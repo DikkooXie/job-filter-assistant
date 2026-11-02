@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createSaveQueue } from './saveQueue.js';
 
 export function useSaveQueue(report) {
@@ -12,9 +12,16 @@ export function useSaveQueue(report) {
       reportRef.current(message, isError);
     });
   }
+  const [status, setStatus] = useState(() => queueRef.current.snapshot());
+  useEffect(() => queueRef.current.subscribe(setStatus), []);
   useEffect(() => () => {
     aliveRef.current = false;
     queueRef.current.dispose();
   }, []);
-  return { enqueue: queueRef.current.enqueue, flush: queueRef.current.flush };
+  return {
+    enqueue: queueRef.current.enqueue,
+    flush: queueRef.current.flush,
+    retry: queueRef.current.retry,
+    status,
+  };
 }

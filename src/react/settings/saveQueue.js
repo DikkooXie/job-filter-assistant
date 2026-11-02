@@ -14,35 +14,89 @@ export function createSaveQueue(report = () => {}, env = {}) {
     : (typeof document !== 'undefined' ? document : null);
 
   const queues = new Map();
+  const listeners = new Set();
+  const now = env.now || (() => Date.now());
+  let savedAt = null;
   let disposed = false;
 
   const bucket = (key) => {
     let q = queues.get(key);
     if (!q) {
-      q = { chain: Promise.resolve(), timer: null, task: null, delay: 500, epoch: 0, lastError: null };
+      q = {
+        chain: Promise.resolve(), timer: null, task: null, delay: 500, epoch: 0,
+        lastError: null, running: false, retrying: false,
+      };
       queues.set(key, q);
     }
     return q;
+  };
+
+  // 保存中优先于失败；自动重试还在等待时保持失败，方便页头提供重试。
+  const snapshot = () => {
+    let saving = false;
+    let error = null;
+    for (const q of queues.values()) {
+      if (q.running || ((q.timer != null || q.task) && !q.retrying)) saving = true;
+      if (q.lastError) error = error || q.lastError;
+    }
+    let phase = 'idle';
+    if (saving) phase = 'saving';
+    else if (error) phase = 'error';
+    else if (savedAt != null) phase = 'saved';
+    return { phase, savedAt, error };
+  };
+
+  const emit = () => {
+    if (!listeners.size) return;
+    const snap = snapshot();
+    for (const fn of listeners) {
+      try { fn(snap); } catch { /* 界面状态失败不能挡住保存 */ }
+    }
+  };
+
+  const subscribe = (fn) => {
+    listeners.add(fn);
+    return () => listeners.delete(fn);
   };
 
   const fail = (q, pending, epoch, error) => {
     const message = error && error.message ? error.message : String(error);
     q.lastError = message;
     try { report(message, true); } catch { /* 提示失败不能挡住重试 */ }
-    if (q.epoch !== epoch || q.task) return;
+    if (q.epoch !== epoch || q.task) {
+      emit();
+      return;
+    }
+    q.retrying = true;
     q.task = pending;
     arm(q);
+    emit();
   };
 
   // 同一次编辑最终写成功后，撤掉已经过时的失败提示。更新的编辑或别的成功提示不动。
   const track = (q, pending, epoch, attempt) => {
     q.chain = attempt;
+    const settleRun = () => {
+      if (q.chain === attempt) q.running = false;
+    };
     attempt.then(() => {
-      if (!q.lastError || q.epoch !== epoch) return;
+      settleRun();
+      if (q.epoch === epoch) {
+        savedAt = now();
+        q.retrying = false;
+      }
+      if (!q.lastError || q.epoch !== epoch) {
+        emit();
+        return;
+      }
       q.lastError = null;
       try { report(null, false); } catch { /* 收起提示失败不影响保存 */ }
+      emit();
     }).catch(() => {});
-    attempt.catch((error) => fail(q, pending, epoch, error));
+    attempt.catch((error) => {
+      settleRun();
+      fail(q, pending, epoch, error);
+    });
   };
 
   const arm = (q) => {
@@ -59,6 +113,8 @@ export function createSaveQueue(report = () => {}, env = {}) {
     const pending = q.task;
     const epoch = q.epoch;
     q.task = null;
+    q.running = true;
+    emit();
     track(q, pending, epoch, q.chain.catch(() => {}).then(() => pending()));
   };
 
@@ -69,6 +125,7 @@ export function createSaveQueue(report = () => {}, env = {}) {
     const pending = q.task;
     const epoch = q.epoch;
     q.task = null;
+    q.running = true;
     let result;
     try {
       result = pending();
@@ -92,7 +149,9 @@ export function createSaveQueue(report = () => {}, env = {}) {
     q.epoch += 1;
     q.delay = delay;
     q.task = task;
+    q.retrying = false;
     arm(q);
+    emit();
   };
 
   const flush = async (key) => {
@@ -102,6 +161,15 @@ export function createSaveQueue(report = () => {}, env = {}) {
     q.timer = null;
     runSerialized(q);
     await q.chain;
+  };
+
+  const retry = () => {
+    if (disposed) return Promise.resolve();
+    const jobs = [];
+    for (const [key, q] of queues) {
+      if (q.lastError) jobs.push(flush(key).catch(() => {}));
+    }
+    return Promise.all(jobs);
   };
 
   const flushPendingNow = () => {
@@ -123,9 +191,10 @@ export function createSaveQueue(report = () => {}, env = {}) {
     disposed = true;
     unbind();
     flushPendingNow();
+    listeners.clear();
   };
 
-  return { enqueue, flush, flushPendingNow, dispose };
+  return { enqueue, flush, retry, snapshot, subscribe, flushPendingNow, dispose };
 }
 
 function bindLifecycle(win, doc, onLeave, onVisibility) {
