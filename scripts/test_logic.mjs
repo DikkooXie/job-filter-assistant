@@ -1103,6 +1103,34 @@ await testAsync('保存筛选补丁时 storage 里的 salaryMaxK 原样保留', 
   }
 });
 
+const { summarizeJobs } = await import('../src/react/settings/jobStats.js');
+test('岗位库数量只统计列表和收藏', () => {
+  assert.deepEqual(summarizeJobs(null), { total: 0, starred: 0 });
+  assert.deepEqual(summarizeJobs([{ star: true }, { star: false }, {}, null]), { total: 4, starred: 1 });
+});
+
+test('通用与隐私页保留原设置字段，并用岗位列表统计数量', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const page = fs.readFileSync(path.join(root, 'src/react/settings/GeneralTab.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/react/settings/general.css'), 'utf8');
+  for (const key of ['autoCapture', 'autoScore', 'showBadge', 'dedupe', 'maxJobs', 'redactPII', 'sendCompanyName', 'confirmBeforeSend']) {
+    assert.match(page, new RegExp(key));
+  }
+  assert.match(page, /JOB_LIST_REQUEST/);
+  assert.match(page, /跟随当前网站/);
+  assert.match(page, /只用 BOSS 直聘/);
+  assert.match(page, /只用前程无忧/);
+  assert.match(page, /role="radiogroup"/);
+  assert.match(page, /type="radio"/);
+  assert.match(page, /gen-update-slot/);
+  assert.match(page, /UpdatePanel/);
+  assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /width:\s*36px/);
+  assert.match(css, /height:\s*21px/);
+  assert.doesNotMatch(css, /import\(/);
+});
+
 // ---------- 汇总 ----------
 console.log(`\n${'='.repeat(40)}\n结果：${pass} 通过 / ${fail} 失败\n`);
 process.exit(fail ? 1 : 0);
