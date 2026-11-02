@@ -84,12 +84,19 @@ AI 一次生成三档招呼语（精简 / 标准 / 详细），可直接编辑�
 
 ## 安装（加载未打包扩展）
 
-1. 在项目目录运行 `npm install`，然后运行 `npm run build`。
+1. 到 [GitHub 发布页](https://github.com/DikkooXie/job-filter-assistant/releases/latest) 下载最新的 `job-filter-assistant-x.y.z.zip`，解压到一个固定位置，例如 `文档/扩展/job-filter-assistant`。不要直接放在「下载」或「桌面」根目录，浏览器不允许授权这两个位置。
 2. Chrome 打开 `chrome://extensions/`，或 Edge 打开 `edge://extensions/`，开启「开发人员模式」。
-3. 选择「加载已解压的扩展程序」，选择本项目的 `dist` 目录。
+3. 选择「加载已解压的扩展程序」，选择刚才解压出的文件夹（里面直接能看到 `manifest.json`）。
 4. 固定图标到工具栏。点击图标弹出快捷面板；面板里「打开岗位面板」进入侧边栏主界面。
 
-每次修改源码后重新运行 `npm run build`，再在扩展管理页重新加载扩展。之前从项目根目录安装的扩展与从 `dist` 安装的扩展可能拥有不同 ID 和独立的浏览器存储；先通过旧扩展导出需要保留的数据，确认新扩展中的数据后再考虑移除旧扩展。不要假设岗位、画像或 API 配置会自动迁移；CSV 导出不能恢复完整扩展数据，保留旧扩展直到确认所需数据已经安全保存。
+### 更新
+
+在 **设置 → 通用与隐私 → 关于与更新** 中完成，不需要命令行或额外软件：
+
+1. 第一次使用时点「选择文件夹」，选中上面加载的扩展文件夹并允许编辑。
+2. 点「检查更新」；有新版本时点「立即更新」。扩展会下载 GitHub 上的安装包、校验后覆盖文件夹并自动重新加载，设置页随后重新打开。
+
+浏览器重启后，文件夹权限会变为「需确认」，更新时浏览器会再询问一次。扩展 ID 由 `manifest.json` 中固定的 `key` 决定，更新后岗位、画像、AI 配置和处理进度都会保留。安装包必须带有相同的 key 和更高的版本号，否则更新会被拒绝。
 
 首次使用：进入 **设置 → AI 接口** 添加一个供应商并填 Key/模型 → **设置 → 个人画像** 上传简历或手动填写。
 之后正常浏览 BOSS/51job 的岗位列表，岗位会自动进入侧边栏，点「AI 分析」即可打分。
@@ -121,7 +128,7 @@ src/
     collector.js           ISOLATED world：转发后台 + 上下文追踪 + DOM 兜底 + 角标
   ui/                       popup / sidepanel / options 的 JS/CSS + design.css 设计系统
   vendor/                   pdf.js（简历 PDF 解析）、fflate（DOCX 解压）
-scripts/                   图标生成 + 纯逻辑测试
+scripts/                   图标生成 + 纯逻辑测试 + 发版脚本
 docs/screenshots/          README 截图
 dev/                       本地预览用（mock chrome API），不进扩展包
 ```
@@ -133,6 +140,13 @@ dev/                       本地预览用（mock chrome API），不进扩展�
 ```bash
 # 纯逻辑单测（用真机逆向样本验证归一化/薪资/画像/筛选/AI 协议）
 node scripts/test_logic.mjs
+
+# 构建后从 dist/ 加载扩展（开发时用）
+npm run build
+
+# 发版：测试 + 构建 + 打包 release/*.zip + 创建 GitHub Release（先改 manifest.json 的 version）
+npm run release -- --dry-run
+npm run release -- --notes "更新说明"
 
 # 重新生成图标
 python scripts/make_icons.py

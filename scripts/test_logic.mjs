@@ -11,12 +11,25 @@ import { evaluateJob, applyFilters } from '../src/common/filters.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable } from '../src/common/ai/providers.js';
 import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
+import {
+  parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex,
+} from '../src/common/update.js';
 
 let pass = 0;
 let fail = 0;
 function test(name, fn) {
   try {
     fn();
+    pass++;
+    console.log('  ✓', name);
+  } catch (e) {
+    fail++;
+    console.log('  ✗', name, '\n      →', e.message);
+  }
+}
+async function testAsync(name, fn) {
+  try {
+    await fn();
     pass++;
     console.log('  ✓', name);
   } catch (e) {
@@ -397,6 +410,76 @@ test('手机号/邮箱/微信被隐藏', () => {
   assert.ok(!out.includes('13800138000'));
   assert.ok(!out.includes('a@b.com'));
   assert.ok(out.includes('已隐藏'));
+});
+
+// ---------- 扩展内更新 ----------
+section('扩展内更新');
+const selfManifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
+const SELF_ID = 'bpepclacjmlmbljmggblckdocinkdide';
+const release = (over = {}) => ({
+  tag_name: 'v1.2.0', name: 'v1.2.0', body: ' 说明 ', html_url: 'https://github.com/x/y/releases/tag/v1.2.0',
+  assets: [{ name: 'job-filter-assistant-1.2.0.zip', size: 10, browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.2.0/a.zip' }],
+  ...over,
+});
+
+test('版本解析与比较', () => {
+  assert.deepEqual(parseVersion('v1.2'), [1, 2, 0, 0]);
+  assert.equal(parseVersion('1.2.beta'), null);
+  assert.equal(compareVersions('1.10.0', '1.9.9'), 1);
+  assert.equal(compareVersions('v1.0', '1.0.0'), 0);
+  assert.equal(compareVersions('1.0.0', '1.0.1'), -1);
+  assert.throws(() => compareVersions('x', '1'));
+});
+test('解析 Release：正常', () => {
+  const r = parseRelease(release());
+  assert.equal(r.version, '1.2.0');
+  assert.equal(r.notes, '说明');
+  assert.ok(r.zipUrl.endsWith('a.zip'));
+});
+test('解析 Release：拒绝预发布、无 zip、非 GitHub 地址', () => {
+  assert.throws(() => parseRelease(release({ prerelease: true })));
+  assert.throws(() => parseRelease(release({ assets: [] })));
+  assert.throws(() => parseRelease(release({ assets: [{ name: 'a.zip', browser_download_url: 'https://evil.example/a.zip' }] })));
+  assert.throws(() => parseRelease(release({ tag_name: 'latest' })));
+  assert.throws(() => parseRelease(release({ assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/someone/else/releases/download/v1/a.zip' }] })), /本项目/);
+});
+await testAsync('manifest key 计算出固定扩展 ID', async () => {
+  assert.equal(await extensionIdFromKey(selfManifest.key), SELF_ID);
+});
+await testAsync('安装包 manifest 校验', async () => {
+  const ok = { ...selfManifest, version: '99.0.0' };
+  assert.equal(await packageManifestError(ok, selfManifest, SELF_ID), '');
+  assert.match(await packageManifestError({ ...ok, key: undefined }, selfManifest, SELF_ID), /key/);
+  assert.match(await packageManifestError(ok, selfManifest, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), /ID/);
+  assert.match(await packageManifestError({ ...ok, version: selfManifest.version }, selfManifest, SELF_ID), /不比当前版本新/);
+  assert.match(await packageManifestError({ ...ok, name: '别的扩展' }, selfManifest, SELF_ID), /名称/);
+  assert.match(await packageManifestError({ ...ok, manifest_version: 2 }, selfManifest, SELF_ID), /MV3/);
+  assert.ok(await packageManifestError(null, selfManifest, SELF_ID));
+});
+test('isSameInstall 比对名称、版本、key', () => {
+  assert.ok(isSameInstall({ ...selfManifest }, selfManifest));
+  assert.ok(!isSameInstall({ ...selfManifest, version: '0.0.1' }, selfManifest));
+  assert.ok(!isSameInstall({ ...selfManifest, key: 'x' }, selfManifest));
+  assert.ok(!isSameInstall(null, selfManifest));
+});
+test('zip 路径安全检查', () => {
+  assert.deepEqual(safeEntryPath('assets/a.js'), ['assets', 'a.js']);
+  for (const bad of ['../x', 'a/../../x', '/etc/passwd', 'a\\b', 'C:x', 'dir/', '', 'a//b', '__MACOSX/a', 'a/.DS_Store']) {
+    assert.equal(safeEntryPath(bad), null, bad);
+  }
+});
+test('解压守卫拦截过大或过多条目', () => {
+  const big = unzipGuard();
+  assert.ok(big({ originalSize: 1024 }));
+  assert.throws(() => big({ originalSize: 300 * 1024 * 1024 }), /过大/);
+  const many = unzipGuard();
+  assert.throws(() => { for (let i = 0; i < 3000; i++) many({ originalSize: 1 }); }, /数量/);
+  assert.equal(toHex(new Uint8Array([0, 15, 255])), '000fff');
+});
+test('写入顺序：manifest.json 最后，跳过不安全路径', () => {
+  const plan = planWrites({ 'manifest.json': 1, 'a.js': 2, '../evil': 3, 'icons/i.png': 4 });
+  assert.deepEqual(plan.map((w) => w.path), ['a.js', 'icons/i.png', 'manifest.json']);
+  assert.throws(() => planWrites({ 'sub/manifest.json': 1 }));
 });
 
 // ---------- 汇总 ----------

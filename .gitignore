@@ -22,3 +22,11 @@ build/
 *.resume
 *简历*
 private/
+
+# 发版产物
+release/
+
+# 本地设计/调研资料（含个人信息，不入库）
+PRODUCT.md
+.impeccable/
+.playwright-cli/

@@ -22,6 +22,14 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   } catch {}
+  // 扩展内更新完成后重新打开设置页（标记由 src/ui/update.js 写入）
+  try {
+    const { reopenAfterUpdate } = await chrome.storage.local.get('reopenAfterUpdate');
+    if (reopenAfterUpdate) {
+      await chrome.storage.local.remove('reopenAfterUpdate');
+      await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#updated') });
+    }
+  } catch {}
 });
 
 // —— 统一消息入口 ——
