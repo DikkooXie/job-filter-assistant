@@ -158,3 +158,29 @@
   .opt-main { padding: 20px; }
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
+
+
+.opt-shell { max-width: 1200px; }
+.opt-nav { background: var(--card-2); border-right: 1px solid var(--separator); }
+.opt-brand-logo { background: var(--accent); border-radius: 6px; font-size: 0; }
+.opt-brand-logo::after { content: "岗"; font-size: 14px; color: #fff; font-weight: 600; }
+.opt-brand-sub, .set-row .s-desc { font-size: 12px; }
+.nav-item { border-radius: 6px; }
+.nav-item .ic { display: none; }
+.nav-item.active { background: var(--accent-soft); color: var(--text); }
+.opt-main { min-width: 0; max-width: 900px; }
+.panel { border: 1px solid var(--separator); box-shadow: none; border-radius: var(--radius); }
+.prov-card.active { box-shadow: none; }
+.upload-zone { border-width: 1px; padding: 20px; }
+.upload-zone .up-icon { display: none; }
+.adv-toggle { border: 0; background: transparent; padding: 0; font-family: inherit; }
+@media (max-width: 720px) {
+  .opt-shell { display: block; }
+  .opt-nav { display: flex; width: auto; height: auto; position: static; padding: 14px 16px 0; border-right: 0; border-bottom: 1px solid var(--separator); }
+  .opt-brand { margin-bottom: 8px; padding: 0; }
+  #nav { flex-direction: row; overflow-x: auto; gap: 4px; }
+  .nav-item { white-space: nowrap; width: auto; flex: 0 0 auto; padding: 9px 10px; }
+  .opt-nav-foot { display: none; }
+  .opt-main { padding: 22px 16px; }
+  .panel { padding: 16px; }
+}

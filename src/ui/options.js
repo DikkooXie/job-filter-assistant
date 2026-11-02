@@ -84,10 +84,12 @@ function renderProfile() {
     ]),
   );
 
+  mainEl.appendChild(renderMaterialsImport());
+
   // 简历上传
   const uploadPanel = h('div', { class: 'panel' }, [
     h('div', { class: 'panel-title', text: '📄 上传简历，AI 自动填写' }),
-    h('div', { class: 'panel-desc', text: '支持 PDF、DOCX、TXT。文件仅在本机解析为文本，抽取后需你确认才写入画像。' }),
+    h('div', { class: 'panel-desc', text: '支持 PDF、DOCX、TXT。文件在本机解析；使用 AI 抽取时文本会发送至你配置的服务。抽取后需确认才写入画像。' }),
   ]);
   const fileInput = h('input', { type: 'file', accept: '.pdf,.docx,.txt,.md,.json', style: 'display:none' });
   const zone = h('div', { class: 'upload-zone' }, [
@@ -150,6 +152,70 @@ function renderProfile() {
   );
 }
 
+function renderMaterialsImport() {
+  const panel = h('div', { class: 'panel' }, [
+    h('div', { class: 'panel-title', text: '导入个人材料' }),
+    h('div', { class: 'panel-desc', text: '可多选 Markdown / TXT，先在本机预览，再选择发送给当前 AI 抽取；也可直接导入画像 JSON，完全在本机处理。确认后才保存，合并会保留已有设置。' }),
+  ]);
+  const input = h('input', { type: 'file', accept: '.md,.markdown,.txt,.json', multiple: true });
+  const preview = h('div');
+  panel.appendChild(input);
+  panel.appendChild(preview);
+  input.addEventListener('change', async () => {
+    preview.replaceChildren();
+    try {
+      const files = Array.from(input.files);
+      if (!files.length) return;
+      const materials = await Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));
+      if (materials.some((item) => !item.text.trim())) throw new Error('文件为空，请检查后重新选择');
+      const jsonFiles = materials.filter((item) => /\.json$/i.test(item.name));
+      if (jsonFiles.length && (jsonFiles.length !== 1 || materials.length !== 1)) throw new Error('画像 JSON 请单独导入');
+      for (const item of materials) {
+        const area = h('textarea', { rows: 6, readonly: true, 'aria-label': item.name });
+        area.value = item.text;
+        preview.appendChild(field(`${item.name}（${item.text.length} 字符）`, area));
+      }
+      if (jsonFiles.length) {
+        const data = JSON.parse(jsonFiles[0].text);
+        if (!data || Array.isArray(data) || typeof data !== 'object' || !['target', 'basics', 'capabilities', 'workSummary', 'projectSummary', 'highlights', 'preference'].some((key) => key in data)) throw new Error('不是有效的画像 JSON');
+        preview.appendChild(h('button', { class: 'btn btn-primary', text: '预览画像草稿', onclick: () => { draft = sanitizeProfile(data); route(); } }));
+      } else {
+        preview.appendChild(h('button', { class: 'btn btn-primary', text: '发送材料给 AI 并抽取', onclick: () => extractMaterials(materials) }));
+      }
+    } catch (e) {
+      preview.replaceChildren();
+      toast('导入失败：' + e.message, true);
+    }
+  });
+  return panel;
+}
+
+async function extractMaterials(materials) {
+  const overlay = showBusy('AI 正在逐段抽取画像…');
+  try {
+    let combined = emptyProfile();
+    for (const item of materials) {
+      // 每段不超过提示词上限，避免长文件被静默截断。
+      for (let offset = 0; offset < item.text.length; offset += 10000) {
+        const part = item.text.slice(offset, offset + 10000);
+        const extracted = sanitizeProfile(await send(MSG.AI_RESUME_EXTRACT, { text: `材料：${item.name}\n${part}` }));
+        const previous = combined;
+        combined = mergeDraft(previous, extracted);
+        for (const key of ['workSummary', 'projectSummary']) {
+          if (previous[key] && extracted[key] && !previous[key].includes(extracted[key])) combined[key] = previous[key] + '\n' + extracted[key];
+        }
+      }
+    }
+    draft = combined;
+    toast('抽取完成，请核对事实和贡献边界');
+    route();
+  } catch (e) {
+    toast('抽取失败：' + e.message, true);
+  } finally {
+    overlay.close();
+  }
+}
+
 async function handleFile(file) {
   const overlay = showBusy('正在解析简历文件…');
   try {
@@ -187,7 +253,11 @@ function renderDraft() {
     line('目标岗位', d.target.jobTitles),
     line('目标城市', d.target.cities),
     line('期望薪资', d.target.salaryMinK ? `${d.target.salaryMinK}-${d.target.salaryMaxK || ''}k` : ''),
-    line('工作年限', d.basics.yearsOfExperience ? d.basics.yearsOfExperience + ' 年' : ''),
+    line('工作年限', d.basics.yearsOfExperience != null ? d.basics.yearsOfExperience + ' 年' : ''),
+    line('姓名', d.basics.name),
+    line('目标行业', d.target.industries),
+    line('公司规模', d.target.companySizes),
+    line('办公方式', d.target.workModes),
     line('学历', d.basics.education),
     line('当前职位', d.basics.currentTitle),
     line('技能', d.capabilities.skills),
@@ -196,17 +266,26 @@ function renderDraft() {
     line('工作概述', d.workSummary),
     line('项目概述', d.projectSummary),
     line('核心成就', d.highlights),
+    line('规避关键词', d.preference.avoidKeywords),
+    line('硬性排除', d.preference.dealbreakers),
+    line('给 AI 的说明', d.preference.notes),
   ]);
   return h('div', { class: 'draft-box' }, [
-    h('h4', { text: '✨ AI 抽取结果（确认后合并到画像）' }),
+    h('h4', { text: '画像草稿（请核对后合并）' }),
+    h('div', { class: 'panel-desc', text: '合并时数组去重、保留已有单值，工作概述、项目概述和备注会追加新内容；可在下方手动编辑。' }),
     preview,
     h('div', { class: 'draft-actions' }, [
       h('button', {
         class: 'btn btn-primary',
         text: '合并到画像',
         onclick: async () => {
-          profile = mergeDraft(profile, draft);
-          profile = await send(MSG.PROFILE_SAVE, { profile });
+          const previous = sanitizeProfile(profile);
+          const combined = mergeDraft(previous, draft);
+          const appendNew = (oldText, newText) => !newText || oldText.includes(newText) ? oldText : oldText ? `${oldText}\n\n${newText}` : newText;
+          combined.workSummary = appendNew(previous.workSummary, draft.workSummary);
+          combined.projectSummary = appendNew(previous.projectSummary, draft.projectSummary);
+          combined.preference.notes = appendNew(previous.preference.notes, draft.preference.notes);
+          profile = await send(MSG.PROFILE_SAVE, { profile: combined });
           draft = null;
           toast('已合并并保存');
           route();
@@ -439,7 +518,7 @@ function renderProviderCard(prov) {
     field('自定义模型列表 URL（可选）', bind('modelsUrl', { ph: '留空则用 Base/models' })),
     field('额外请求头（JSON，可选）', extraHeadersEditor(prov, commit)),
   ]);
-  const advToggle = h('span', { class: 'adv-toggle', text: '▸ 高级设置' });
+  const advToggle = h('button', { type: 'button', class: 'adv-toggle', text: '▸ 高级设置' });
   advToggle.addEventListener('click', () => {
     advWrap.classList.toggle('hidden');
     advToggle.textContent = advWrap.classList.contains('hidden') ? '▸ 高级设置' : '▾ 高级设置';
@@ -565,7 +644,7 @@ function renderFilters() {
   panel.appendChild(
     h('div', { class: 'set-row' }, [
       h('div', {}, [h('div', { class: 's-label', text: '启用本地筛选' }), h('div', { class: 's-desc', text: '关闭时收录全部岗位，仅标注风险词' })]),
-      switchEl(f.enabled, (val) => { f.enabled = val; save(); }),
+      switchEl(f.enabled, (val) => { f.enabled = val; save(); }, '启用本地筛选'),
     ]),
   );
   mainEl.appendChild(panel);
@@ -604,7 +683,7 @@ function renderFilters() {
 //  通用与隐私
 // ============================================================
 function renderGeneral() {
-  mainEl.appendChild(sectionHead('通用与隐私', '控制抓取行为与发送给 AI 的数据范围。所有数据仅存本机浏览器。'));
+  mainEl.appendChild(sectionHead('通用与隐私', '控制抓取行为与发送给 AI 的数据范围。数据保存在本机，AI 操作会向所配置服务发送相关内容。'));
   const save = debounce(async (patch) => {
     settings = await send(MSG.SETTINGS_SAVE, { patch });
   }, 200);
@@ -646,7 +725,7 @@ function renderGeneral() {
   // 隐私
   const priv = h('div', { class: 'panel' }, [
     h('div', { class: 'panel-title', text: '隐私' }),
-    h('div', { class: 'panel-desc', text: '发送给第三方 AI 前的数据处理。API Key 与全部数据仅保存在本机。' }),
+    h('div', { class: 'panel-desc', text: 'API Key 和数据保存在本机；使用 AI 时相关内容会发送至所配置的服务。脱敏无法保证移除所有个人信息。' }),
   ]);
   priv.appendChild(setRow('发送前脱敏', '隐去手机号、邮箱、联系方式、个人链接等', settings.privacy.redactPII, (v) => save({ privacy: { redactPII: v } })));
   priv.appendChild(setRow('发送岗位公司名', '公司名一般为公开招聘信息，发送可提升分析质量', settings.privacy.sendCompanyName, (v) => save({ privacy: { sendCompanyName: v } })));
@@ -690,18 +769,20 @@ async function exportData(format) {
 //  通用组件
 // ============================================================
 function field(label, control) {
-  return h('div', { class: 'field' }, [h('label', { text: label }), control]);
+  const target = control.matches('input, select, textarea') ? control : control.querySelector('input, select, textarea');
+  if (target) { target.id ||= `field-${Math.random().toString(36).slice(2)}`; }
+  return h('div', { class: 'field' }, [h('label', { text: label, ...(target ? { for: target.id } : {}) }), control]);
 }
 
 function setRow(label, desc, checked, onChange) {
   return h('div', { class: 'set-row' }, [
     h('div', {}, [h('div', { class: 's-label', text: label }), h('div', { class: 's-desc', text: desc })]),
-    switchEl(checked, onChange),
+    switchEl(checked, onChange, label),
   ]);
 }
 
-function switchEl(checked, onChange) {
-  const input = h('input', { type: 'checkbox' });
+function switchEl(checked, onChange, label = '开关') {
+  const input = h('input', { type: 'checkbox', 'aria-label': label });
   input.checked = checked;
   input.addEventListener('change', () => onChange(input.checked));
   return h('label', { class: 'switch' }, [input, h('span', { class: 'slider' })]);

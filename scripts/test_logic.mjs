@@ -9,7 +9,7 @@ import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
 import { evaluateJob, applyFilters } from '../src/common/filters.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable } from '../src/common/ai/providers.js';
-import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor } from '../src/common/ai/prompts.js';
+import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 
 let pass = 0;
@@ -207,6 +207,31 @@ test('mergeDraft 合并去重', () => {
   const merged = mergeDraft(cur, draft);
   assert.deepEqual(merged.capabilities.skills, ['React', 'Vue'], '大小写去重');
   assert.equal(merged.basics.education, '本科', '空字段填充');
+});
+
+test('未知年限保持未知，明确零年正确计入完整度', () => {
+  for (const value of [null, undefined, '', '  ']) {
+    const p = sanitizeProfile({ basics: { yearsOfExperience: value } });
+    assert.equal(p.basics.yearsOfExperience, null);
+    assert.ok(scoreProfile(p).missing.includes('工作年限'));
+  }
+  const zero = sanitizeProfile({ basics: { yearsOfExperience: 0 } });
+  assert.equal(zero.basics.yearsOfExperience, 0);
+  assert.ok(!scoreProfile(zero).missing.includes('工作年限'));
+  assert.equal(mergeDraft(emptyProfile(), { basics: { yearsOfExperience: 2 } }).basics.yearsOfExperience, 2);
+});
+test('画像合并保留已有偏好与非空字段', () => {
+  const result = mergeDraft({ basics: { education: '本科' }, preference: { notes: '已有说明', dealbreakers: ['出差'] } },
+    { basics: { education: '硕士' }, preference: { notes: '新说明', dealbreakers: ['夜班'] } });
+  assert.equal(result.basics.education, '本科');
+  assert.equal(result.preference.notes, '已有说明');
+  assert.deepEqual(result.preference.dealbreakers, ['出差', '夜班']);
+});
+test('招呼提示保留岗位隐私设置并要求真实表达', () => {
+  const messages = buildMatchPrompt(emptyProfile(), { title: '前端', company: '测试公司' }, { includeCompany: false });
+  assert.ok(messages[0].content.includes('未知年限不是零'));
+  assert.ok(messages[0].content.includes('实习写实习'));
+  assert.ok(!messages[1].content.includes('测试公司'));
 });
 
 // ---------- 筛选 ----------

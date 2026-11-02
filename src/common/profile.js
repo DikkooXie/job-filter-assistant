@@ -49,7 +49,7 @@ const SCORE_ITEMS = [
   { label: '目标岗位', weight: 14, ok: (p) => p.target.jobTitles.length > 0 },
   { label: '目标城市', weight: 8, ok: (p) => p.target.cities.length > 0 },
   { label: '期望薪资', weight: 8, ok: (p) => num(p.target.salaryMinK) || num(p.target.salaryMaxK) },
-  { label: '工作年限', weight: 8, ok: (p) => num(p.basics.yearsOfExperience) },
+  { label: '工作年限', weight: 8, ok: (p) => p.basics.yearsOfExperience !== null },
   { label: '最高学历', weight: 6, ok: (p) => !!p.basics.education },
   { label: '当前职位', weight: 6, ok: (p) => !!p.basics.currentTitle },
   { label: '专业技能', weight: 16, ok: (p) => p.capabilities.skills.length > 0 },
@@ -198,6 +198,7 @@ function posNum(x) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 function nonNegNum(x) {
+  if (x == null || (typeof x === 'string' && !x.trim())) return null;
   const n = Number(x);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }

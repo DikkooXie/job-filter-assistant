@@ -271,3 +271,30 @@
   display: flex; align-items: center; gap: 8px;
   cursor: pointer;
 }
+
+
+/* Keep the list readable in a browser side panel. */
+.sp-top { padding: 14px 14px 12px; background: var(--bg-elevated); }
+.sp-logo { background: var(--accent); border-radius: 6px; font-size: 0; }
+.sp-logo::after { content: "岗"; font-size: 13px; color: #fff; font-weight: 600; }
+.sp-title-row { margin-bottom: 10px; }
+.sp-search input { border-radius: var(--radius-sm); padding-left: 12px; }
+.sp-search::before { content: none; }
+.sp-list { padding: 10px 12px 20px; gap: 8px; }
+.job-card { border: 1px solid var(--separator); border-radius: var(--radius); box-shadow: none; padding: 12px; }
+.job-card:hover { box-shadow: var(--shadow-sm); }
+.jc-score { border: 0; padding: 0; background: transparent; font: inherit; color: inherit; }
+.jc-main.clickable { text-align: left; border: 0; background: transparent; font: inherit; color: inherit; width: 100%; }
+.jc-score .lbl, .cur-note, .fact .fk, .greet-count, .batch-note { font-size: 12px; }
+.jc-title-row { flex-wrap: wrap; gap: 2px 8px; }
+.jc-title { min-width: 0; }
+.jc-salary, .cur-salary { color: var(--text); }
+.jc-actions, .batch-row2, .greet-tools { flex-wrap: wrap; }
+.batch-row2 .btn { flex: 1 1 42%; }
+.sp-bottom { flex-wrap: wrap; }
+.sp-bottom .btn { white-space: normal; }
+.plat-boss, .plat-qcwy { background: var(--fill); color: var(--text-2); }
+.filter-chip { border: 1px solid transparent; border-radius: 6px; }
+.filter-chip.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.cur-head { box-shadow: none; }
+.fade-up, .jc-analysis { animation: none; }

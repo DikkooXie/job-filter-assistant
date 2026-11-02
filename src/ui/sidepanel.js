@@ -31,6 +31,25 @@ const tailorCache = new Map(); // uid -> 简历定制建议（仅会话态，不
 const tailoring = new Set(); // 正在生成简历建议的 uid
 const checked = new Set(); // 岗位库中勾选的 uid（批量操作）
 let batchBusy = false; // 批量分析进行中（禁用按钮 + 防重入）
+const progress = new Map();
+const progressKey = (uid) => `job-progress-v1:${encodeURIComponent(uid)}`;
+const progressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
+
+async function loadProgress() {
+  const keys = jobs.map((j) => progressKey(j.uid));
+  const stored = keys.length ? await chrome.storage.local.get(keys) : {};
+  progress.clear();
+  for (const job of jobs) {
+    const value = stored[progressKey(job.uid)];
+    if (value && progressLabels[value.status]) progress.set(job.uid, value);
+  }
+}
+
+async function setProgress(uid, status) {
+  const value = { status, at: new Date().toISOString() };
+  await chrome.storage.local.set({ [progressKey(uid)]: value });
+  progress.set(uid, value);
+}
 
 async function boot() {
   await reload();
@@ -60,6 +79,7 @@ async function reload() {
       send(MSG.AI_PROVIDERS_GET),
       send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null),
     ]);
+    await loadProgress();
     view.platform = settings.mode === MODE.auto ? view.platform : settings.mode;
   } catch (e) {
     app.innerHTML = `<div class="empty"><div class="icon">⚠️</div>${esc(e.message)}</div>`;
@@ -279,8 +299,8 @@ function renderCard(job) {
   const risks = (job._filter && job._filter.risks) || [];
 
   const scoreBox = h(
-    'div',
-    { class: 'jc-score', onclick: () => analyze(job, true) },
+    'button',
+    { class: 'jc-score', type: 'button', 'aria-label': '分析 ' + job.title, onclick: () => analyze(job, true) },
     m
       ? [
           h('div', { class: `score-badge verdict-${m.verdict}`, text: String(m.score) }),
@@ -309,7 +329,7 @@ function renderCard(job) {
   const isChecked = checked.has(job.uid);
   const checkbox = h('label', { class: 'jc-check', title: '勾选以批量操作' }, [
     (() => {
-      const cb = h('input', { type: 'checkbox' });
+      const cb = h('input', { type: 'checkbox', 'aria-label': `选择岗位 ${job.title}，用于批量操作` });
       cb.checked = isChecked;
       cb.addEventListener('change', () => {
         if (cb.checked) checked.add(job.uid);
@@ -324,7 +344,7 @@ function renderCard(job) {
   const card = h('div', { class: 'job-card fade-up' + (isChecked ? ' is-checked' : '') }, [
     h('div', { class: 'jc-head' }, [
       checkbox,
-      h('div', { class: 'jc-main clickable', title: '在「当前岗位」查看', onclick: () => openCurrent(job, 'info') }, [
+      h('button', { type: 'button', class: 'jc-main clickable', title: '在「当前岗位」查看', onclick: () => openCurrent(job, 'info') }, [
         h('div', { class: 'jc-title-row' }, [
           h('div', { class: 'jc-title', text: job.title, title: job.title }),
           job.salaryText ? h('div', { class: 'jc-salary', text: job.salaryText }) : null,
@@ -352,7 +372,7 @@ function renderCard(job) {
         class: 'jc-icon-btn',
         text: '🗑',
         title: '删除',
-        onclick: async () => { jobs = await send(MSG.JOB_DELETE, { uid: job.uid }); render(); },
+        onclick: async () => { if (!confirm(`确定删除岗位「${job.title}」？此操作无法撤销。`)) return; jobs = await send(MSG.JOB_DELETE, { uid: job.uid }); render(); },
       }),
     ]),
   ]);
@@ -397,8 +417,8 @@ function renderCurrent() {
       h('div', { class: 'cur-company', text: job.company + (job.companyIndustry ? ' · ' + job.companyIndustry : '') }),
     ]),
     h(
-      'div',
-      { class: 'jc-score', onclick: () => analyze(job, true), title: '点击重新分析' },
+      'button',
+      { type: 'button', class: 'jc-score', onclick: () => analyze(job, true), title: '点击重新分析', 'aria-label': '分析 ' + job.title },
       m
         ? [h('div', { class: `score-badge verdict-${m.verdict}`, text: String(m.score) }), h('div', { class: 'lbl', text: VERDICT_LABELS[m.verdict] || '' })]
         : scoring.has(job.uid)
@@ -597,14 +617,25 @@ function renderGreeting(panel, job) {
   panel.appendChild(ta);
   panel.appendChild(counter);
 
+  const savedProgress = progress.get(job.uid);
+  panel.appendChild(h('div', { class: 'tiny', text: `处理状态：${savedProgress ? progressLabels[savedProgress.status] : '未处理'}` }));
+  panel.appendChild(h('button', {
+    class: 'btn btn-sm', text: '标记已发送',
+    onclick: async () => {
+      if (!confirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`)) return;
+      try { await setProgress(job.uid, 'sent'); render(); toast('已记录为手动确认发送'); }
+      catch (e) { toast(`记录失败：${e.message}`, true); }
+    },
+  }));
+
   // 发送状态提示
   const onChat = activeCtx && activeCtx.isChat;
   panel.appendChild(
     h('div', { class: 'greet-hint' + (onChat ? ' ok' : '') }, [
       h('span', {
         text: onChat
-          ? '✓ 已在聊天页，点下方按钮尝试直接填入'
-          : 'ℹ 点下方按钮会新建标签页打开岗位并自动进入与 HR 的沟通（保留当前标签），招呼语已复制，可 Ctrl+V 粘贴',
+          ? '请先核对招聘方，再复制并粘贴招呼语发送'
+          : '将新建标签页打开岗位并尝试进入沟通，招呼语会复制；请核对招聘方后粘贴发送',
       }),
     ]),
   );
@@ -620,7 +651,7 @@ function renderGreeting(panel, job) {
       }),
       h('button', { class: 'btn btn-sm', text: '📋 复制', onclick: () => copyText(greetingValueFor(job)) }),
       h('div', { class: 'spacer' }),
-      h('button', { class: 'btn btn-sm btn-primary', text: '打开沟通并复制', title: '新建标签页打开该岗位并自动进入与 HR 的沟通（保留当前标签），招呼语已复制，可 Ctrl+V 粘贴', onclick: () => sendGreeting(job) }),
+      h('button', { class: 'btn btn-sm btn-primary', text: '打开沟通并复制', title: '尝试打开沟通，核对招聘方后粘贴发送', onclick: () => sendGreeting(job) }),
     ]),
   );
 }
@@ -752,6 +783,8 @@ function fillBottom(bar, list) {
             disabled: batchBusy,
             onclick: () => batchAnalyze(checkedJobs()),
           }),
+          h('button', { class: 'btn btn-sm', text: '准备未处理岗位', disabled: batchBusy, onclick: () => prepareUnprocessed(checkedJobs()) }),
+          h('button', { class: 'btn btn-sm', text: '处理下一个', disabled: batchBusy, onclick: () => openNextPrepared(checkedJobs()) }),
           h('button', { class: 'btn btn-sm', text: `批量导出（${n}）`, onclick: () => batchExport(checkedJobs()) }),
         ]),
       ]),
@@ -804,13 +837,18 @@ async function sendGreeting(job) {
   }
   // 可选：发送前二次确认（设置 → 隐私 → confirmBeforeSend）
   if (settings.privacy && settings.privacy.confirmBeforeSend) {
-    if (!confirm(`确认发送给 ${job.company || 'HR'}？\n\n${text}`)) return;
+    if (!confirm(`确认打开 ${job.company || '该招聘方'} 的岗位并尝试进入沟通？\n招呼语将复制，请核对会话后手动发送。\n\n${text}`)) return;
   }
   // 以当前文本为准，落库
   greetingCache.set(job.uid, text);
   persistGreeting(job.uid, text);
   // 先复制到剪贴板兜底（无论聊天能否自动填入，招呼语都在手上）
-  copyText(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    toast('复制失败，请先手动复制招呼语', true);
+    return;
+  }
   if (!job.url) {
     toast('招呼语已复制，该岗位没有可打开的链接，请手动打开岗位页粘贴发送', true);
     return;
@@ -818,8 +856,13 @@ async function sendGreeting(job) {
   try {
     // 新建标签页打开岗位并自动进入与 HR 的沟通（保留当前浏览的标签）
     const r = await send(MSG.OPEN_JOB_CHAT, { url: job.url, platform: job.platform, text });
-    if (r && r.mode === 'sent') toast('已在新标签页打开与 HR 的沟通并尝试发送，招呼语已复制备用');
-    else toast('已在新标签页打开岗位并进入沟通，招呼语已复制，请在聊天框 Ctrl+V 粘贴发送');
+    if (r && r.mode === 'navigating') {
+      if (progress.get(job.uid)?.status !== 'sent') await setProgress(job.uid, 'opened');
+      toast('已尝试打开沟通；请核对招聘方后粘贴并发送');
+    } else {
+      toast(`已打开岗位，未确认进入沟通；请核对后粘贴发送${r?.note ? `（${r.note}）` : ''}`, true);
+    }
+    render();
   } catch (e) {
     // 打开失败：招呼语已复制，提示手动粘贴
     toast(`招呼语已复制，请手动打开岗位页粘贴发送（${e.message}）`, true);
@@ -870,8 +913,26 @@ function setBatchBusy(v) {
   }
 }
 
+// 逐个打开已准备的岗位；已尝试或标记发送的岗位不会重复打开。
+async function openNextPrepared(list) {
+  const job = list.find((item) => progress.get(item.uid)?.status === 'prepared');
+  if (!job) { toast('没有待处理的已准备岗位，请先准备未处理岗位'); return; }
+  selectedUid = job.uid;
+  view.tab = 'current';
+  view.sub = 'greeting';
+  render();
+  await sendGreeting(job);
+}
+
+// 仅准备未处理的岗位，已有处理记录的岗位不重复处理。
+async function prepareUnprocessed(list) {
+  const remaining = list.filter((job) => !progress.has(job.uid));
+  if (!remaining.length) { toast('所选岗位均已有处理记录'); return; }
+  await batchAnalyze(remaining, true);
+}
+
 // 逐个分析（短请求 + 进度），避免一次性长请求把 MV3 后台拖死导致挂起
-async function batchAnalyze(list) {
+async function batchAnalyze(list, recordPrepared = false) {
   if (batchBusy) return;
   if (!providers.length) {
     toast('请先在设置中配置 AI 接口', true);
@@ -891,7 +952,12 @@ async function batchAnalyze(list) {
       const job = jobs.find((j) => j.uid === uid);
       toast(`批量分析 ${i + 1}/${uids.length}…`);
       try {
-        await send(MSG.AI_MATCH_SCORE, { uid, job });
+        const match = await send(MSG.AI_MATCH_SCORE, { uid, job });
+        if (recordPrepared) {
+          const greeting = String(job.greetingDraft || normalizeGreetings(match).standard || '').trim();
+          if (!greeting) throw new Error('未生成招呼语，请重新分析');
+          if (!progress.has(uid)) await setProgress(uid, 'prepared');
+        }
         ok++;
       } catch (e) {
         fail++;
@@ -955,6 +1021,8 @@ function buildDetailedCsv(items) {
     ['匹配档次', (j) => (j.match ? VERDICT_LABELS[j.match.verdict] || j.match.verdict : '未分析')],
     ['匹配分', (j) => (j.match ? j.match.score : '')],
     ['是否收藏', (j) => (j.star ? '★' : '')],
+    ['处理状态', (j) => progressLabels[progress.get(j.uid)?.status] || '未处理'],
+    ['状态更新时间', (j) => fmtTime(progress.get(j.uid)?.at)],
     // —— 基本信息 ——
     ['岗位名称', (j) => j.title],
     ['薪资', (j) => j.salaryText],
@@ -1008,19 +1076,8 @@ function csvCell(v) {
   return `"${s.replace(/"/g, '""')}"`;
 }
 
-async function exportJobs() {
-  try {
-    const res = await send(MSG.JOB_EXPORT_REQUEST, { format: 'csv' });
-    const blob = new Blob([res.content], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const ts = new Date().toISOString().slice(0, 10);
-    await chrome.downloads.download({ url, filename: `岗位收录-${ts}.csv`, saveAs: true }).catch(() => {
-      chrome.tabs.create({ url });
-    });
-    toast(`已导出 ${res.count} 个岗位`);
-  } catch (e) {
-    toast(e.message, true);
-  }
+function exportJobs() {
+  batchExport(jobs);
 }
 
 function copyText(text) {

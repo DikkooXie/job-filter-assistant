@@ -96,12 +96,12 @@ function render() {
     h('div', { class: 'popup-actions' }, [
       h('button', {
         class: 'btn btn-primary btn-block',
-        text: '📋 打开岗位面板',
+        text: '打开岗位面板',
         onclick: openSidePanel,
       }),
       h('button', {
         class: 'btn btn-block',
-        text: '⚙️ 画像与设置',
+        text: '画像与设置',
         onclick: () => send(MSG.OPEN_OPTIONS).then(() => window.close()),
       }),
     ]),
@@ -116,7 +116,7 @@ function stat(num, lbl) {
 }
 
 function toggle(label, desc, checked, onChange) {
-  const input = h('input', { type: 'checkbox' });
+  const input = h('input', { type: 'checkbox', 'aria-label': label });
   input.checked = checked;
   input.addEventListener('change', () => onChange(input.checked).catch((e) => toast(e.message, true)));
   return h('div', { class: 'toggle-row' }, [
