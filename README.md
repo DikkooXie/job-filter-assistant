@@ -144,6 +144,8 @@ dev/                       本地预览用（mock chrome API），不进扩展�
 
 ## 开发与测试
 
+本机或云端 Agent 接手前读 [AGENTS.md](AGENTS.md)；首次克隆与跨设备协作见 [接手指南](docs/agents/cloud-start.md)。当前研发任务与交接记录集中在 [GitHub Issues](https://github.com/DikkooXie/job-filter-assistant/issues)。
+
 ```bash
 # 纯逻辑单测（用真机逆向样本验证归一化/薪资/画像/筛选/AI 协议）
 node scripts/test_logic.mjs

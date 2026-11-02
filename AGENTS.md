@@ -2,6 +2,12 @@
 
 给接手开发的人和 agent 的项目上下文。修改前先读这一页；设计相关的改动再读 `DESIGN.md` 和 `docs/settings-ui-spec.md`。
 
+## 需求与协作入口
+
+- 用户用自然语言提需求即可。按 `docs/agents/workflow.md` 自动选择澄清、规格、拆分、实现与审查流程；有可自动调用的 skill 就使用，没有则按仓库流程执行，不要求用户逐步敲命令。
+- 开发、领取任务、提交 PR 或跨设备交接前，读 `docs/agents/collaboration.md`，从 GitHub 查询依赖和占用状态，通过原子创建远端任务分支领取。进度、阻塞和交接写回 issue / PR。
+- 云端首次接手读 `docs/agents/cloud-start.md`。本机、云端和其他厂商的 Agent 都以仓库文档与 GitHub 状态为准，不依赖私人 skill 或聊天记忆。
+
 ## 这个项目是什么
 
 Chrome / Edge 扩展（Manifest V3）：浏览 BOSS直聘 或 前程无忧 时被动收录岗位，结合本机保存的个人画像，调用用户自己配置的 AI 接口逐个分析岗位匹配度。
@@ -25,12 +31,12 @@ npm run release   # 打包发布，需先确认 build 通过
 - **`showBadge` 字段被内容脚本硬编码读取**。`src/content/` 下的文件不经过打包（被原样复制），不能 `import` 常量文件，所以键名是字面量写死的。改这个字段名必须同时改内容脚本。
 - **不引入代码分割、不改构建输出文件名**。构建产物用固定文件名（`assets/[name].js`，无哈希），扩展内自动更新靠覆盖同名文件完成；加哈希会让每次发版都残留旧文件。
 - **后台消息类型名不变**：`SETTINGS_GET/SAVE`、`PROFILE_GET/SAVE/CLEAR`、`AI_PROVIDERS_GET/SAVE`、`AI_PROVIDER_TEST/MODELS`、`AI_RESUME_EXTRACT`、`JOB_LIST_REQUEST`、`JOB_EXPORT_REQUEST`、`JOB_CLEAR_REQUEST`。界面重构不应该新增或改名消息。
-- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖；失败后重新排队；页面关闭前把未保存的内容写出去。改动保存逻辑时要保住这几点。
+- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖；目标是失败后重新排队、页面关闭前写出未保存内容。当前保存队列尚未满足后两项，见 issue #1；修改时需核实并补齐，不能假定现有实现已经满足。
 - **更新流程里有一处不能动的顺序**：点击安装后必须立即弹出文件夹选择窗口（保留用户点击手势），中间不能先 `await` 其他异步操作。
 
 ## 现有模块速查
 
-- `src/react/options.jsx` — 设置页（React）。四个标签页的界面代码集中在文件末尾。
+- `src/react/options.jsx` — 设置页（React）框架与业务编排；四个标签页、共享控件、初始加载及保存队列在 `src/react/settings/`。
 - `src/react/UpdatePanel.jsx` — 设置页里的「关于与更新」。
 - `src/ui/options.js` — 旧版（非 React）设置页，只被仓库根目录和 `dev/` 的 HTML 引用。改设置项的文案时不要漏掉它，直到它被删除。
 - `src/common/constants.js` — 存储 key、消息类型、默认设置与默认筛选条件。
@@ -49,3 +55,17 @@ npm run release   # 打包发布，需先确认 build 通过
 - 以下路径已在 `.gitignore` 中，不要强行提交：`PRODUCT.md`、`.impeccable/`、`.playwright-cli/`、`docs/screenshots/ui-audit/`。
 - `origin` 是上游仓库，只读；不要往 `origin` 推送。
 - 提交信息用中文，结尾加 `Co-Authored-By: Claude Code <noreply@anthropic.com>`。
+
+## Agent skills
+
+### Issue tracker
+
+议题和规格保存在个人 GitHub 仓库。操作前参见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认分诊标签。分诊时参见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+领域文档采用单上下文布局。探索领域代码前参见 `docs/agents/domain.md`。
