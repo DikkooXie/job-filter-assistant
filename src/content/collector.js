@@ -123,8 +123,31 @@
   } catch {}
 
   // —— 极简状态角标（Apple 风：胶囊、毛玻璃） ——
+  // 受设置项 showBadge 控制。内容脚本不打包，不能 import constants.js，
+  // 这里的键名必须与 STORAGE_KEYS.settings 保持一致。
+  const SETTINGS_KEY = 'jobHelperSettingsV1';
   let badgeEl = null;
   let badgeTimer = null;
+  let badgeAllowed = true; // 与 defaultSettings().showBadge 一致：未保存过设置时显示
+  function applyBadgeSetting(settings) {
+    badgeAllowed = !(settings && settings.showBadge === false);
+    if (!badgeAllowed && badgeEl) {
+      clearTimeout(badgeTimer);
+      badgeEl.remove();
+      badgeEl = null;
+    }
+  }
+  let badgeSettingReady = Promise.resolve();
+  try {
+    badgeSettingReady = chrome.storage.local
+      .get(SETTINGS_KEY)
+      .then((got) => applyBadgeSetting(got && got[SETTINGS_KEY]))
+      .catch(() => {});
+    // 在设置页切换后立即生效，不用刷新招聘网站页面
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes[SETTINGS_KEY]) applyBadgeSetting(changes[SETTINGS_KEY].newValue);
+    });
+  } catch {}
   function ensureBadge() {
     if (badgeEl) return badgeEl;
     badgeEl = document.createElement('div');
@@ -137,11 +160,15 @@
     return badgeEl;
   }
   function flashBadge() {
-    const el = ensureBadge();
-    el.querySelector('.jh-text').textContent = `已收录 ${captured} 次`;
-    el.classList.add('jh-active');
-    clearTimeout(badgeTimer);
-    badgeTimer = setTimeout(() => el.classList.remove('jh-active'), 1600);
+    // 等设置读完再决定，避免关闭角标后页面刚打开时仍闪一下
+    badgeSettingReady.then(() => {
+      if (!badgeAllowed) return;
+      const el = ensureBadge();
+      el.querySelector('.jh-text').textContent = `已收录 ${captured} 次`;
+      el.classList.add('jh-active');
+      clearTimeout(badgeTimer);
+      badgeTimer = setTimeout(() => el.classList.remove('jh-active'), 1600);
+    });
   }
 
   // —— DOM 兜底：当接口嗅探长时间未命中时，从可见卡片粗略抓取 ——

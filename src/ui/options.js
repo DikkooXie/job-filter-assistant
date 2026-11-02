@@ -710,8 +710,8 @@ function renderGeneral() {
   const cap = h('div', { class: 'panel' }, [h('div', { class: 'panel-title', text: '抓取与分析' })]);
   cap.appendChild(setRow('自动收录岗位', '浏览列表时自动抓取', settings.autoCapture, (v) => save({ autoCapture: v })));
   cap.appendChild(setRow('自动 AI 分析', '新收录岗位自动打分（消耗 token）', settings.autoScore, (v) => save({ autoScore: v })));
-  cap.appendChild(setRow('列表内显示角标', '页面右下角显示收录状态', settings.showBadge, (v) => save({ showBadge: v })));
-  cap.appendChild(setRow('去重', '相同岗位只保留一条', settings.dedupe, (v) => save({ dedupe: v })));
+  cap.appendChild(setRow('显示收录角标', '收录岗位时在页面右下角短暂显示。', settings.showBadge, (v) => save({ showBadge: v })));
+  cap.appendChild(setRow('合并重复岗位', '', settings.dedupe, (v) => save({ dedupe: v })));
   const maxInput = h('input', { type: 'number', value: settings.maxJobs, style: 'width:100px' });
   maxInput.addEventListener('input', () => save({ maxJobs: Number(maxInput.value) || 800 }));
   cap.appendChild(

@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import vm from 'node:vm';
 
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
@@ -495,6 +496,79 @@ test('写入顺序：manifest.json 最后，跳过不安全路径', () => {
   const plan = planWrites({ 'manifest.json': 1, 'a.js': 2, '../evil': 3, 'icons/i.png': 4 });
   assert.deepEqual(plan.map((w) => w.path), ['a.js', 'icons/i.png', 'manifest.json']);
   assert.throws(() => planWrites({ 'sub/manifest.json': 1 }));
+});
+
+// ---------- 页面角标 ----------
+// 在 vm 里用最小桩跑 collector.js（内容脚本不打包，无法直接 import）。
+section('页面收录角标');
+function runCollector(stored) {
+  const appended = [];
+  const listeners = { message: [], storage: [] };
+  const makeEl = () => {
+    const el = {
+      className: '', innerHTML: '', removed: false,
+      classList: { add() {}, remove() {}, toggle() {} },
+      addEventListener() {},
+      querySelector: () => ({ textContent: '' }),
+      remove() { el.removed = true; },
+    };
+    return el;
+  };
+  const fakeWindow = { addEventListener: (type, fn) => type === 'message' && listeners.message.push(fn) };
+  const ctx = {
+    window: fakeWindow,
+    location: { href: 'https://example.com/', hostname: 'example.com' },
+    URL,
+    document: {
+      createElement: makeEl,
+      body: { appendChild: (el) => { appended.push(el); return el; } },
+      querySelector: () => null,
+      querySelectorAll: () => [],
+    },
+    MutationObserver: class { observe() {} },
+    setTimeout: () => 0, // 不触发兜底抓取与淡出计时
+    clearTimeout: () => {},
+    chrome: {
+      runtime: { sendMessage: () => Promise.resolve(), onMessage: { addListener() {} } },
+      storage: {
+        local: { get: async () => (stored === undefined ? {} : { jobHelperSettingsV1: stored }) },
+        onChanged: { addListener: (fn) => listeners.storage.push(fn) },
+      },
+    },
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/collector.js'), 'utf8'), ctx);
+  const capture = async () => {
+    for (const fn of listeners.message) {
+      fn({ source: fakeWindow, data: { source: 'job-helper:sniffer', platform: 'boss', url: 'https://www.zhipin.com/wapi/zpgeek/search/joblist.json', payload: { zpData: { jobList: [] } } } });
+    }
+    await new Promise((r) => setImmediate(r));
+  };
+  const badges = () => appended.filter((el) => el.className === 'jobhelper-capture-badge' && !el.removed);
+  const changeSettings = (newValue) => listeners.storage.forEach((fn) => fn({ jobHelperSettingsV1: { newValue } }, 'local'));
+  return { capture, badges, changeSettings };
+}
+await testAsync('未保存过设置时，收录后显示角标', async () => {
+  const c = runCollector(undefined);
+  await c.capture();
+  assert.equal(c.badges().length, 1);
+});
+await testAsync('showBadge 为 false 时不创建角标', async () => {
+  const c = runCollector({ showBadge: false });
+  await c.capture();
+  await c.capture();
+  assert.equal(c.badges().length, 0);
+});
+await testAsync('在设置页关闭后，已显示的角标立即移除；重新打开后再次显示', async () => {
+  const c = runCollector({ showBadge: true });
+  await c.capture();
+  assert.equal(c.badges().length, 1);
+  c.changeSettings({ showBadge: false });
+  assert.equal(c.badges().length, 0);
+  await c.capture();
+  assert.equal(c.badges().length, 0);
+  c.changeSettings({ showBadge: true });
+  await c.capture();
+  assert.equal(c.badges().length, 1);
 });
 
 // ---------- 汇总 ----------

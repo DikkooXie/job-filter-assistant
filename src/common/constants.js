@@ -98,7 +98,7 @@ export function defaultSettings() {
     mode: MODE.auto,
     autoCapture: true, // 浏览时自动收录嗅探到的岗位
     autoScore: false, // 收录后自动 AI 打分（默认关，省 token）
-    showBadge: true, // 在岗位卡片上显示匹配角标
+    showBadge: true, // 收录岗位时在招聘网站页面右下角短暂显示「已收录 N 次」（content/collector.js 读取）
     dedupe: true,
     maxJobs: 800, // 岗位库上限，超出按时间淘汰
     activeProviderId: '', // 当前启用的 AI 供应商
