@@ -6,7 +6,6 @@ import { Tabs } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MSG } from '../common/constants.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../common/profile.js';
-import { PRESETS, validateProvider } from '../common/ai/providers.js';
 import { send } from '../ui/ui-common.js';
 import { parseResumeFile } from '../ui/resumeParser.js';
 import { Field, Tags } from './settings/controls.jsx';
@@ -29,8 +28,6 @@ export default function Options() {
   const pendingSettings = useRef({});
   const [draft, setDraft] = useState(null), [materials, setMaterials] = useState([]), [paste, setPaste] = useState('');
   const [notice, setNotice] = useState(null), [busy, setBusy] = useState(''), [confirm, setConfirm] = useState(null);
-  const [preset, setPreset] = useState(PRESETS[0].key);
-  const [results, setResults] = useState({});
   const fileRef = useRef(null);
   const report = useCallback((message, error = false) => {
     if (message == null) {
@@ -106,16 +103,6 @@ export default function Options() {
   const profileText = (label, group, key, type = 'text', placeholder = '') => <Field key={key} label={label}><Input type={type} placeholder={placeholder} value={(group ? profile[group][key] : profile[key]) ?? ''} onChange={(e) => editProfile(group, key, type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)} /></Field>;
   const profileTags = (label, group, key, placeholder) => <div key={key} className="space-y-2"><div className="text-sm font-medium">{label}</div><Tags label={label} value={group ? profile[group][key] : profile[key]} placeholder={placeholder} onChange={(v) => editProfile(group, key, v)} /></div>;
   const profileArea = (label, group, key, placeholder) => <Field key={key} label={label}><Textarea rows={3} placeholder={placeholder} value={(group ? profile[group][key] : profile[key]) || ''} onChange={(e) => editProfile(group, key, e.target.value)} /></Field>;
-  const changeProvider = (id, patch) => updateProviders(providersRef.current.map((p) => p.id === id ? { ...p, ...patch } : p));
-  const providerOperation = (prov, kind) => action(async () => {
-    if (kind === 'test') { const valid = validateProvider(prov); if (!valid.ok) { setResults((r) => ({ ...r, [prov.id]: '配置有误：' + valid.errors.join('；') })); return; } }
-    setResults((r) => ({ ...r, [prov.id]: kind === 'test' ? '测试中…' : '拉取模型中…' }));
-    try {
-      const result = await send(kind === 'test' ? MSG.AI_PROVIDER_TEST : MSG.AI_PROVIDER_MODELS, { provider: prov });
-      if (kind === 'test') setResults((r) => ({ ...r, [prov.id]: `${result.ok ? '✓' : '✕'} ${result.message}${result.sample ? `（模型回复：${result.sample}）` : ''}` }));
-      else { changeProvider(prov.id, { discoveredModels: result }); setResults((r) => ({ ...r, [prov.id]: `✓ 发现 ${result.length} 个模型，已填入模型候选` })); }
-    } catch (e) { setResults((r) => ({ ...r, [prov.id]: `✕ ${e.message}${kind === 'models' ? '（部分供应商不支持列模型，可手动填写模型 ID）' : ''}` })); }
-  });
   const exportData = (format) => action(async () => { const res = await send(MSG.JOB_EXPORT_REQUEST, { format }); const url = URL.createObjectURL(new Blob([res.content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' })); try { await chrome.downloads.download({ url, filename: `岗位收录-${new Date().toISOString().slice(0, 10)}.${format}`, saveAs: true }); report(`已导出 ${res.count} 个岗位`); } finally { setTimeout(() => URL.revokeObjectURL(url), 60000); } });
 
   if (!settings || !profile) {
@@ -127,7 +114,7 @@ export default function Options() {
     <SettingsShell page={page} title={title} status={status} onRetry={retry} version={extensionVersion()} notice={notice} onDismissNotice={() => setNotice(null)} busy={busy} rail={page === 'profile' ? <ProfileRail score={score} /> : null}>
       <Tabs value={page} onValueChange={(next) => { if (next && location.hash !== `#${next}`) location.hash = `#${next}`; }}>
         <ProfileTab {...{ score, materials, readMaterials, action, setDraft, extractMaterials, fileRef, resumeFile, paste, setPaste, extract, report, draft, applyDraft, profileTags, profileText, profileArea, setConfirm, flush, profileRef, setProfile }} />
-        <AiTab {...{ preset, setPreset, action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, results, changeProvider, providerOperation }} />
+        <AiTab {...{ action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, setConfirm }} />
         <FiltersTab settings={settings} updateSettings={updateSettings} />
         <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} />
       </Tabs>

@@ -12,7 +12,10 @@ import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, rem
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
 import { evaluateJob, applyFilters } from '../src/common/filters.js';
-import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable } from '../src/common/ai/providers.js';
+import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
+import {
+  formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
+} from '../src/react/settings/aiState.js';
 import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 import {
@@ -310,6 +313,112 @@ test('本地模型无需 key 即可用', () => {
 });
 test('远程模型缺 key 不可用', () => {
   assert.equal(isProviderUsable({ baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiKey: '' }), false);
+});
+test('四种协议和全部预设都能生成接口', () => {
+  assert.deepEqual(PROTOCOLS, ['openai-chat', 'openai-responses', 'anthropic', 'gemini']);
+  assert.ok(PRESETS.length >= 4);
+  for (const preset of PRESETS) {
+    const provider = providerFromPreset(preset.key);
+    assert.equal(provider.protocol, preset.protocol);
+    assert.ok(PROTOCOLS.includes(provider.protocol));
+    assert.equal(provider.name, preset.name);
+    assert.equal(provider.apiKey, '');
+    assert.ok(provider.id.startsWith('prov-'));
+  }
+});
+
+// ---------- AI 接口页状态 ----------
+section('AI 接口页状态');
+test('删除正在使用的接口时落到剩余第一个', () => {
+  const providers = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  const next = removeProviderState({ providers, activeProviderId: 'b', selectedId: 'b', removedId: 'b' });
+  assert.deepEqual(next.providers.map((item) => item.id), ['a', 'c']);
+  assert.equal(next.activeProviderId, 'a');
+  assert.equal(next.selectedId, 'a');
+  assert.deepEqual(providers.map((item) => item.id), ['a', 'b', 'c']);
+});
+test('删除排在第一且正在使用的接口时启用新的第一个', () => {
+  const next = removeProviderState({
+    providers: [{ id: 'a' }, { id: 'b' }], activeProviderId: 'a', selectedId: 'a', removedId: 'a',
+  });
+  assert.equal(next.activeProviderId, 'b');
+  assert.equal(next.selectedId, 'b');
+});
+test('删除非使用中的接口时保留使用状态', () => {
+  const next = removeProviderState({
+    providers: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], activeProviderId: 'a', selectedId: 'c', removedId: 'b',
+  });
+  assert.equal(next.activeProviderId, 'a');
+  assert.equal(next.selectedId, 'c');
+  assert.deepEqual(next.providers.map((item) => item.id), ['a', 'c']);
+});
+test('删除正在使用的接口时，正在编辑的另一个接口保持选中', () => {
+  const next = removeProviderState({
+    providers: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], activeProviderId: 'a', selectedId: 'c', removedId: 'a',
+  });
+  assert.equal(next.activeProviderId, 'b');
+  assert.equal(next.selectedId, 'c');
+});
+test('删除唯一接口时清空使用状态', () => {
+  const next = removeProviderState({
+    providers: [{ id: 'a' }], activeProviderId: 'a', selectedId: 'a', removedId: 'a',
+  });
+  assert.deepEqual(next.providers, []);
+  assert.equal(next.activeProviderId, '');
+  assert.equal(next.selectedId, '');
+});
+test('已有接口时优先保持当前编辑，否则选中正在使用的', () => {
+  const providers = [{ id: 'a' }, { id: 'b' }];
+  assert.equal(initialSelectedId(providers, 'b', 'a'), 'a');
+  assert.equal(initialSelectedId(providers, 'b', ''), 'b');
+  assert.equal(initialSelectedId(providers, '', 'missing'), 'a');
+  assert.equal(initialSelectedId([], 'a', 'a'), '');
+});
+test('额外请求头只接受 JSON 对象', () => {
+  assert.deepEqual(parseExtraHeaders(''), { ok: true, headers: {} });
+  assert.deepEqual(parseExtraHeaders('  {"X-Demo":"1"} '), { ok: true, headers: { 'X-Demo': '1' } });
+  assert.equal(parseExtraHeaders('{').ok, false);
+  assert.equal(parseExtraHeaders('[]').ok, false);
+  assert.equal(parseExtraHeaders('null').ok, false);
+  assert.equal(parseExtraHeaders('{"X":{"nested":true}}').ok, false);
+  assert.match(parseExtraHeaders('{').error, /JSON/);
+});
+test('连接耗时由调用方传入的毫秒决定', () => {
+  assert.equal(formatElapsed(40), '0.04 秒');
+  assert.equal(formatElapsed(800), '0.8 秒');
+  assert.equal(formatElapsed(1200), '1.2 秒');
+  assert.equal(formatElapsed(10500), '11 秒');
+  assert.equal(formatElapsed(-1), '');
+  const ok = formatConnectionResult({ ok: true, sample: '正常', elapsedMs: 800, duration: 9 });
+  assert.equal(ok.text, '连接正常 · 0.8 秒');
+  assert.equal(ok.detail, '模型回复：正常');
+  const failed = formatConnectionResult({ ok: false, message: '网络请求失败', elapsedMs: 1200 });
+  assert.equal(failed.text, '连接失败 · 1.2 秒');
+  assert.equal(failed.detail, '网络请求失败');
+  assert.equal(formatModelsResult({ count: 2, elapsedMs: 500 }).text, '已拉取 2 个模型 · 0.5 秒');
+});
+test('列表行展示协议、模型和主机', () => {
+  const meta = providerMeta({ protocol: 'openai-chat', model: 'demo-small', baseUrl: 'https://invalid.example/v1' });
+  assert.equal(meta.text, 'OpenAI 兼容 · demo-small · invalid.example');
+  assert.equal(providerHost(''), '未填写地址');
+  assert.equal(providerHost('not a url'), 'not a url');
+});
+test('AI 接口页保留原字段、自动保存，并且自己计时', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const ui = fs.readFileSync(path.join(root, 'src/react/settings/AiTab.jsx'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'src/common/ai/client.js'), 'utf8');
+  for (const field of ['baseUrl', 'apiKey', 'model', 'anthropicVersion', 'temperature', 'maxTokens', 'requestUrl', 'modelsUrl', 'extraHeaders', 'discoveredModels', 'activeProviderId']) {
+    assert.match(ui, new RegExp(field));
+  }
+  assert.match(ui, /updateProviders/);
+  assert.match(ui, /PRESETS\.map/);
+  assert.match(ui, /PROTOCOLS\.map/);
+  assert.match(ui, /AI_PROVIDER_TEST/);
+  assert.match(ui, /AI_PROVIDER_MODELS/);
+  assert.match(ui, /performance\.now\(\)/);
+  assert.match(ui, /formatConnectionResult/);
+  assert.doesNotMatch(ui, /<button\b[^>]*>\s*保存/);
+  assert.doesNotMatch(client, /elapsedMs/);
 });
 
 // ---------- 匹配结果规整 ----------
