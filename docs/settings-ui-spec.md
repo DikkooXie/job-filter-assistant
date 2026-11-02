@@ -9,31 +9,38 @@
 只作用于设置页，不要改全局主题，避免影响浮窗和侧边栏（它们与设置页共用组件和样式表）。
 
 ```css
-:root[data-theme="light"]{
-  --page:#f1f2f0; --surface:#f1f2f0; --surface-2:#e9ecea; --inset:#e3e8e5; --field:#f6f7f5;
-  --border:rgba(20,32,38,.10); --border-strong:rgba(20,32,38,.16);
-  --ink-1:#16202a; --ink-2:#4b5865; --ink-3:#5e6b75;
-  --accent:#1c6b5e; --accent-soft:rgba(28,107,94,.09); --accent-line:rgba(28,107,94,.28); --on-accent:#f7fbfa;
-  --up:#1d7a4c; --down:#b23b48; --down-soft:rgba(178,59,72,.08); --warn:#94651a;
-  --btn-bg:#18232c; --btn-ink:#f7fafa; --focus:rgba(28,107,94,.22);
-  --switch-off:#c4cdd3;
-  --shadow:0 1px 2px rgba(16,28,34,.05),0 8px 24px -16px rgba(16,28,34,.22);
+.settings-root{
+  --s-page:#f1f2f0; --s-surface:#f1f2f0; --s-surface-2:#e9ecea; --s-inset:#e3e8e5; --s-field:#f6f7f5;
+  --s-border:rgba(20,32,38,.10); --s-border-strong:rgba(20,32,38,.16);
+  --s-ink-1:#16202a; --s-ink-2:#4b5865; --s-ink-3:#5e6b75;
+  --s-accent:#1c6b5e; --s-accent-soft:rgba(28,107,94,.09); --s-accent-line:rgba(28,107,94,.28); --s-on-accent:#f7fbfa;
+  --s-up:#1d7a4c; --s-down:#b23b48; --s-down-soft:rgba(178,59,72,.08); --s-warn:#94651a;
+  --s-btn-bg:#18232c; --s-btn-ink:#f7fafa; --s-focus:rgba(28,107,94,.22);
+  --s-switch-off:#c4cdd3;
+  --s-shadow:0 1px 2px rgba(16,28,34,.05),0 8px 24px -16px rgba(16,28,34,.22);
 }
-:root[data-theme="dark"]{
-  --page:#161d22; --surface:#161d22; --surface-2:#1a2228; --inset:#1d262c; --field:#121a1f;
-  --border:rgba(214,230,238,.10); --border-strong:rgba(214,230,238,.16);
-  --ink-1:#e7edf0; --ink-2:#aebac3; --ink-3:#828f99;
-  --accent:#66c6b2; --accent-soft:rgba(102,198,178,.12); --accent-line:rgba(102,198,178,.32); --on-accent:#0d1a17;
-  --up:#5ec48c; --down:#e0818b; --down-soft:rgba(224,129,139,.1); --warn:#d5a75c;
-  --btn-bg:#e7edf0; --btn-ink:#10171b; --focus:rgba(102,198,178,.25);
-  --switch-off:#3b4750;
-  --shadow:0 1px 2px rgba(0,0,0,.28),0 12px 30px -20px rgba(0,0,0,.7);
+@media (prefers-color-scheme: dark){
+  .settings-root{
+  --s-page:#161d22; --s-surface:#161d22; --s-surface-2:#1a2228; --s-inset:#1d262c; --s-field:#121a1f;
+  --s-border:rgba(214,230,238,.10); --s-border-strong:rgba(214,230,238,.16);
+  --s-ink-1:#e7edf0; --s-ink-2:#aebac3; --s-ink-3:#828f99;
+  --s-accent:#66c6b2; --s-accent-soft:rgba(102,198,178,.12); --s-accent-line:rgba(102,198,178,.32); --s-on-accent:#0d1a17;
+  --s-up:#5ec48c; --s-down:#e0818b; --s-down-soft:rgba(224,129,139,.1); --s-warn:#d5a75c;
+  --s-btn-bg:#e7edf0; --s-btn-ink:#10171b; --s-focus:rgba(102,198,178,.25);
+  --s-switch-off:#3b4750;
+  --s-shadow:0 1px 2px rgba(0,0,0,.28),0 12px 30px -20px rgba(0,0,0,.7);
+  }
 }
 ```
 
-要点：侧栏和主区域同一底色（`--page`），只有一条 `--border` 细线分隔。页面上不使用纯白或纯黑。强调色是深青绿，只用于选中态、链接、焦点环和计量条，不做大面积填充。
+要点：侧栏和主区域同一底色（`--s-page`），只有一条 `--s-border` 细线分隔。页面上不使用纯白或纯黑。强调色是深青绿，只用于选中态、链接、焦点环和计量条，不做大面积填充。
 
-深色模式的切换沿用现有主题机制即可，不新增设置项。
+实现约定：
+
+- 变量挂在 `.settings-root` 类上，这个类加在 `extension-pages/options.html` 的 `<body>` 上，不写到 `:root`。`src/react/globals.css` 是三个扩展页面共用的，写到 `:root` 会改到浮窗和侧边栏。
+- 统一加 `--s-` 前缀。shadcn 已经占用了 `--border`、`--accent` 等同名变量，含义不同（shadcn 的 `--accent` 是悬停底色，不是强调色），不加前缀会互相覆盖。
+- 深色模式跟随系统，和项目现有做法一致（`globals.css` 里的 `@custom-variant dark` 用的是 `prefers-color-scheme`）。不加 `data-theme` 属性，不新增主题设置项。
+- 设置页里继续用到的 shadcn 组件（如 Select 的下拉层），在 `.settings-root` 内把 shadcn 变量映射到上面这组颜色。类加在 `<body>` 上，Radix 渲染到 `body` 下的弹出层也能拿到这些变量。
 
 ## 2. 排版与间距
 
@@ -42,14 +49,14 @@
 | 用途 | 字号 / 行高 / 字重 |
 |---|---|
 | 页面标题 | 26px / 1.3 / 600，字距 -0.015em |
-| 页面说明 | 13px / 1.65 / 400，`--ink-3` |
+| 页面说明 | 13px / 1.65 / 400，`--s-ink-3` |
 | 分组标题 | 15px / 1.45 / 600 |
-| 分组说明 | 12.5px / 1.65 / 400，`--ink-3` |
-| 字段标签 | 13px / 1.5 / 500，`--ink-2` |
+| 分组说明 | 12.5px / 1.65 / 400，`--s-ink-3` |
+| 字段标签 | 13px / 1.5 / 500，`--s-ink-2` |
 | 输入文字 | 13.5px |
-| 辅助说明 | 12px / 1.6，`--ink-3` |
+| 辅助说明 | 12px / 1.6，`--s-ink-3` |
 | 行标题（列表项） | 13.5px / 1.5 / 500 |
-| 行附加信息 | 12px，`--ink-3` |
+| 行附加信息 | 12px，`--s-ink-3` |
 | 侧栏卡片标题 | 12.5px / 600 |
 | 侧栏分数 | 30px / 1 / 600，字距 -0.02em |
 
@@ -58,10 +65,10 @@
 ## 3. 外壳
 
 - 网格：`248px minmax(0,1fr)`，最小高度 100vh。
-- 侧栏：吸顶，高 100vh，内边距 `30px 18px 22px`，纵向排列：品牌 → 导航 → 底部版本号。品牌是 30px 方形图标（`--inset` 底、`--border` 边）加 13.5px 名称。导航项高约 34px（`9px 10px` 内边距）、圆角 8px、13.5px、`--ink-2`；悬停 `--surface-2`；选中 `--inset` 底 + `--ink-1` + 600 字重，**不加彩色竖条**。导航项前有一个 16px 线性图标（人像 / 接口 / 漏斗 / 齿轮）。
-- 底部：只有「版本 1.0.3」，12px `--ink-3`，上方一条 `--border` 细线。
-- 页头：标题 + 右侧保存状态，下方 `--border` 细线，与内容间距 32px。
-- 保存状态：6px 圆点（已保存用 `--up`）+ 12px 文字 `--ink-3`。三种：`保存中…`、`已自动保存 · 14:32`、`保存失败，重试`（失败时圆点用 `--down`，文字可点击或作为按钮重试）。
+- 侧栏：吸顶，高 100vh，内边距 `30px 18px 22px`，纵向排列：品牌 → 导航 → 底部版本号。品牌是 30px 方形图标（`--s-inset` 底、`--s-border` 边）加 13.5px 名称。导航项高约 34px（`9px 10px` 内边距）、圆角 8px、13.5px、`--s-ink-2`；悬停 `--s-surface-2`；选中 `--s-inset` 底 + `--s-ink-1` + 600 字重，**不加彩色竖条**。导航项前有一个 16px 线性图标（人像 / 接口 / 漏斗 / 齿轮）。
+- 底部：只有「版本 1.0.3」，12px `--s-ink-3`，上方一条 `--s-border` 细线。
+- 页头：标题 + 右侧保存状态，下方 `--s-border` 细线，与内容间距 32px。
+- 保存状态：6px 圆点（已保存用 `--s-up`）+ 12px 文字 `--s-ink-3`。三种：`保存中…`、`已自动保存 · 14:32`、`保存失败，重试`（失败时圆点用 `--s-down`，文字可点击或作为按钮重试）。
 - 页面切换：`#profile` / `#ai` / `#filters` / `#general` 四个 hash，刷新后保持当前页。更新完成后打开设置页会带 `#updated`：此时显示更新完成提示，并落在「通用与隐私」页。
 - 内容载体是「分组」，不是卡片：不加边框、圆角、阴影、嵌套。分组之间只靠留白和细线。
 
@@ -69,27 +76,27 @@
 
 **字段**：两列网格 `132px minmax(0,1fr)`，标签在左、控件在右、间距 18px。窄屏（≤860px）改为上下排列、间距 7px，标签取消上内边距。
 
-**输入框**：高 36px，圆角 8px，`--field` 底，`--border-strong` 边；聚焦时边框转 `--accent` 并带 3px `--focus` 光晕。数字输入的短版宽 88px、高 34px。文本域最小高 76px。
+**输入框**：高 36px，圆角 8px，`--s-field` 底，`--s-border-strong` 边；聚焦时边框转 `--s-accent` 并带 3px `--s-focus` 光晕。数字输入的短版宽 88px、高 34px。文本域最小高 76px。
 
-**标签输入（chips）**：容器 `--field` 底、圆角 8px、内边距 `6px 8px`；标签高 24px、圆角 6px、`--inset` 底，右侧一个 18px 的 × 按钮。空容器里显示提示文字（如「回车添加」）。交互不变：回车或逗号确认、输入为空时退格删除最后一个、去重不区分大小写、失焦时提交。风险词标签用 `--down-soft` 底、`--down` 字。
+**标签输入（chips）**：容器 `--s-field` 底、圆角 8px、内边距 `6px 8px`；标签高 24px、圆角 6px、`--s-inset` 底，右侧一个 18px 的 × 按钮。空容器里显示提示文字（如「回车添加」）。交互不变：回车或逗号确认、输入为空时退格删除最后一个、去重不区分大小写、失焦时提交。风险词标签用 `--s-down-soft` 底、`--s-down` 字。
 
-**按钮**：高 32px、圆角 8px、13px / 500，内边距 `0 12px`；小号 28px。主按钮 `--btn-bg` 底 + `--btn-ink` 字（深色模式下自动反转）；描边按钮 `--surface` 底 + `--border-strong` 边；幽灵按钮无底色；危险按钮只有 `--down` 字和 32% 透明度的 `--down` 边。禁用态 45% 不透明。
+**按钮**：高 32px、圆角 8px、13px / 500，内边距 `0 12px`；小号 28px。主按钮 `--s-btn-bg` 底 + `--s-btn-ink` 字（深色模式下自动反转）；描边按钮 `--s-surface` 底 + `--s-border-strong` 边；幽灵按钮无底色；危险按钮只有 `--s-down` 字和 32% 透明度的 `--s-down` 边。禁用态 45% 不透明。
 
-**开关**：36×21px 胶囊，关闭时 `--switch-off`，打开时 `--accent`，滑块 15px 白色圆点带阴影。可点区域整行。开关行左右分置，下方 `--border` 细线，最后一行去掉。
+**开关**：36×21px 胶囊，关闭时 `--s-switch-off`，打开时 `--s-accent`，滑块 15px 白色圆点带阴影。可点区域整行。开关行左右分置，下方 `--s-border` 细线，最后一行去掉。
 
-**分段控件**：`--inset` 底、圆角 9px、内边距 3px；选中项 `--surface` 底 + 细边 + 阴影，字重 500。
+**分段控件**：`--s-inset` 底、圆角 9px、内边距 3px；选中项 `--s-surface` 底 + 细边 + 阴影，字重 500。
 
-**单选卡片**：三列网格，`--field` 底、圆角 10px、内边距 `12px 13px`；选中时 `--accent-soft` 底、`--accent-line` 边、内部 14px 圆点填充。整张卡可点，键盘可达。
+**单选卡片**：三列网格，`--s-field` 底、圆角 10px、内边距 `12px 13px`；选中时 `--s-accent-soft` 底、`--s-accent-line` 边、内部 14px 圆点填充。整张卡可点，键盘可达。
 
-**拖放区**：虚线 `--border-strong` 边、圆角 10px、`--surface-2` 底、内边距 `26px 22px`、居中；悬停变 `--accent-line` 边和 `--accent-soft` 底。
+**拖放区**：虚线 `--s-border-strong` 边、圆角 10px、`--s-surface-2` 底、内边距 `26px 22px`、居中；悬停变 `--s-accent-line` 边和 `--s-accent-soft` 底。
 
-**列表行**：左右分置，`14px 0` 内边距，行间 `--border` 细线。左侧标题行可带状态徽标，下方一行附加信息（协议 · 模型 · 地址，模型名用等宽字体加 `--inset` 底）；右侧是操作按钮组。
+**列表行**：左右分置，`14px 0` 内边距，行间 `--s-border` 细线。左侧标题行可带状态徽标，下方一行附加信息（协议 · 模型 · 地址，模型名用等宽字体加 `--s-inset` 底）；右侧是操作按钮组。
 
-**折叠区**：`details/summary`，summary 12.5px `--ink-2`，前面一个 `›`，展开时旋转 90°。高级设置用虚线顶边，手动更新步骤用实线顶边。
+**折叠区**：`details/summary`，summary 12.5px `--s-ink-2`，前面一个 `›`，展开时旋转 90°。高级设置用虚线顶边，手动更新步骤用实线顶边。
 
-**徽标**：高 20px、圆角 5px、11.5px；强调徽标用 `--accent-soft` 底 + `--accent` 字；「正在使用」带一个 5px 圆点。
+**徽标**：高 20px、圆角 5px、11.5px；强调徽标用 `--s-accent-soft` 底 + `--s-accent` 字；「正在使用」带一个 5px 圆点。
 
-**侧栏卡片**：296px 宽，`--surface` 底、圆角 14px、内边距 `20px`、`--shadow`，吸顶 38px。窄屏（≤1080px）移到内容下方并改为两列，≤860px 改为一列。
+**侧栏卡片**：296px 宽，`--s-surface` 底、圆角 14px、内边距 `20px`、`--s-shadow`，吸顶 38px。窄屏（≤1080px）移到内容下方并改为两列，≤860px 改为一列。
 
 **危险操作区**：一行，左侧标题 + 一句后果说明，右侧危险按钮；与普通分组用细线分隔。
 
