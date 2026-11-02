@@ -31,7 +31,7 @@ npm run release   # 打包发布，需先确认 build 通过
 - **`showBadge` 字段被内容脚本硬编码读取**。`src/content/` 下的文件不经过打包（被原样复制），不能 `import` 常量文件，所以键名是字面量写死的。改这个字段名必须同时改内容脚本。
 - **不引入代码分割、不改构建输出文件名**。构建产物用固定文件名（`assets/[name].js`，无哈希），扩展内自动更新靠覆盖同名文件完成；加哈希会让每次发版都残留旧文件。
 - **后台消息类型名不变**：`SETTINGS_GET/SAVE`、`PROFILE_GET/SAVE/CLEAR`、`AI_PROVIDERS_GET/SAVE`、`AI_PROVIDER_TEST/MODELS`、`AI_RESUME_EXTRACT`、`JOB_LIST_REQUEST`、`JOB_EXPORT_REQUEST`、`JOB_CLEAR_REQUEST`。界面重构不应该新增或改名消息。
-- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖；目标是失败后重新排队、页面关闭前写出未保存内容。当前保存队列尚未满足后两项，见 issue #1；修改时需核实并补齐，不能假定现有实现已经满足。
+- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖。保存失败且没有更新的编辑时，按原间隔重新排队。页面隐藏、`pagehide`、`beforeunload` 时立即发出未保存内容，不能只靠组件卸载。实现在 `src/react/settings/saveQueue.js`。
 - **更新流程里有一处不能动的顺序**：点击安装后必须立即弹出文件夹选择窗口（保留用户点击手势），中间不能先 `await` 其他异步操作。
 
 ## 现有模块速查
