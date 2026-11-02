@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
 
+import { defaultFilters, defaultSettings, STORAGE_KEYS } from '../src/common/constants.js';
+import { loadSettings, saveSettings } from '../src/common/settingsStore.js';
+import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
 import { evaluateJob, applyFilters } from '../src/common/filters.js';
@@ -881,6 +884,114 @@ test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
   assert.match(options, /role=\{notice\?\.error \? 'alert' : 'status'\}/);
   assert.match(options, /aria-live="polite"/);
   assert.doesNotMatch(options, /import\(/);
+});
+
+// ---------- 岗位筛选页 ----------
+section('岗位筛选页');
+test('风险词默认值不变', () => {
+  assert.deepEqual(defaultFilters().riskKeywords, ['外包', '驻场', '猎头', '销售', '电销', '中介']);
+});
+test('标签回车逗号确认、空退格删除、大小写去重', () => {
+  assert.deepEqual(commitTags(['前端'], 'React'), ['前端', 'React']);
+  assert.deepEqual(commitTags([], '前端，React'), ['前端', 'React']);
+  const existing = ['React'];
+  assert.equal(commitTags(existing, 'react'), existing);
+  const same = ['前端'];
+  assert.equal(commitTags(same, ''), same);
+  assert.equal(commitTags(same, '   '), same);
+  assert.deepEqual(removeLastTag(['前端', 'React'], ''), ['前端']);
+  assert.deepEqual(removeLastTag(['前端', 'React'], 'R'), ['前端', 'React']);
+  assert.deepEqual(removeLastTag([], ''), []);
+});
+test('月薪下限空值写成 null，非法数字不落成 NaN', () => {
+  assert.equal(parseSalaryMinK(''), null);
+  assert.equal(parseSalaryMinK('  '), null);
+  assert.equal(parseSalaryMinK(null), null);
+  assert.equal(parseSalaryMinK('18'), 18);
+  assert.equal(parseSalaryMinK('18.5'), 18.5);
+  assert.equal(parseSalaryMinK('0'), 0);
+  assert.equal(parseSalaryMinK('abc'), null);
+});
+test('筛选页补丁不携带 salaryMaxK，合并后原值还在', () => {
+  const current = { ...defaultFilters(), salaryMaxK: 36, salaryMinK: 12, keywordsInclude: ['前端'], note: 'keep' };
+  const patch = filterSettingsPatch({ salaryMinK: 20, enabled: true, salaryMaxK: null, keywordsExclude: ['电销'] });
+  assert.deepEqual(Object.keys(patch.filters).sort(), ['enabled', 'keywordsExclude', 'salaryMinK']);
+  assert.equal('salaryMaxK' in patch.filters, false);
+  const merged = mergeFilterPatch(current, { salaryMinK: 20, salaryMaxK: null, keywordsExclude: ['电销'] });
+  assert.equal(merged.salaryMaxK, 36);
+  assert.equal(merged.salaryMinK, 20);
+  assert.deepEqual(merged.keywordsInclude, ['前端']);
+  assert.deepEqual(merged.keywordsExclude, ['电销']);
+  assert.equal(merged.note, 'keep');
+  for (const key of Object.keys(defaultFilters())) assert.ok(Object.prototype.hasOwnProperty.call(merged, key), key);
+});
+test('筛选页不渲染月薪上限，保存仍走字段合并', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const tab = fs.readFileSync(path.join(root, 'src/react/settings/FiltersTab.jsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
+  const store = fs.readFileSync(path.join(root, 'src/common/settingsStore.js'), 'utf8');
+  assert.match(tab, /filterSettingsPatch/);
+  assert.match(tab, /包含任一/);
+  assert.match(tab, /公司与城市/);
+  assert.match(tab, /薪资与要求/);
+  assert.match(tab, /is-risk/);
+  assert.match(tab, /岗位最高薪资低于这个数就不显示/);
+  assert.match(tab, /只在岗位上标注提醒，筛选关闭时也生效/);
+  assert.match(tab, /value="filters"/);
+  assert.doesNotMatch(tab, /salaryMaxK/);
+  assert.match(options, /filters:\s*\{\s*\.\.\.old\.filters,\s*\.\.\.patch\.filters\s*\}/);
+  assert.match(store, /filters:\s*\{\s*\.\.\.cur\.filters,\s*\.\.\.\(patch && patch\.filters\)\s*\}/);
+});
+
+function memoryChrome() {
+  const data = {};
+  return {
+    storage: {
+      local: {
+        get(key) {
+          if (typeof key === 'string') return Promise.resolve(key in data ? { [key]: data[key] } : {});
+          return Promise.resolve({ ...data });
+        },
+        set(items) {
+          Object.assign(data, items);
+          return Promise.resolve();
+        },
+      },
+    },
+  };
+}
+
+await testAsync('保存筛选补丁时 storage 里的 salaryMaxK 原样保留', async () => {
+  const previous = globalThis.chrome;
+  globalThis.chrome = memoryChrome();
+  try {
+    const stored = defaultSettings();
+    stored.filters = { ...defaultFilters(), salaryMaxK: 36, salaryMinK: 12, keywordsInclude: ['前端'] };
+    await chrome.storage.local.set({ [STORAGE_KEYS.settings]: stored });
+    const patch = filterSettingsPatch({
+      salaryMinK: parseSalaryMinK('20'),
+      enabled: true,
+      salaryMaxK: null,
+      keywordsExclude: commitTags([], '电销'),
+    });
+    const saved = await saveSettings(patch);
+    assert.equal(saved.filters.salaryMaxK, 36);
+    assert.equal(saved.filters.salaryMinK, 20);
+    assert.equal(saved.filters.enabled, true);
+    assert.deepEqual(saved.filters.keywordsInclude, ['前端']);
+    assert.deepEqual(saved.filters.keywordsExclude, ['电销']);
+    assert.deepEqual(saved.filters.riskKeywords, defaultFilters().riskKeywords);
+    assert.deepEqual(Object.keys(saved.filters).sort(), Object.keys(defaultFilters()).sort());
+    const again = await saveSettings({ filters: { salaryMinK: 22 } });
+    assert.equal(again.filters.salaryMaxK, 36);
+    assert.equal(again.filters.salaryMinK, 22);
+    const loaded = await loadSettings();
+    assert.equal(loaded.filters.salaryMaxK, 36);
+    assert.deepEqual(Object.keys(loaded.filters).sort(), Object.keys(defaultFilters()).sort());
+  } finally {
+    if (previous === undefined) delete globalThis.chrome;
+    else globalThis.chrome = previous;
+  }
 });
 
 // ---------- 汇总 ----------
