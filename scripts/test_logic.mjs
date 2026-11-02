@@ -607,7 +607,7 @@ function createClock() {
 async function settle() {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 }
-function createQueueHarness(report) {
+function createQueueHarness(report, extra = {}) {
   const clock = createClock();
   const listeners = {};
   const bind = (target) => {
@@ -625,6 +625,7 @@ function createQueueHarness(report) {
     cancel: clock.cancel,
     target,
     documentTarget,
+    ...extra,
   });
   const fire = (type) => (listeners[type] || []).slice().forEach((fn) => fn());
   return { clock, queue, fire, documentTarget, listeners };
@@ -781,6 +782,57 @@ await testAsync('组件卸载时写出未完成保存，之后不再接收新任
   queue.dispose();
 });
 
+await testAsync('编辑后为保存中，成功后为已保存并记下时间', async () => {
+  const savedAt = 1_700_000_123_000;
+  const seen = [];
+  const { clock, queue } = createQueueHarness(undefined, { now: () => savedAt });
+  queue.subscribe((snap) => seen.push(snap.phase));
+  queue.enqueue('settings', () => {}, 200);
+  assert.equal(queue.snapshot().phase, 'saving');
+  assert.equal(seen.at(-1), 'saving');
+  await clock.advance(199);
+  assert.equal(queue.snapshot().phase, 'saving');
+  await clock.advance(1);
+  assert.equal(queue.snapshot().phase, 'saved');
+  assert.equal(queue.snapshot().savedAt, savedAt);
+  assert.equal(queue.snapshot().error, null);
+});
+
+await testAsync('保存失败时保持可重试，手动重试成功后变为已保存', async () => {
+  const { clock, queue } = createQueueHarness(undefined, { now: () => 42 });
+  let calls = 0;
+  queue.enqueue('profile', async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('保存失败');
+  }, 200);
+  await clock.advance(200);
+  assert.equal(calls, 1);
+  assert.equal(queue.snapshot().phase, 'error');
+  assert.match(queue.snapshot().error, /保存失败/);
+  await clock.advance(199);
+  assert.equal(calls, 1);
+  assert.equal(queue.snapshot().phase, 'error');
+  await queue.retry();
+  assert.equal(calls, 2);
+  assert.equal(queue.snapshot().phase, 'saved');
+  assert.equal(queue.snapshot().savedAt, 42);
+});
+
+await testAsync('更新的编辑进行中时，不把状态停在上一次失败', async () => {
+  const { clock, queue } = createQueueHarness();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  queue.enqueue('settings', () => gate.then(() => { throw new Error('旧保存失败'); }), 10);
+  await clock.advance(10);
+  queue.enqueue('settings', async () => {}, 100);
+  assert.equal(queue.snapshot().phase, 'saving');
+  release();
+  await settle();
+  assert.equal(queue.snapshot().phase, 'saving');
+  await clock.advance(100);
+  assert.equal(queue.snapshot().phase, 'saved');
+});
+
 test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
   const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/react/options.jsx'), 'utf8');
   assert.match(src, /enqueue\('settings',[\s\S]*?,\s*200\)/);
@@ -791,6 +843,44 @@ test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
   assert.match(queueSrc, /pagehide/);
   assert.match(queueSrc, /beforeunload/);
   assert.doesNotMatch(queueSrc, /import\(/);
+});
+
+const { pageFromHash, isUpdatedHash, nextNavIndex, SETTINGS_PAGES } = await import('../src/react/settings/pageHash.js');
+test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () => {
+  assert.deepEqual(SETTINGS_PAGES.map((page) => page.id), ['profile', 'ai', 'filters', 'general']);
+  assert.equal(pageFromHash(''), 'profile');
+  assert.equal(pageFromHash('#profile'), 'profile');
+  assert.equal(pageFromHash('#ai'), 'ai');
+  assert.equal(pageFromHash('#filters'), 'filters');
+  assert.equal(pageFromHash('#general'), 'general');
+  assert.equal(pageFromHash('#updated'), 'general');
+  assert.equal(pageFromHash('#nope'), 'profile');
+  assert.equal(isUpdatedHash('#updated'), true);
+  assert.equal(isUpdatedHash('#general'), false);
+  assert.equal(nextNavIndex(0, 'ArrowDown', 4), 1);
+  assert.equal(nextNavIndex(0, 'ArrowUp', 4), 3);
+  assert.equal(nextNavIndex(1, 'ArrowLeft', 4), 0);
+  assert.equal(nextNavIndex(3, 'ArrowRight', 4), 0);
+  assert.equal(nextNavIndex(2, 'Home', 4), 0);
+  assert.equal(nextNavIndex(2, 'End', 4), 3);
+  assert.equal(nextNavIndex(1, 'Enter', 4), -1);
+});
+
+test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const html = fs.readFileSync(path.join(root, 'extension-pages/options.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
+  const globals = fs.readFileSync(path.join(root, 'src/react/globals.css'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
+  assert.match(html, /<body class="settings-root">/);
+  assert.match(css, /\.settings-root\s*\{/);
+  assert.match(css, /--s-page:\s*#f1f2f0/);
+  assert.match(css, /--s-page:\s*#161d22/);
+  assert.doesNotMatch(css, /:root\s*\{[^}]*--s-page/);
+  assert.doesNotMatch(globals, /--s-page/);
+  assert.match(options, /role=\{notice\?\.error \? 'alert' : 'status'\}/);
+  assert.match(options, /aria-live="polite"/);
+  assert.doesNotMatch(options, /import\(/);
 });
 
 // ---------- 汇总 ----------

@@ -1,9 +1,8 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MSG } from '../common/constants.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../common/profile.js';
@@ -13,10 +12,14 @@ import { parseResumeFile } from '../ui/resumeParser.js';
 import { Field, Tags } from './settings/controls.jsx';
 import { useSaveQueue } from './settings/useSaveQueue.js';
 import { useInitialSettings } from './settings/useInitialSettings.js';
+import { useSettingsHash } from './settings/useSettingsHash.js';
+import SettingsShell, { ProfileRail, extensionVersion } from './settings/SettingsShell.jsx';
+import { SETTINGS_PAGES } from './settings/pageHash.js';
 import ProfileTab from './settings/ProfileTab.jsx';
 import AiTab from './settings/AiTab.jsx';
 import FiltersTab from './settings/FiltersTab.jsx';
 import GeneralTab from './settings/GeneralTab.jsx';
+import './settings/shell.css';
 
 export default function Options() {
   const [settings, setSettings] = useState(null);
@@ -36,7 +39,8 @@ export default function Options() {
     }
     setNotice({ message, error: !!error });
   }, []);
-  const { enqueue, flush } = useSaveQueue(report);
+  const { enqueue, flush, retry, status } = useSaveQueue(report);
+  const { page } = useSettingsHash();
   useInitialSettings({ settingsRef, providersRef, profileRef, setSettings, setProviders, setProfile, report });
   const updateSettings = (patch) => {
     const old = settingsRef.current;
@@ -114,18 +118,21 @@ export default function Options() {
   });
   const exportData = (format) => action(async () => { const res = await send(MSG.JOB_EXPORT_REQUEST, { format }); const url = URL.createObjectURL(new Blob([res.content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' })); try { await chrome.downloads.download({ url, filename: `岗位收录-${new Date().toISOString().slice(0, 10)}.${format}`, saveAs: true }); report(`已导出 ${res.count} 个岗位`); } finally { setTimeout(() => URL.revokeObjectURL(url), 60000); } });
 
-  if (!settings || !profile) return <div className="p-8 text-foreground" role="status">{notice?.message || '正在加载设置…'}</div>;
+  if (!settings || !profile) {
+    return <div className="settings-loading" role={notice?.error ? 'alert' : 'status'}>{notice?.message || '正在加载设置…'}</div>;
+  }
   const score = scoreProfile(profile);
-  return <div className="min-h-screen bg-background text-foreground"><div className="mx-auto max-w-6xl p-4 sm:p-8">
-    <header className="mb-6"><h1 className="text-2xl font-semibold">岗位筛选助手 · 设置</h1><p className="text-sm text-muted-foreground">BOSS直聘 · 前程无忧。数据保存在本机；AI 操作会发送相关内容至所配置的服务。</p></header>
-    {notice && <div role="status" className={`mb-4 rounded-md border p-3 text-sm ${notice.error ? 'text-destructive' : 'text-foreground'}`}>{notice.message}<button className="float-right" aria-label="关闭提示" onClick={() => setNotice(null)}>×</button></div>}
-    <div inert={busy ? true : undefined}><Tabs defaultValue="profile"><TabsList className="mb-6 flex h-auto flex-wrap"><TabsTrigger value="profile">个人画像</TabsTrigger><TabsTrigger value="ai">AI 接口</TabsTrigger><TabsTrigger value="filters">岗位筛选</TabsTrigger><TabsTrigger value="general">通用与隐私</TabsTrigger></TabsList>
-      <ProfileTab {...{ score, materials, readMaterials, action, setDraft, extractMaterials, fileRef, resumeFile, paste, setPaste, extract, report, draft, applyDraft, profileTags, profileText, profileArea, setConfirm, flush, profileRef, setProfile }} />
-      <AiTab {...{ preset, setPreset, action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, results, changeProvider, providerOperation }} />
-      <FiltersTab settings={settings} updateSettings={updateSettings} />
-      <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} />
-    </Tabs></div>
+  const title = SETTINGS_PAGES.find((item) => item.id === page)?.label || '个人画像';
+  return <>
+    <SettingsShell page={page} title={title} status={status} onRetry={retry} version={extensionVersion()} notice={notice} onDismissNotice={() => setNotice(null)} busy={busy} rail={page === 'profile' ? <ProfileRail score={score} /> : null}>
+      <Tabs value={page} onValueChange={(next) => { if (next && location.hash !== `#${next}`) location.hash = `#${next}`; }}>
+        <ProfileTab {...{ score, materials, readMaterials, action, setDraft, extractMaterials, fileRef, resumeFile, paste, setPaste, extract, report, draft, applyDraft, profileTags, profileText, profileArea, setConfirm, flush, profileRef, setProfile }} />
+        <AiTab {...{ preset, setPreset, action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, results, changeProvider, providerOperation }} />
+        <FiltersTab settings={settings} updateSettings={updateSettings} />
+        <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} />
+      </Tabs>
+    </SettingsShell>
     <Dialog open={!!confirm} onOpenChange={(open) => { if (!open) setConfirm(null); }}><DialogContent><DialogHeader><DialogTitle>{confirm?.title}</DialogTitle><DialogDescription>{confirm?.body}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>取消</Button><Button variant="destructive" disabled={!!busy} onClick={() => action(async () => { setBusy('正在处理…'); try { await confirm.run(); setConfirm(null); } finally { setBusy(''); } })}>确认</Button></DialogFooter></DialogContent></Dialog>
-    {busy && <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80" role="status" aria-live="polite"><Card><CardContent className="p-6">{busy}</CardContent></Card></div>}
-  </div></div>;
+    {busy && <div className="settings-busy" role="status" aria-live="polite"><p>{busy}</p></div>}
+  </>;
 }
