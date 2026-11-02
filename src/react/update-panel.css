@@ -1,0 +1,356 @@
+/* 关于与更新。只作用于本面板，颜色全部用设置页的 --s- 变量。 */
+
+.settings-root .update-panel {
+  margin: 28px 0 30px;
+  padding-top: 22px;
+  border-top: 1px solid var(--s-border);
+  color: var(--s-ink-1);
+}
+
+.settings-root .update-panel :where(p, h2, h3, h4, ol, ul) {
+  margin: 0;
+}
+
+.update-title {
+  margin: 0;
+  color: var(--s-ink-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.update-lead {
+  margin: 4px 0 0;
+  color: var(--s-ink-3);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--s-border);
+}
+
+.update-identity {
+  min-width: 0;
+}
+
+.update-version-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-version {
+  color: var(--s-ink-1);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--s-accent-soft);
+  color: var(--s-accent);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.update-folder {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.update-folder span + span::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--s-ink-3);
+}
+
+.update-folder-state {
+  color: var(--s-ink-2);
+}
+
+.update-folder.is-granted .update-folder-state {
+  color: var(--s-up);
+}
+
+.update-folder.is-prompt .update-folder-state {
+  color: var(--s-warn);
+}
+
+.update-folder.is-denied .update-folder-state {
+  color: var(--s-down);
+}
+
+.update-hint {
+  margin-top: 2px;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.update-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.update-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.update-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.update-btn-primary {
+  background: var(--s-btn-bg);
+  color: var(--s-btn-ink);
+}
+
+.update-btn-outline {
+  border-color: var(--s-border-strong);
+  background: var(--s-surface);
+  color: var(--s-ink-1);
+}
+
+.update-btn-outline:hover:not(:disabled) {
+  background: var(--s-surface-2);
+}
+
+.update-btn:focus-visible,
+.update-manual summary:focus-visible,
+.update-panel a:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--s-focus);
+}
+
+.update-feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.update-status {
+  color: var(--s-ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.update-status.is-ok {
+  color: var(--s-up);
+}
+
+.update-alert {
+  color: var(--s-down);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.update-progress p {
+  color: var(--s-ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.update-meter {
+  height: 6px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: var(--s-inset);
+}
+
+.update-meter span {
+  display: block;
+  height: 100%;
+  background: var(--s-accent);
+  transition: width 160ms linear;
+}
+
+.update-notes {
+  margin-top: 16px;
+  padding: 12px 13px;
+  border: 1px solid var(--s-border);
+  border-radius: 10px;
+  background: var(--s-field);
+}
+
+.update-notes-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.update-notes-head h3 {
+  margin: 0;
+  color: var(--s-ink-1);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.update-notes-head time {
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.update-notes-head a,
+.update-manual a {
+  color: var(--s-accent);
+  font-size: 12.5px;
+  text-underline-offset: 2px;
+}
+
+.update-notes-head a {
+  margin-left: auto;
+}
+
+.update-notes-body {
+  max-height: 240px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.update-notes-body p,
+.update-notes-body ul {
+  margin: 0 0 8px;
+  color: var(--s-ink-2);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.update-notes-body ul {
+  padding-left: 1.15em;
+  list-style: disc;
+  list-style-position: inside;
+}
+
+.update-notes-body li + li {
+  margin-top: 4px;
+}
+
+.update-notes-body h4 {
+  margin: 8px 0 6px;
+  color: var(--s-ink-1);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.update-keep {
+  margin-top: 12px;
+  color: var(--s-ink-3);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.update-manual {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--s-border);
+}
+
+.update-manual summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--s-ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  cursor: pointer;
+  list-style: none;
+}
+
+.update-manual summary::-webkit-details-marker {
+  display: none;
+}
+
+.update-chevron {
+  display: inline-block;
+  width: 0.8em;
+  transition: transform 160ms ease;
+}
+
+.update-manual[open] .update-chevron {
+  transform: rotate(90deg);
+}
+
+.update-manual ol {
+  margin: 10px 0 12px;
+  padding-left: 1.2em;
+  color: var(--s-ink-2);
+  font-size: 13px;
+  line-height: 1.65;
+  list-style: decimal;
+  list-style-position: inside;
+}
+
+.update-manual li + li {
+  margin-top: 4px;
+}
+
+.update-id {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 16px;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.update-id code {
+  color: var(--s-ink-2);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+@media (max-width: 860px) {
+  .settings-root .update-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .update-chevron,
+  .update-meter span {
+    transition: none;
+  }
+}

@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { RELEASE_PAGE } from '../common/update.js';
 import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../ui/update.js';
+import './update-panel.css';
 
-const FOLDER_LABEL = {
-  granted: ['已授权', 'secondary'],
-  prompt: ['需确认', 'outline'],
-  denied: ['已拒绝', 'destructive'],
+const FOLDER_TEXT = {
+  none: '未选择',
+  granted: '已授权',
+  prompt: '需确认',
+  denied: '已拒绝',
 };
 
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -22,18 +21,82 @@ function progressText(p) {
   return '';
 }
 
+function plainNote(text) {
+  return String(text)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1');
+}
+
+function noteBlocks(text) {
+  const blocks = [];
+  let list = null;
+  const flush = () => {
+    if (list?.length) blocks.push({ type: 'list', items: list });
+    list = null;
+  };
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    const item = /^[-*•]\s+(.+)$/.exec(line) || /^\d+[.)]\s+(.+)$/.exec(line);
+    if (item) {
+      list = list || [];
+      list.push(plainNote(item[1]));
+      continue;
+    }
+    flush();
+    if (!line) continue;
+    const heading = /^#{1,6}\s+(.+)$/.exec(line);
+    blocks.push(heading
+      ? { type: 'heading', text: plainNote(heading[1]) }
+      : { type: 'text', text: plainNote(line) });
+  }
+  flush();
+  return blocks;
+}
+
+function formatReleaseDate(iso) {
+  const date = new Date(iso);
+  if (!iso || Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+}
+
 const openExtensionsPage = () => chrome.tabs.create({ url: extensionsPageUrl() }).catch(() => {});
 
-function ManualSteps({ pageUrl }) {
-  return <div className="space-y-2 rounded-md border border-dashed p-3 text-sm">
-    <div className="font-medium">也可以手动更新</div>
-    <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
-      <li>到 <a className="underline" href={pageUrl || RELEASE_PAGE} target="_blank" rel="noreferrer">GitHub 发布页</a> 下载最新的 zip。</li>
-      <li>解压，把里面的文件覆盖到原来的扩展文件夹（扩展管理页本扩展的「来源」显示的位置）。</li>
-      <li>回到扩展管理页，点本扩展的「重新加载」。岗位、画像和配置会保留。</li>
-    </ol>
-    <Button variant="outline" size="sm" onClick={openExtensionsPage}>打开扩展管理页</Button>
+function ReleaseNotes({ release }) {
+  const blocks = noteBlocks(release.notes);
+  const date = formatReleaseDate(release.publishedAt);
+  return <div className="update-notes">
+    <div className="update-notes-head">
+      <h3>{release.version}</h3>
+      {date && <time dateTime={release.publishedAt}>{date}</time>}
+      <a href={release.pageUrl || RELEASE_PAGE} target="_blank" rel="noreferrer">在 GitHub 查看</a>
+    </div>
+    {blocks.length > 0 && <div className="update-notes-body">
+      {blocks.map((block, index) => {
+        if (block.type === 'list') {
+          return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{item}</li>)}</ul>;
+        }
+        if (block.type === 'heading') return <h4 key={index}>{block.text}</h4>;
+        return <p key={index}>{block.text}</p>;
+      })}
+    </div>}
   </div>;
+}
+
+function ManualSteps({ pageUrl, open, onToggle }) {
+  return <details className="update-manual" open={open} onToggle={(event) => {
+    const next = event.currentTarget.open;
+    onToggle((current) => (current === next ? current : next));
+  }}>
+    <summary><span className="update-chevron" aria-hidden="true">›</span>手动更新</summary>
+    <ol>
+      <li>到 <a href={pageUrl || RELEASE_PAGE} target="_blank" rel="noreferrer">GitHub 发布页</a> 下载最新的 zip。</li>
+      <li>解压，把里面的文件覆盖到原来的扩展文件夹。</li>
+      <li>回到扩展管理页，点「重新加载」。</li>
+    </ol>
+    <button type="button" className="update-btn update-btn-outline" onClick={openExtensionsPage}>打开扩展管理页</button>
+  </details>;
 }
 
 export default function UpdatePanel({ onConfirm }) {
@@ -44,8 +107,11 @@ export default function UpdatePanel({ onConfirm }) {
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(() => (location.hash === '#updated' ? `已更新到 ${version}` : ''));
+  const [manualOpen, setManualOpen] = useState(() => !supportsFolderAccess());
+  const [manualNeeded, setManualNeeded] = useState(false);
   const installing = !!progress;
   const canAutoUpdate = supportsFolderAccess();
+  const positive = message.startsWith('已是最新') || message.startsWith('已更新到');
 
   const refresh = useCallback(() => folderStatus().then(setFolder).catch(() => {}), []);
   useEffect(() => {
@@ -54,6 +120,11 @@ export default function UpdatePanel({ onConfirm }) {
     return () => window.removeEventListener('focus', refresh);
   }, [refresh]);
 
+  const showManual = !canAutoUpdate || manualNeeded;
+  useEffect(() => {
+    if (showManual) setManualOpen(true);
+  }, [showManual]);
+
   const run = async (fn) => {
     setError(''); setMessage('');
     try { await fn(); } catch (e) { setError(e?.message || String(e)); }
@@ -61,9 +132,9 @@ export default function UpdatePanel({ onConfirm }) {
   const check = () => run(async () => {
     setChecking(true);
     try {
-      const r = await fetchLatestRelease();
-      setRelease(r);
-      if (!r.hasUpdate) setMessage(`已是最新版本（${r.current}）`);
+      const next = await fetchLatestRelease();
+      setRelease(next);
+      if (!next.hasUpdate) setMessage(`已是最新版本（${next.current}）`);
     } finally { setChecking(false); }
   });
   const firstTime = folder.state === 'none';
@@ -72,62 +143,69 @@ export default function UpdatePanel({ onConfirm }) {
     body: firstTime
       ? '接下来会弹出文件夹选择窗口，请选择扩展管理页中本扩展「来源」显示的那个文件夹（就是当初「加载解压缩的扩展」时选的）。之后会下载安装包覆盖其中的文件并自动重新加载，岗位、画像和配置会保留。'
       : '将下载安装包并覆盖扩展文件夹中的文件，完成后扩展自动重新加载。岗位、画像和配置会保留。',
-    // 不 await：让确认框立即关闭，进度显示在本面板（仍处于点击手势内，可弹出文件夹选择/请求权限）
-    run: () => { run(async () => {
-      setProgress(firstTime ? { phase: 'folder' } : { phase: 'download', received: 0, total: release.zipSize });
-      try {
-        const done = await installRelease(release, setProgress);
-        if (!done) { setProgress(null); setMessage('已取消选择文件夹，未做任何改动'); }
-      } catch (e) {
-        setProgress(null);
-        throw e;
-      } finally {
-        refresh();
-      }
-    }); },
+    // 不 await：确认按钮的这次点击要立刻进入 installRelease，由它走到文件夹选择窗口。
+    // 中间再 await 别的异步操作，浏览器会丢掉用户手势，选择窗口就不会弹出。
+    run: () => {
+      run(async () => {
+        setProgress(firstTime ? { phase: 'folder' } : { phase: 'download', received: 0, total: release.zipSize });
+        try {
+          const done = await installRelease(release, setProgress);
+          if (!done) { setProgress(null); setMessage('已取消选择文件夹，未做任何改动'); }
+        } catch (e) {
+          setProgress(null);
+          setManualNeeded(true);
+          setManualOpen(true);
+          throw e;
+        } finally {
+          refresh();
+        }
+      });
+    },
   });
 
-  const label = FOLDER_LABEL[folder.state];
-  const showManual = release?.hasUpdate && !installing && (!!error || !canAutoUpdate);
+  const folderState = FOLDER_TEXT[folder.state] ? folder.state : 'none';
+  const downloadPct = progress?.phase === 'download' && progress.total > 0
+    ? Math.min(100, Math.round((progress.received / progress.total) * 100))
+    : 0;
+  const pageUrl = release?.pageUrl;
 
-  return <Card>
-    <CardHeader>
-      <CardTitle>关于与更新</CardTitle>
-      <CardDescription>点「检查更新」即可在这里升级，岗位、画像和配置会保留。注意：解压出来的扩展文件夹就是扩展本身，请放在固定位置，不要删除或移动，否则扩展会无法运行。</CardDescription>
-    </CardHeader>
-    <CardContent className="space-y-4">
-      <div className="text-sm text-muted-foreground">版本 {version} · 扩展 ID {chrome.runtime.id}</div>
+  return <section className="update-panel" aria-labelledby="update-panel-title">
+    <h2 id="update-panel-title" className="update-title">关于与更新</h2>
+    <p className="update-lead">解压出来的文件夹就是扩展本身。请放在固定位置，不要删除或移动。</p>
 
-      {label && <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-medium">扩展文件夹</span>
-        <Badge variant={label[1]}>{label[0]}</Badge>
-        {folder.name && <span className="text-muted-foreground">{folder.name}</span>}
-        {folder.state === 'prompt' && <span className="text-muted-foreground">浏览器需要重新确认写入权限，更新时会自动询问</span>}
-      </div>}
-
-      {!canAutoUpdate && <p className="text-sm text-destructive">当前浏览器不支持扩展内自动更新，请按下方说明手动更新。</p>}
-
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={installing || checking} onClick={check}>{checking ? '正在检查…' : '检查更新'}</Button>
-        {release?.hasUpdate && canAutoUpdate && <Button disabled={installing} onClick={install}>立即更新到 {release.version}</Button>}
+    <div className="update-row">
+      <div className="update-identity">
+        <div className="update-version-line">
+          <span className="update-version">版本 {version}</span>
+          {release?.hasUpdate && <span className="update-badge">可更新到 {release.version}</span>}
+        </div>
+        <p className={`update-folder is-${folderState}`}>
+          <span>扩展文件夹</span>
+          <span className="update-folder-state">{FOLDER_TEXT[folderState]}</span>
+          {folder.name && <span>{folder.name}</span>}
+        </p>
+        {folder.state === 'prompt' && <p className="update-hint">浏览器需要重新确认写入权限，更新时会自动询问</p>}
       </div>
-      {release?.hasUpdate && canAutoUpdate && firstTime && !installing && <p className="text-sm text-muted-foreground">
-        首次更新会让你选择扩展所在的文件夹。不记得放在哪？<button type="button" className="underline" onClick={openExtensionsPage}>打开扩展管理页</button>，本扩展的「来源」就是它的位置。
-      </p>}
+      <div className="update-actions">
+        <button type="button" className="update-btn update-btn-outline" disabled={installing || checking} onClick={check}>{checking ? '检查中' : '检查更新'}</button>
+        {release?.hasUpdate && canAutoUpdate && <button type="button" className="update-btn update-btn-primary" disabled={installing} onClick={install}>更新到 {release.version}</button>}
+      </div>
+    </div>
 
-      {release?.hasUpdate && <div className="space-y-2 rounded-md border p-3 text-sm">
-        <div className="font-medium">{release.name}{release.publishedAt && <span className="ml-2 font-normal text-muted-foreground">{new Date(release.publishedAt).toLocaleDateString()}</span>}</div>
-        {release.notes && <p className="max-h-48 overflow-auto whitespace-pre-wrap text-muted-foreground">{release.notes}</p>}
-        <a className="text-muted-foreground underline" href={release.pageUrl} target="_blank" rel="noreferrer">在 GitHub 查看</a>
+    {(checking || installing || message || error || !canAutoUpdate) && <div className="update-feedback">
+      {checking && <p className="update-status" role="status">正在检查更新…</p>}
+      {installing && progress && <div className="update-progress" role="status" aria-live="polite">
+        <p>{progressText(progress)}</p>
+        {progress.phase === 'download' && progress.total > 0 && <div className="update-meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={downloadPct} aria-label="下载进度"><span style={{ width: `${downloadPct}%` }} /></div>}
       </div>}
+      {message && <p className={positive ? 'update-status is-ok' : 'update-status'} role="status">{message}</p>}
+      {error && <p className="update-alert" role="alert">{error}</p>}
+      {!canAutoUpdate && <p className="update-status" role="status">当前浏览器不支持扩展内自动更新，请按下方步骤手动更新。</p>}
+    </div>}
 
-      {installing && <div role="status" aria-live="polite" className="space-y-2 text-sm">
-        <div>{progressText(progress)}</div>
-        {progress.phase === 'download' && progress.total > 0 && <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary transition-[width]" style={{ width: `${Math.min(100, (progress.received / progress.total) * 100)}%` }} /></div>}
-      </div>}
-      {message && <p role="status" className="text-sm">{message}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {showManual && <ManualSteps pageUrl={release.pageUrl} />}
-    </CardContent>
-  </Card>;
+    {release?.hasUpdate && <ReleaseNotes release={release} />}
+    {canAutoUpdate && <p className="update-keep">更新后扩展会自动重新加载，岗位、画像和配置都会保留。</p>}
+    <ManualSteps pageUrl={pageUrl} open={manualOpen} onToggle={setManualOpen} />
+    <p className="update-id"><span>扩展 ID</span> <code>{chrome.runtime.id}</code></p>
+  </section>;
 }
