@@ -30,3 +30,6 @@ release/
 PRODUCT.md
 .impeccable/
 .playwright-cli/
+
+# UI 盘点截图（本地用，不入库）
+docs/screenshots/ui-audit/
