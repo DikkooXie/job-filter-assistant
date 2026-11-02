@@ -36,9 +36,8 @@ npm run release   # 打包发布，需先确认 build 通过
 
 ## 现有模块速查
 
-- `src/react/options.jsx` — 设置页（React）框架与业务编排；四个标签页、共享控件、初始加载及保存队列在 `src/react/settings/`。
+- `src/react/options.jsx` — 设置页（React）框架与业务编排；四个标签页、共享控件、初始加载及保存队列在 `src/react/settings/`。入口是 `extension-pages/options.html`，构建后由 `dist/options.html` 加载。
 - `src/react/UpdatePanel.jsx` — 设置页里的「关于与更新」。
-- `src/ui/options.js` — 旧版（非 React）设置页，只被仓库根目录和 `dev/` 的 HTML 引用。改设置项的文案时不要漏掉它，直到它被删除。
 - `src/common/constants.js` — 存储 key、消息类型、默认设置与默认筛选条件。
 - `src/common/profile.js` — 画像结构、清洗、合并、完整度评分（11 项）。
 - `src/common/ai/providers.js` — 4 种协议、预设供应商、清洗与校验。

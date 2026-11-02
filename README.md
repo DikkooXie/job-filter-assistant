@@ -114,7 +114,8 @@ AI 一次生成三档招呼语（精简 / 标准 / 详细），可直接编辑�
 
 ```
 manifest.json              扩展清单（MV3）
-popup.html / sidepanel.html / options.html   三个页面入口
+popup.html / sidepanel.html    浮窗与侧边栏旧页面
+extension-pages/           三个扩展页面的构建入口（设置页只在这里）
 icons/                     图标（scripts/make_icons.py 生成）
 src/
   common/                  共享逻辑（ES module，被 background 与 UI 复用）
@@ -133,7 +134,7 @@ src/
   content/
     sniffer.js             MAIN world：劫持 fetch/XHR 捕获岗位接口
     collector.js           ISOLATED world：转发后台 + 上下文追踪 + DOM 兜底 + 角标
-  ui/                       popup / sidepanel / options 的 JS/CSS + design.css 设计系统
+  ui/                       浮窗与侧边栏的 JS/CSS、design.css，以及设置页共用的解析与更新模块
   vendor/                   pdf.js（简历 PDF 解析）、fflate（DOCX 解压）
 scripts/                   图标生成 + 纯逻辑测试 + 发版脚本
 docs/screenshots/          README 截图
