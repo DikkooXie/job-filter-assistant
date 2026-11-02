@@ -51,9 +51,9 @@ export async function folderStatus() {
   return { state, name: handle.name };
 }
 
-/** 让用户选择扩展所在文件夹；必须由点击触发。 */
-export async function pickFolder() {
-  if (!supportsFolderAccess()) throw new Error('当前浏览器不支持文件夹授权，请使用新版 Edge 或 Chrome');
+/** 弹出文件夹选择窗口并校验是当前扩展；取消时返回 null。必须由点击触发。 */
+async function chooseFolder() {
+  if (!supportsFolderAccess()) throw new Error('当前浏览器不支持文件夹授权，请按下方说明手动更新');
   let handle;
   try {
     handle = await globalThis.showDirectoryPicker({ id: PICKER_ID, mode: 'readwrite' });
@@ -62,20 +62,26 @@ export async function pickFolder() {
     throw new Error(`无法使用该文件夹：${e?.message || e}。请不要直接选择「下载」或「桌面」，而是选择其中解压出来的扩展文件夹`);
   }
   if (!isSameInstall(await readManifest(handle), selfManifest())) {
-    throw new Error(`「${handle.name}」不是当前正在运行的扩展文件夹（里面的 manifest.json 不一致），请选择你在扩展管理页「加载解压缩的扩展」时选的那个文件夹`);
+    throw new Error(`「${handle.name}」不是当前正在运行的扩展文件夹。请在扩展管理页查看本扩展的「来源」，选择那里显示的文件夹`);
   }
   await saveHandle(handle);
-  return handle.name;
+  return handle;
 }
 
-/** 确保拥有写权限；需要时弹出浏览器确认（必须由点击触发）。 */
-async function ensureWritable() {
-  const handle = await loadHandle();
-  if (!handle) throw new Error('请先选择扩展所在的文件夹');
-  let state = await handle.queryPermission({ mode: 'readwrite' });
-  if (state !== 'granted') state = await handle.requestPermission({ mode: 'readwrite' });
+/** 取得可写的扩展文件夹：没授权过就弹出选择窗口，授权过期就请求确认。取消时返回 null。 */
+async function getWritableFolder() {
+  const saved = await loadHandle();
+  if (!saved) return chooseFolder();
+  let state = await saved.queryPermission({ mode: 'readwrite' });
+  if (state !== 'granted') state = await saved.requestPermission({ mode: 'readwrite' });
   if (state !== 'granted') throw new Error('没有获得文件夹写入权限，更新已取消');
-  return handle;
+  return saved;
+}
+
+/** 扩展管理页中本扩展的详情地址（可看到「来源」路径）。 */
+export function extensionsPageUrl() {
+  const scheme = /\bEdg\//.test(navigator.userAgent) ? 'edge' : 'chrome';
+  return `${scheme}://extensions/?id=${chrome.runtime.id}`;
 }
 
 /** 查询 GitHub 最新正式版。返回 parseRelease 结果加 { current, hasUpdate }。 */
@@ -125,14 +131,17 @@ async function writeFile(root, segments, data) {
 }
 
 /**
- * 下载并安装 release（fetchLatestRelease 的结果），成功后重新加载扩展。
- * 必须由点击触发（可能需要请求文件夹权限）。onProgress({ phase, received, total, done, count })。
+ * 下载并安装 release（fetchLatestRelease 的结果），成功后重新加载扩展并返回 true；用户取消选择文件夹时返回 false。
+ * 必须由点击触发（首次会弹出文件夹选择窗口，之后可能请求权限确认）。onProgress({ phase, received, total, done, count })。
  */
 export async function installRelease(release, onProgress) {
-  const handle = await ensureWritable(); // 先拿权限：用户手势在长时间下载后可能失效
+  // 先拿文件夹和权限：点击手势在长时间下载后会失效
+  const handle = await getWritableFolder();
+  if (!handle) return false;
   const self = selfManifest();
   if (!isSameInstall(await readManifest(handle), self)) {
-    throw new Error('授权的文件夹已不是当前运行的扩展，请重新选择文件夹');
+    await forgetFolder();
+    throw new Error('之前授权的文件夹已不是当前运行的扩展（可能被移动或替换），请再点一次「立即更新」重新选择');
   }
 
   const zip = await download(release.zipUrl, onProgress);
@@ -165,4 +174,5 @@ export async function installRelease(release, onProgress) {
   await chrome.storage.local.set({ [REOPEN_FLAG]: true });
   onProgress?.({ phase: 'reload' });
   setTimeout(() => chrome.runtime.reload(), 600);
+  return true;
 }

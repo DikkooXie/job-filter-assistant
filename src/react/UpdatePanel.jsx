@@ -3,10 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { RELEASE_PAGE } from '../common/update.js';
-import { folderStatus, pickFolder, fetchLatestRelease, installRelease, supportsFolderAccess } from '../ui/update.js';
+import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../ui/update.js';
 
 const FOLDER_LABEL = {
-  none: ['未授权', 'outline'],
   granted: ['已授权', 'secondary'],
   prompt: ['需确认', 'outline'],
   denied: ['已拒绝', 'destructive'],
@@ -15,11 +14,26 @@ const FOLDER_LABEL = {
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 function progressText(p) {
   if (!p) return '';
+  if (p.phase === 'folder') return '请在弹出的窗口中选择扩展文件夹…';
   if (p.phase === 'download') return p.total ? `正在下载 ${mb(p.received)} / ${mb(p.total)}（${Math.round((p.received / p.total) * 100)}%）` : `正在下载 ${mb(p.received)}`;
   if (p.phase === 'verify') return '正在校验安装包…';
   if (p.phase === 'write') return `正在写入文件 ${p.done} / ${p.count}`;
   if (p.phase === 'reload') return '更新完成，扩展即将重新加载，设置页会自动重新打开…';
   return '';
+}
+
+const openExtensionsPage = () => chrome.tabs.create({ url: extensionsPageUrl() }).catch(() => {});
+
+function ManualSteps({ pageUrl }) {
+  return <div className="space-y-2 rounded-md border border-dashed p-3 text-sm">
+    <div className="font-medium">也可以手动更新</div>
+    <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
+      <li>到 <a className="underline" href={pageUrl || RELEASE_PAGE} target="_blank" rel="noreferrer">GitHub 发布页</a> 下载最新的 zip。</li>
+      <li>解压，把里面的文件覆盖到原来的扩展文件夹（扩展管理页本扩展的「来源」显示的位置）。</li>
+      <li>回到扩展管理页，点本扩展的「重新加载」。岗位、画像和配置会保留。</li>
+    </ol>
+    <Button variant="outline" size="sm" onClick={openExtensionsPage}>打开扩展管理页</Button>
+  </div>;
 }
 
 export default function UpdatePanel({ onConfirm }) {
@@ -31,6 +45,7 @@ export default function UpdatePanel({ onConfirm }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState(() => (location.hash === '#updated' ? `已更新到 ${version}` : ''));
   const installing = !!progress;
+  const canAutoUpdate = supportsFolderAccess();
 
   const refresh = useCallback(() => folderStatus().then(setFolder).catch(() => {}), []);
   useEffect(() => {
@@ -43,11 +58,6 @@ export default function UpdatePanel({ onConfirm }) {
     setError(''); setMessage('');
     try { await fn(); } catch (e) { setError(e?.message || String(e)); }
   };
-  const choose = () => run(async () => {
-    const name = await pickFolder();
-    if (name) setMessage(`已授权文件夹「${name}」`);
-    await refresh();
-  });
   const check = () => run(async () => {
     setChecking(true);
     try {
@@ -56,48 +66,54 @@ export default function UpdatePanel({ onConfirm }) {
       if (!r.hasUpdate) setMessage(`已是最新版本（${r.current}）`);
     } finally { setChecking(false); }
   });
+  const firstTime = folder.state === 'none';
   const install = () => onConfirm({
     title: `更新到 ${release.version}？`,
-    body: '将下载安装包并覆盖扩展文件夹中的文件，完成后扩展自动重新加载。岗位、画像和配置会保留。',
-    // 不 await：让确认框立即关闭，进度显示在本面板（仍处于点击手势内，可请求文件夹权限）
+    body: firstTime
+      ? '接下来会弹出文件夹选择窗口，请选择扩展管理页中本扩展「来源」显示的那个文件夹（就是当初「加载解压缩的扩展」时选的）。之后会下载安装包覆盖其中的文件并自动重新加载，岗位、画像和配置会保留。'
+      : '将下载安装包并覆盖扩展文件夹中的文件，完成后扩展自动重新加载。岗位、画像和配置会保留。',
+    // 不 await：让确认框立即关闭，进度显示在本面板（仍处于点击手势内，可弹出文件夹选择/请求权限）
     run: () => { run(async () => {
-      setProgress({ phase: 'download', received: 0, total: release.zipSize });
+      setProgress(firstTime ? { phase: 'folder' } : { phase: 'download', received: 0, total: release.zipSize });
       try {
-        await installRelease(release, setProgress);
+        const done = await installRelease(release, setProgress);
+        if (!done) { setProgress(null); setMessage('已取消选择文件夹，未做任何改动'); }
       } catch (e) {
         setProgress(null);
-        await refresh();
         throw e;
+      } finally {
+        refresh();
       }
     }); },
   });
 
-  const [folderText, folderVariant] = FOLDER_LABEL[folder.state] || FOLDER_LABEL.prompt;
-  const canInstall = release?.hasUpdate && folder.state !== 'none' && !installing;
+  const label = FOLDER_LABEL[folder.state];
+  const showManual = release?.hasUpdate && !installing && (!!error || !canAutoUpdate);
 
   return <Card>
     <CardHeader>
       <CardTitle>关于与更新</CardTitle>
-      <CardDescription>首次使用请选择扩展所在的文件夹（就是在扩展管理页「加载解压缩的扩展」时选的那个），之后可以直接在这里更新。扩展 ID 已固定，岗位、画像和配置会保留。</CardDescription>
+      <CardDescription>点「检查更新」即可在这里升级，岗位、画像和配置会保留。注意：解压出来的扩展文件夹就是扩展本身，请放在固定位置，不要删除或移动，否则扩展会无法运行。</CardDescription>
     </CardHeader>
     <CardContent className="space-y-4">
       <div className="text-sm text-muted-foreground">版本 {version} · 扩展 ID {chrome.runtime.id}</div>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      {label && <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">扩展文件夹</span>
-        <Badge variant={folderVariant}>{folderText}</Badge>
+        <Badge variant={label[1]}>{label[0]}</Badge>
         {folder.name && <span className="text-muted-foreground">{folder.name}</span>}
         {folder.state === 'prompt' && <span className="text-muted-foreground">浏览器重启后需要再确认一次，更新时会自动询问</span>}
-      </div>
+      </div>}
 
-      {!supportsFolderAccess() && <p className="text-sm text-destructive">当前浏览器不支持扩展内更新，请到 <a className="underline" href={RELEASE_PAGE} target="_blank" rel="noreferrer">GitHub 发布页</a> 手动下载。</p>}
+      {!canAutoUpdate && <p className="text-sm text-destructive">当前浏览器不支持扩展内自动更新，请按下方说明手动更新。</p>}
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={installing || !supportsFolderAccess()} onClick={choose}>{folder.state === 'none' ? '选择文件夹' : '重新选择文件夹'}</Button>
         <Button variant="outline" disabled={installing || checking} onClick={check}>{checking ? '正在检查…' : '检查更新'}</Button>
-        {release?.hasUpdate && <Button disabled={!canInstall} onClick={install}>立即更新到 {release.version}</Button>}
+        {release?.hasUpdate && canAutoUpdate && <Button disabled={installing} onClick={install}>立即更新到 {release.version}</Button>}
       </div>
-      {release?.hasUpdate && folder.state === 'none' && <p className="text-sm text-muted-foreground">更新前需要先选择扩展文件夹。</p>}
+      {release?.hasUpdate && canAutoUpdate && firstTime && !installing && <p className="text-sm text-muted-foreground">
+        首次更新会让你选择扩展所在的文件夹。不记得放在哪？<button type="button" className="underline" onClick={openExtensionsPage}>打开扩展管理页</button>，本扩展的「来源」就是它的位置。
+      </p>}
 
       {release?.hasUpdate && <div className="space-y-2 rounded-md border p-3 text-sm">
         <div className="font-medium">{release.name}{release.publishedAt && <span className="ml-2 font-normal text-muted-foreground">{new Date(release.publishedAt).toLocaleDateString()}</span>}</div>
@@ -111,6 +127,7 @@ export default function UpdatePanel({ onConfirm }) {
       </div>}
       {message && <p role="status" className="text-sm">{message}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {showManual && <ManualSteps pageUrl={release.pageUrl} />}
     </CardContent>
   </Card>;
 }
