@@ -39,6 +39,13 @@ export default defineConfig({
       input: Object.fromEntries(
         ['popup', 'sidepanel', 'options'].map((page) => [page, resolve(pagesDir, `${page}.html`)]),
       ),
+      // 固定文件名（不带内容哈希）：扩展从本地磁盘加载，不需要缓存失效；
+      // 固定名字让更新时直接覆盖旧文件，避免每次发版都在扩展文件夹里留下新文件。
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
+      },
     },
   },
 });

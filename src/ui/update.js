@@ -3,7 +3,7 @@
 import { unzipSync, strFromU8 } from '../vendor/fflate.module.js';
 import {
   RELEASE_API, MAX_PACKAGE_BYTES, compareVersions, parseRelease,
-  packageManifestError, isSameInstall, planWrites, unzipGuard, toHex,
+  packageManifestError, isSameInstall, planWrites, unzipGuard, toHex, staleAssets,
 } from '../common/update.js';
 
 const DB_NAME = 'jobHelperUpdate';
@@ -117,6 +117,17 @@ async function download(url, onProgress) {
   return bytes;
 }
 
+/** 删除旧版本遗留的哈希命名构建产物（只动 assets/ 下、不在新包里的 js/css）。 */
+async function removeStaleAssets(root, newPaths) {
+  let assets;
+  try { assets = await root.getDirectoryHandle('assets'); } catch { return; }
+  const existing = [];
+  for await (const name of assets.keys()) existing.push(`assets/${name}`);
+  for (const path of staleAssets(existing, newPaths)) {
+    try { await assets.removeEntry(path.slice('assets/'.length)); } catch {}
+  }
+}
+
 async function writeFile(root, segments, data) {
   let dir = root;
   for (const seg of segments.slice(0, -1)) dir = await dir.getDirectoryHandle(seg, { create: true });
@@ -171,6 +182,7 @@ export async function installRelease(release, onProgress) {
     onProgress?.({ phase: 'write', done: i + 1, count: writes.length });
   }
 
+  await removeStaleAssets(handle, writes.map((w) => w.path));
   await chrome.storage.local.set({ [REOPEN_FLAG]: true });
   onProgress?.({ phase: 'reload' });
   setTimeout(() => chrome.runtime.reload(), 600);

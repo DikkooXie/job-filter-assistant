@@ -12,7 +12,7 @@ import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsabl
 import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 import {
-  parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex,
+  parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
 } from '../src/common/update.js';
 
 let pass = 0;
@@ -476,6 +476,21 @@ test('解压守卫拦截过大或过多条目', () => {
   assert.throws(() => { for (let i = 0; i < 3000; i++) many({ originalSize: 1 }); }, /数量/);
   assert.equal(toHex(new Uint8Array([0, 15, 255])), '000fff');
 });
+test('清理旧构建产物：只删 assets/ 下不在新包里的哈希文件', () => {
+  const existing = [
+    'assets/options-8FXsuZlm.js',
+    'assets/styles-B3AvHOdf.css',
+    'assets/options.js',
+    'assets/logo-12345678.png',
+    'icons/16.png',
+    'manifest.json',
+  ];
+  const next = ['assets/options.js', 'assets/styles.css', 'manifest.json'];
+  assert.deepEqual(staleAssets(existing, next), ['assets/options-8FXsuZlm.js', 'assets/styles-B3AvHOdf.css']);
+  assert.deepEqual(staleAssets(existing, existing), []);
+  assert.deepEqual(staleAssets([], next), []);
+});
+
 test('写入顺序：manifest.json 最后，跳过不安全路径', () => {
   const plan = planWrites({ 'manifest.json': 1, 'a.js': 2, '../evil': 3, 'icons/i.png': 4 });
   assert.deepEqual(plan.map((w) => w.path), ['a.js', 'icons/i.png', 'manifest.json']);

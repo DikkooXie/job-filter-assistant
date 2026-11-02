@@ -122,6 +122,18 @@ export function safeEntryPath(name) {
   return segments;
 }
 
+// Vite 旧版本产出的带内容哈希的 js/css（如 assets/options-8FXsuZlm.js）
+const HASHED_ASSET = /^assets\/[^/]+-[A-Za-z0-9_-]{8}\.(?:js|css)$/;
+
+/**
+ * 更新后应删除的旧构建产物：仅限 assets/ 下带 Vite 内容哈希、且新安装包中已不存在的 js/css。
+ * 新构建改用固定文件名，正常更新直接覆盖；这里只清理历史版本遗留，避免文件夹越来越大。
+ */
+export function staleAssets(existingPaths, newPaths) {
+  const keep = new Set(newPaths || []);
+  return (existingPaths || []).filter((p) => HASHED_ASSET.test(p) && !keep.has(p));
+}
+
 /** 把解压后的 { path: bytes } 整理成写入顺序：其他文件在前，manifest.json 最后。 */
 export function planWrites(files) {
   const writes = [];

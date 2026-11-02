@@ -102,7 +102,7 @@ export default function UpdatePanel({ onConfirm }) {
         <span className="font-medium">扩展文件夹</span>
         <Badge variant={label[1]}>{label[0]}</Badge>
         {folder.name && <span className="text-muted-foreground">{folder.name}</span>}
-        {folder.state === 'prompt' && <span className="text-muted-foreground">浏览器重启后需要再确认一次，更新时会自动询问</span>}
+        {folder.state === 'prompt' && <span className="text-muted-foreground">浏览器需要重新确认写入权限，更新时会自动询问</span>}
       </div>}
 
       {!canAutoUpdate && <p className="text-sm text-destructive">当前浏览器不支持扩展内自动更新，请按下方说明手动更新。</p>}
