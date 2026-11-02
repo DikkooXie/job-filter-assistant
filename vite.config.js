@@ -43,7 +43,12 @@ export default defineConfig({
       // 固定名字让更新时直接覆盖旧文件，避免每次发版都在扩展文件夹里留下新文件。
       output: {
         entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
+        // 共享模块会被抽成一个 chunk。代表模块一变，Rollup 就会把原来的 badge.js
+        // 改名成别的文件，更新时旧文件不会被清掉。只要这个 chunk 里还有 badge 组件，就沿用原名。
+        chunkFileNames(chunkInfo) {
+          const sharedBadge = (chunkInfo.moduleIds || []).some((id) => id.includes('/components/ui/badge'));
+          return `assets/${sharedBadge ? 'badge' : chunkInfo.name}.js`;
+        },
         assetFileNames: 'assets/[name][extname]',
       },
     },

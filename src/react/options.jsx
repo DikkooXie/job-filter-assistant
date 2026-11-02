@@ -1,14 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { MSG } from '../common/constants.js';
-import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../common/profile.js';
+import { scoreProfile, sanitizeProfile } from '../common/profile.js';
+import { applyProfileDraft, assertNonEmptyText, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles } from '../common/profileImport.js';
 import { send } from '../ui/ui-common.js';
 import { parseResumeFile } from '../ui/resumeParser.js';
-import { Field, Tags } from './settings/controls.jsx';
 import { useSaveQueue } from './settings/useSaveQueue.js';
 import { useInitialSettings } from './settings/useInitialSettings.js';
 import { useSettingsHash } from './settings/useSettingsHash.js';
@@ -26,9 +24,8 @@ export default function Options() {
   const [profile, setProfile] = useState(null);
   const settingsRef = useRef(null), providersRef = useRef([]), profileRef = useRef(null);
   const pendingSettings = useRef({});
-  const [draft, setDraft] = useState(null), [materials, setMaterials] = useState([]), [paste, setPaste] = useState('');
+  const [draft, setDraft] = useState(null);
   const [notice, setNotice] = useState(null), [busy, setBusy] = useState(''), [confirm, setConfirm] = useState(null);
-  const fileRef = useRef(null);
   const report = useCallback((message, error = false) => {
     if (message == null) {
       setNotice((current) => (current?.error ? null : current));
@@ -69,40 +66,41 @@ export default function Options() {
   const withBusy = async (text, fn) => { setBusy(text); try { await fn(); } catch (e) { report(e.message, true); } finally { setBusy(''); } };
   const prepareAI = async () => { await flush('providers'); await flush('settings'); };
   const extract = (text) => withBusy('AI 正在抽取画像…', async () => { await prepareAI(); setDraft(sanitizeProfile(await send(MSG.AI_RESUME_EXTRACT, { text }))); report('抽取完成，请确认'); });
-  const resumeFile = (file) => withBusy('正在解析简历文件…', async () => { const { text } = await parseResumeFile(file); setBusy('AI 正在抽取画像…'); await prepareAI(); setDraft(sanitizeProfile(await send(MSG.AI_RESUME_EXTRACT, { text }))); report('抽取完成，请确认'); });
-  const readMaterials = async (files) => { setMaterials([]); await action(async () => {
-    const items = await Promise.all(Array.from(files).map(async (file) => ({ name: file.name, text: await file.text() })));
-    if (!items.length) return;
-    if (items.some((item) => !item.text.trim())) throw new Error('文件为空，请检查后重新选择');
-    const json = items.filter((item) => /\.json$/i.test(item.name));
-    if (json.length && (json.length !== 1 || items.length !== 1)) throw new Error('画像 JSON 请单独导入');
-    if (json.length) { const data = JSON.parse(json[0].text); if (!data || Array.isArray(data) || typeof data !== 'object' || !['target', 'basics', 'capabilities', 'workSummary', 'projectSummary', 'highlights', 'preference'].some((key) => key in data)) throw new Error('不是有效的画像 JSON'); }
-    setMaterials(items);
-  }); };
-  const extractMaterials = () => withBusy('AI 正在逐段抽取画像…', async () => {
-    await prepareAI();
-    let combined = emptyProfile();
-    for (const item of materials) for (let offset = 0; offset < item.text.length; offset += 10000) {
-      const extracted = sanitizeProfile(await send(MSG.AI_RESUME_EXTRACT, { text: `材料：${item.name}\n${item.text.slice(offset, offset + 10000)}` }));
-      const previous = combined; combined = mergeDraft(previous, extracted);
-      for (const key of ['workSummary', 'projectSummary']) if (previous[key] && extracted[key] && !previous[key].includes(extracted[key])) combined[key] = previous[key] + '\n' + extracted[key];
+  const importProfileFiles = (files, mode) => withBusy(mode === 'json' ? '正在读取画像…' : '正在解析简历文件…', async () => {
+    if (mode === 'json') {
+      const file = planJsonFile(files);
+      if (!file) return;
+      const text = await file.text();
+      assertNonEmptyText(file.name, text);
+      setDraft(sanitizeProfile(parseProfileJson(text)));
+      report('已读取画像草稿，请确认');
+      return;
     }
-    setDraft(combined); report('抽取完成，请核对事实和贡献边界');
+    const plan = planResumeFiles(files);
+    if (plan.kind === 'empty') return;
+    if (plan.kind === 'resume') {
+      const file = plan.files[0];
+      const { text } = await parseResumeFile(file);
+      assertNonEmptyText(file.name, text);
+      setBusy('AI 正在抽取画像…');
+      await prepareAI();
+      setDraft(sanitizeProfile(await send(MSG.AI_RESUME_EXTRACT, { text })));
+      report('抽取完成，请确认');
+      return;
+    }
+    const items = await Promise.all(plan.files.map(async (file) => ({ name: file.name, text: await file.text() })));
+    setBusy('AI 正在逐段抽取画像…');
+    await prepareAI();
+    setDraft(await combineMaterialExtracts(items, (text) => send(MSG.AI_RESUME_EXTRACT, { text })));
+    report('抽取完成，请核对事实和贡献边界');
   });
   const applyDraft = (replace) => withBusy('正在保存画像…', async () => {
     await flush('profile');
-    let next = draft;
-    if (!replace) {
-      const previous = sanitizeProfile(profileRef.current); next = mergeDraft(previous, draft);
-      const append = (oldText, newText) => !newText || oldText.includes(newText) ? oldText : oldText ? `${oldText}\n\n${newText}` : newText;
-      next.workSummary = append(previous.workSummary, draft.workSummary); next.projectSummary = append(previous.projectSummary, draft.projectSummary); next.preference.notes = append(previous.preference.notes, draft.preference.notes);
-    }
-    next = await send(MSG.PROFILE_SAVE, { profile: next }); profileRef.current = next; setProfile(next); setDraft(null); report(replace ? '已替换并保存' : '已合并并保存');
+    const next = await send(MSG.PROFILE_SAVE, { profile: applyProfileDraft(profileRef.current, draft, replace) });
+    profileRef.current = next; setProfile(next); setDraft(null); report(replace ? '已替换并保存' : '已合并并保存');
   });
   const editProfile = (group, key, value) => updateProfile(group ? { ...profileRef.current, [group]: { ...profileRef.current[group], [key]: value } } : { ...profileRef.current, [key]: value });
-  const profileText = (label, group, key, type = 'text', placeholder = '') => <Field key={key} label={label}><Input type={type} placeholder={placeholder} value={(group ? profile[group][key] : profile[key]) ?? ''} onChange={(e) => editProfile(group, key, type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)} /></Field>;
-  const profileTags = (label, group, key, placeholder) => <div key={key} className="space-y-2"><div className="text-sm font-medium">{label}</div><Tags label={label} value={group ? profile[group][key] : profile[key]} placeholder={placeholder} onChange={(v) => editProfile(group, key, v)} /></div>;
-  const profileArea = (label, group, key, placeholder) => <Field key={key} label={label}><Textarea rows={3} placeholder={placeholder} value={(group ? profile[group][key] : profile[key]) || ''} onChange={(e) => editProfile(group, key, e.target.value)} /></Field>;
+  const requestClearProfile = () => setConfirm({ title: '清除个人画像？', body: '将清空全部画像字段，并使已生成的岗位匹配分缓存失效。此操作不可撤销。', run: async () => { await flush('profile'); const p = await send(MSG.PROFILE_CLEAR); profileRef.current = p; setProfile(p); report('画像已清除'); } });
   const exportData = (format) => action(async () => { const res = await send(MSG.JOB_EXPORT_REQUEST, { format }); const url = URL.createObjectURL(new Blob([res.content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' })); try { await chrome.downloads.download({ url, filename: `岗位收录-${new Date().toISOString().slice(0, 10)}.${format}`, saveAs: true }); report(`已导出 ${res.count} 个岗位`); } finally { setTimeout(() => URL.revokeObjectURL(url), 60000); } });
 
   if (!settings || !profile) {
@@ -113,7 +111,7 @@ export default function Options() {
   return <>
     <SettingsShell page={page} title={title} status={status} onRetry={retry} version={extensionVersion()} notice={notice} onDismissNotice={() => setNotice(null)} busy={busy} rail={page === 'profile' ? <ProfileRail score={score} /> : null}>
       <Tabs value={page} onValueChange={(next) => { if (next && location.hash !== `#${next}`) location.hash = `#${next}`; }}>
-        <ProfileTab {...{ score, materials, readMaterials, action, setDraft, extractMaterials, fileRef, resumeFile, paste, setPaste, extract, report, draft, applyDraft, profileTags, profileText, profileArea, setConfirm, flush, profileRef, setProfile }} />
+        <ProfileTab profile={profile} draft={draft} report={report} onEdit={editProfile} onImportFiles={importProfileFiles} onExtractText={extract} onApplyDraft={applyDraft} onDiscardDraft={() => setDraft(null)} onClear={requestClearProfile} />
         <AiTab {...{ action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, setConfirm }} />
         <FiltersTab settings={settings} updateSettings={updateSettings} />
         <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} />
