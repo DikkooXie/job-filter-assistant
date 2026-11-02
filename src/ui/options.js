@@ -1,5 +1,6 @@
 import { MSG, MODE } from '../common/constants.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../common/profile.js';
+import { assertFilesWithinLimit, assertNonEmptyText, parseProfileJson } from '../common/profileImport.js';
 import { PRESETS, PROTOCOLS, PROTOCOL_LABELS, providerFromPreset, sanitizeProvider, validateProvider } from '../common/ai/providers.js';
 import { send, h, toast, toList, fromList, debounce } from './ui-common.js';
 import { parseResumeFile } from './resumeParser.js';
@@ -164,10 +165,10 @@ function renderMaterialsImport() {
   input.addEventListener('change', async () => {
     preview.replaceChildren();
     try {
-      const files = Array.from(input.files);
+      const files = assertFilesWithinLimit(input.files);
       if (!files.length) return;
       const materials = await Promise.all(files.map(async (file) => ({ name: file.name, text: await file.text() })));
-      if (materials.some((item) => !item.text.trim())) throw new Error('文件为空，请检查后重新选择');
+      for (const item of materials) assertNonEmptyText(item.name, item.text);
       const jsonFiles = materials.filter((item) => /\.json$/i.test(item.name));
       if (jsonFiles.length && (jsonFiles.length !== 1 || materials.length !== 1)) throw new Error('画像 JSON 请单独导入');
       for (const item of materials) {
@@ -176,8 +177,7 @@ function renderMaterialsImport() {
         preview.appendChild(field(`${item.name}（${item.text.length} 字符）`, area));
       }
       if (jsonFiles.length) {
-        const data = JSON.parse(jsonFiles[0].text);
-        if (!data || Array.isArray(data) || typeof data !== 'object' || !['target', 'basics', 'capabilities', 'workSummary', 'projectSummary', 'highlights', 'preference'].some((key) => key in data)) throw new Error('不是有效的画像 JSON');
+        const data = parseProfileJson(jsonFiles[0].text);
         preview.appendChild(h('button', { class: 'btn btn-primary', text: '预览画像草稿', onclick: () => { draft = sanitizeProfile(data); route(); } }));
       } else {
         preview.appendChild(h('button', { class: 'btn btn-primary', text: '发送材料给 AI 并抽取', onclick: () => extractMaterials(materials) }));
@@ -219,6 +219,7 @@ async function extractMaterials(materials) {
 async function handleFile(file) {
   const overlay = showBusy('正在解析简历文件…');
   try {
+    assertFilesWithinLimit([file]);
     const { text } = await parseResumeFile(file);
     overlay.setText('AI 正在抽取画像…');
     const d = await send(MSG.AI_RESUME_EXTRACT, { text });

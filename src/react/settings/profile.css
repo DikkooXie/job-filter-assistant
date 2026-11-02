@@ -1,0 +1,374 @@
+/* 个人画像页。只描述这一页的分组、字段和导入控件，不改框架变量。 */
+
+.profile-page {
+  min-width: 0;
+}
+
+.profile-group {
+  margin: 28px 0 30px;
+  padding-top: 28px;
+  border-top: 1px solid var(--s-border);
+}
+
+.profile-group:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.profile-group > h2 {
+  margin: 0 0 14px;
+  color: var(--s-ink-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.profile-group > h2 + .group-note {
+  margin: -8px 0 14px;
+}
+
+.group-note,
+.field-note,
+.drop-hint {
+  color: var(--s-ink-3);
+  font-weight: 400;
+}
+
+.group-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.field-note,
+.drop-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.drop-hint {
+  margin: 0;
+}
+
+.profile-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.profile-field {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  column-gap: 18px;
+  align-items: start;
+}
+
+.field-label {
+  padding-top: 8px;
+  color: var(--s-ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.profile-page .text-input,
+.profile-page .num-input,
+.profile-page .area-input,
+.profile-page .chip-box {
+  border: 1px solid var(--s-border-strong);
+  border-radius: 8px;
+  background: var(--s-field);
+  color: var(--s-ink-1);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.profile-page .text-input,
+.profile-page .num-input {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.profile-page .text-input {
+  width: 100%;
+}
+
+.profile-page .num-input {
+  width: 88px;
+  height: 34px;
+}
+
+.profile-page .area-input {
+  width: 100%;
+  min-height: 76px;
+  padding: 8px 10px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.profile-page .text-input:focus,
+.profile-page .num-input:focus,
+.profile-page .area-input:focus,
+.profile-page .chip-box:focus-within,
+.segment button:focus-visible,
+.s-btn:focus-visible {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px var(--s-focus);
+}
+
+.profile-page .text-input::placeholder,
+.profile-page .area-input::placeholder,
+.profile-page .chip-input::placeholder {
+  color: var(--s-ink-3);
+}
+
+.salary-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.salary-unit {
+  color: var(--s-ink-3);
+  font-size: 13px;
+}
+
+.chip-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 2px 0 8px;
+  border-radius: 6px;
+  background: var(--s-inset);
+  color: var(--s-ink-1);
+  font-size: 12.5px;
+  line-height: 1;
+}
+
+.chip button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--s-ink-2);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-input {
+  flex: 1 1 8em;
+  min-width: 8em;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--s-ink-1);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.chip-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--s-inset);
+}
+
+.segment button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--s-ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.segment button[aria-checked="true"] {
+  border-color: var(--s-border);
+  background: var(--s-surface);
+  box-shadow: var(--s-shadow);
+  color: var(--s-ink-1);
+  font-weight: 500;
+}
+
+.dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 26px 22px;
+  border: 1px dashed var(--s-border-strong);
+  border-radius: 10px;
+  background: var(--s-surface-2);
+  text-align: center;
+}
+
+.dropzone.is-over,
+.dropzone:hover {
+  border-color: var(--s-accent-line);
+  background: var(--s-accent-soft);
+}
+
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.paste-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.paste-box .area-input {
+  min-height: 120px;
+}
+
+.s-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.s-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.s-btn-primary {
+  border: 1px solid transparent;
+  background: var(--s-btn-bg);
+  color: var(--s-btn-ink);
+}
+
+.s-btn-outline {
+  border: 1px solid var(--s-border-strong);
+  background: var(--s-surface);
+  color: var(--s-ink-1);
+}
+
+.s-btn-ghost {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--s-ink-2);
+}
+
+.s-btn-danger {
+  border: 1px solid color-mix(in srgb, var(--s-down) 32%, transparent);
+  background: transparent;
+  color: var(--s-down);
+}
+
+.draft-box {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--s-surface-2);
+}
+
+.draft-box h3 {
+  margin: 0 0 10px;
+  color: var(--s-ink-1);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.draft-line {
+  color: var(--s-ink-1);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.draft-line dt {
+  display: inline;
+  color: var(--s-ink-2);
+  font-weight: 500;
+}
+
+.draft-line dd {
+  display: inline;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.danger-row h2 {
+  margin: 0;
+}
+
+.danger-row .group-note {
+  margin: 4px 0 0;
+}
+
+/* 右栏只剩一张完整度卡。窄屏移到内容下方时铺满，不再留出第二列空位。 */
+@media (max-width: 1080px) {
+  .settings-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .profile-field {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 7px;
+  }
+
+  .field-label {
+    padding-top: 0;
+  }
+
+  .danger-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

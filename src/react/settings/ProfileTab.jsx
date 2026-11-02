@@ -1,39 +1,203 @@
-import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import React, { useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
-import { MSG } from '../../common/constants.js';
-import { sanitizeProfile } from '../../common/profile.js';
-import { send } from '../../ui/ui-common.js';
-import { Field, Panel } from './controls.jsx';
+import { toList } from '../../ui/ui-common.js';
+import './profile.css';
 
-export default function ProfileTab({ score, materials, readMaterials, action, setDraft, extractMaterials, fileRef, resumeFile, paste, setPaste, extract, report, draft, applyDraft, profileTags, profileText, profileArea, setConfirm, flush, profileRef, setProfile }) {
-  return <TabsContent value="profile" className="space-y-4">
-        <Panel title="个人画像" description="上传简历自动抽取，或手动填写。画像越完整，AI 匹配越准。"><div className="flex flex-wrap items-center gap-4"><Badge variant="secondary" className="text-lg">{score.score}%</Badge><div><div className="font-medium">完整度 {score.completed}/{score.total} 项</div><p className="text-sm text-muted-foreground">{score.missing.length ? '待补充：' + score.missing.join('、') : '画像已相当完整'}</p></div></div></Panel>
-        <Panel title="导入个人材料" description="可多选 Markdown / TXT，先在本机预览，再选择发送给当前 AI 抽取；也可直接导入画像 JSON，完全在本机处理。确认后才保存，合并会保留已有设置。">
-          <Input type="file" aria-label="选择个人材料" accept=".md,.markdown,.txt,.json" multiple onChange={(e) => readMaterials(e.target.files)} />
-          {materials.map((m, i) => <Field key={`${m.name}-${i}`} label={`${m.name}（${m.text.length} 字符）`}><Textarea rows={6} readOnly value={m.text} /></Field>)}
-          {!!materials.length && (/\.json$/i.test(materials[0].name) ? <Button onClick={() => action(async () => setDraft(sanitizeProfile(JSON.parse(materials[0].text))))}>预览画像草稿</Button> : <Button onClick={extractMaterials}>发送材料给 AI 并抽取</Button>)}
-        </Panel>
-        <Panel title="上传简历，AI 自动填写" description="支持 PDF、DOCX、TXT。文件在本机解析；使用 AI 抽取时文本会发送至你配置的服务。抽取后需确认才写入画像。">
-          <input ref={fileRef} className="hidden" type="file" accept=".pdf,.docx,.txt,.md,.json" onChange={(e) => { if (e.target.files[0]) resumeFile(e.target.files[0]); e.target.value = ''; }} />
-          <div className="rounded-md border border-dashed p-6 text-center" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files[0]) resumeFile(e.dataTransfer.files[0]); }}><Button variant="outline" onClick={() => fileRef.current?.click()}>选择简历文件</Button><p className="mt-2 text-sm text-muted-foreground">也可拖拽文件到此处 · PDF / DOCX / TXT</p></div>
-          <Textarea aria-label="简历文本" rows={4} placeholder="或在此粘贴简历文本…" value={paste} onChange={(e) => setPaste(e.target.value)} /><Button onClick={() => paste.trim() ? extract(paste.trim()) : report('请先粘贴简历文本', true)}>从文本抽取画像</Button>
-          {draft && <div className="space-y-3 rounded-md border p-4"><h3 className="font-semibold">画像草稿（请核对后合并）</h3><p className="text-sm text-muted-foreground">合并时数组去重、保留已有单值，工作概述、项目概述和备注会追加新内容；可在下方手动编辑。</p><DraftPreview draft={draft} /><div className="flex flex-wrap gap-2"><Button onClick={() => applyDraft(false)}>合并到画像</Button><Button variant="outline" onClick={() => applyDraft(true)}>替换现有画像</Button><Button variant="ghost" onClick={() => setDraft(null)}>放弃</Button></div></div>}
-        </Panel>
-        <Panel title="手动编辑（自动保存）">
-          <h3 className="font-semibold">求职目标</h3>{profileTags('目标岗位', 'target', 'jobTitles', '回车添加，如 前端工程师')}{profileTags('目标城市', 'target', 'cities', '如 广州')}<div className="grid gap-4 sm:grid-cols-3">{profileText('期望月薪下限(k)', 'target', 'salaryMinK', 'number', '如 15')}{profileText('期望月薪上限(k)', 'target', 'salaryMaxK', 'number', '如 25')}{profileText('工作年限', 'basics', 'yearsOfExperience', 'number', '如 3')}</div>{profileTags('目标行业', 'target', 'industries', '如 互联网')}{profileTags('期望公司规模', 'target', 'companySizes', '如 100-499人')}{profileTags('办公方式', 'target', 'workModes', '如 远程')}
-          <h3 className="font-semibold">个人基础</h3><div className="grid gap-4 sm:grid-cols-2">{profileText('最高学历', 'basics', 'education', 'text', '如 本科')}{profileText('当前/最近职位', 'basics', 'currentTitle', 'text', '如 高级前端')}</div>{profileText('姓名（仅本地展示，默认不发送给 AI）', 'basics', 'name', 'text', '可留空')}
-          <h3 className="font-semibold">能力与经历</h3>{profileTags('专业技能', 'capabilities', 'skills', '如 React、TypeScript')}{profileTags('优势亮点', 'capabilities', 'strengths', '一句一条')}{profileTags('行业经验', 'capabilities', 'industryExperience', '如 电商、金融')}{profileArea('工作经历概述', null, 'workSummary', '一段话概述工作经历')}{profileArea('项目经历概述', null, 'projectSummary', '代表性项目')}{profileTags('核心成就', null, 'highlights', '可量化的成果，一条一个')}
-          <h3 className="font-semibold">偏好与禁区</h3>{profileTags('规避关键词', 'preference', 'avoidKeywords', '如 外包、驻场')}{profileTags('硬性排除', 'preference', 'dealbreakers', '如 需要出差')}{profileArea('给 AI 的额外说明', 'preference', 'notes', '任何想让 AI 知道的补充')}
-        </Panel>
-        <Panel title="一键清除画像" description="清空全部画像字段，并使已有匹配分缓存失效。不可撤销。"><Button variant="destructive" onClick={() => setConfirm({ title: '清除个人画像？', body: '将清空全部画像字段，并使已生成的岗位匹配分缓存失效。此操作不可撤销。', run: async () => { await flush('profile'); const p = await send(MSG.PROFILE_CLEAR); profileRef.current = p; setProfile(p); report('画像已清除'); } })}>清除画像</Button></Panel>
-      </TabsContent>;
+const IMPORT_MODES = [
+  { id: 'resume', label: '简历文件' },
+  { id: 'paste', label: '粘贴文本' },
+  { id: 'json', label: '画像 JSON' },
+];
+
+const DRAFT_ROWS = [
+  ['目标岗位', (d) => d.target.jobTitles],
+  ['目标城市', (d) => d.target.cities],
+  ['期望薪资', (d) => (d.target.salaryMinK || d.target.salaryMaxK ? `${d.target.salaryMinK ?? ''}-${d.target.salaryMaxK ?? ''}k` : '')],
+  ['工作年限', (d) => (d.basics.yearsOfExperience != null ? `${d.basics.yearsOfExperience} 年` : '')],
+  ['姓名', (d) => d.basics.name],
+  ['目标行业', (d) => d.target.industries],
+  ['公司规模', (d) => d.target.companySizes],
+  ['办公方式', (d) => d.target.workModes],
+  ['学历', (d) => d.basics.education],
+  ['当前职位', (d) => d.basics.currentTitle],
+  ['技能', (d) => d.capabilities.skills],
+  ['优势', (d) => d.capabilities.strengths],
+  ['行业经验', (d) => d.capabilities.industryExperience],
+  ['工作概述', (d) => d.workSummary],
+  ['项目概述', (d) => d.projectSummary],
+  ['核心成就', (d) => d.highlights],
+  ['规避关键词', (d) => d.preference.avoidKeywords],
+  ['硬性排除', (d) => d.preference.dealbreakers],
+  ['给 AI 的说明', (d) => d.preference.notes],
+];
+
+export default function ProfileTab({ profile, draft, report, onEdit, onImportFiles, onExtractText, onApplyDraft, onDiscardDraft, onClear }) {
+  const [mode, setMode] = useState('resume');
+  const [paste, setPaste] = useState('');
+  const [over, setOver] = useState(false);
+  const fileRef = useRef(null);
+  const dragDepth = useRef(0);
+  const valueOf = (group, key) => (group ? profile[group][key] : profile[key]);
+  const editText = (group, key, type = 'text') => (event) => {
+    const raw = event.target.value;
+    onEdit(group, key, type === 'number' ? (raw === '' ? null : Number(raw)) : raw);
+  };
+  const takeFiles = (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length) onImportFiles(files, mode);
+  };
+
+  return <TabsContent value="profile" className="profile-page">
+    <section className="profile-group">
+      <h2>导入材料</h2>
+      <p className="group-note">抽取时文本会发给当前启用的 AI，确认后才写入画像。</p>
+      <div className="profile-fields">
+        <div className="segment" role="radiogroup" aria-label="导入方式">
+          {IMPORT_MODES.map((item) => <button key={item.id} type="button" role="radio" aria-checked={mode === item.id} onClick={() => setMode(item.id)}>{item.label}</button>)}
+        </div>
+        {mode === 'paste' ? <div className="paste-box">
+          <textarea className="area-input" aria-label="简历文本" placeholder="在此粘贴简历文本" value={paste} onChange={(event) => setPaste(event.target.value)} />
+          <button type="button" className="s-btn s-btn-primary" onClick={() => {
+            const text = paste.trim();
+            if (!text) report('请先粘贴简历文本', true);
+            else onExtractText(text);
+          }}>抽取画像</button>
+        </div> : <div
+          className={over ? 'dropzone is-over' : 'dropzone'}
+          onDragEnter={(event) => { event.preventDefault(); dragDepth.current += 1; setOver(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setOver(false); }}
+          onDrop={(event) => { event.preventDefault(); dragDepth.current = 0; setOver(false); takeFiles(event.dataTransfer.files); }}
+        >
+          <input
+            ref={fileRef}
+            className="file-input"
+            tabIndex={-1}
+            type="file"
+            aria-label={mode === 'json' ? '选择画像 JSON' : '选择简历文件'}
+            accept={mode === 'json' ? '.json,application/json' : '.pdf,.docx,.doc,.txt,.md,.markdown'}
+            multiple={mode !== 'json'}
+            onChange={(event) => { takeFiles(event.target.files); event.target.value = ''; }}
+          />
+          <button type="button" className="s-btn s-btn-outline" onClick={() => fileRef.current?.click()}>选择文件</button>
+          <p className="drop-hint">{mode === 'json' ? '选择或拖入一个画像 JSON' : '选择或拖入 PDF、DOCX；MD / TXT 可一次多选'}</p>
+        </div>}
+        {draft && <DraftPreview draft={draft} onApply={onApplyDraft} onDiscard={onDiscardDraft} />}
+      </div>
+    </section>
+
+    <section className="profile-group">
+      <h2>求职目标</h2>
+      <div className="profile-fields">
+        <ProfileTags label="目标岗位" value={profile.target.jobTitles} placeholder="回车添加，如 前端工程师" onChange={(next) => onEdit('target', 'jobTitles', next)} />
+        <ProfileTags label="目标城市" value={profile.target.cities} placeholder="回车添加，如 广州" onChange={(next) => onEdit('target', 'cities', next)} />
+        <ProfileField label="期望月薪" note="只用于匹配打分，不会写进招呼语">
+          <div className="salary-row">
+            <input className="num-input" type="number" aria-label="期望月薪下限" placeholder="下限" value={profile.target.salaryMinK ?? ''} onChange={editText('target', 'salaryMinK', 'number')} />
+            <span aria-hidden="true">—</span>
+            <input className="num-input" type="number" aria-label="期望月薪上限" placeholder="上限" value={profile.target.salaryMaxK ?? ''} onChange={editText('target', 'salaryMaxK', 'number')} />
+            <span className="salary-unit">k/月</span>
+          </div>
+        </ProfileField>
+        <ProfileTags label="目标行业" value={profile.target.industries} placeholder="回车添加，如 互联网" onChange={(next) => onEdit('target', 'industries', next)} />
+        <ProfileTags label="公司规模" value={profile.target.companySizes} placeholder="回车添加，如 100-499人" onChange={(next) => onEdit('target', 'companySizes', next)} />
+        <ProfileTags label="办公方式" value={profile.target.workModes} placeholder="回车添加，如 远程" onChange={(next) => onEdit('target', 'workModes', next)} />
+      </div>
+    </section>
+
+    <section className="profile-group">
+      <h2>个人基础</h2>
+      <div className="profile-fields">
+        <ProfileField label="最高学历" htmlFor="profile-education">
+          <input id="profile-education" className="text-input" placeholder="如 本科" value={valueOf('basics', 'education') || ''} onChange={editText('basics', 'education')} />
+        </ProfileField>
+        <ProfileField label="当前或最近职位" htmlFor="profile-current-title">
+          <input id="profile-current-title" className="text-input" placeholder="如 高级前端" value={valueOf('basics', 'currentTitle') || ''} onChange={editText('basics', 'currentTitle')} />
+        </ProfileField>
+        <ProfileField label="姓名" htmlFor="profile-name">
+          <input id="profile-name" className="text-input" placeholder="留空即不填" value={valueOf('basics', 'name') || ''} onChange={editText('basics', 'name')} />
+        </ProfileField>
+        <ProfileField label="工作年限" htmlFor="profile-years">
+          <input id="profile-years" className="num-input" type="number" placeholder="如 3" value={valueOf('basics', 'yearsOfExperience') ?? ''} onChange={editText('basics', 'yearsOfExperience', 'number')} />
+        </ProfileField>
+      </div>
+    </section>
+
+    <section className="profile-group">
+      <h2>能力与经历</h2>
+      <div className="profile-fields">
+        <ProfileTags label="专业技能" value={profile.capabilities.skills} placeholder="回车添加，如 React" onChange={(next) => onEdit('capabilities', 'skills', next)} />
+        <ProfileTags label="优势亮点" value={profile.capabilities.strengths} placeholder="回车添加" onChange={(next) => onEdit('capabilities', 'strengths', next)} />
+        <ProfileTags label="行业经验" value={profile.capabilities.industryExperience} placeholder="回车添加，如 电商" onChange={(next) => onEdit('capabilities', 'industryExperience', next)} />
+        <ProfileField label="工作经历概述" htmlFor="profile-work">
+          <textarea id="profile-work" className="area-input" placeholder="一段话概述工作经历" value={valueOf(null, 'workSummary') || ''} onChange={editText(null, 'workSummary')} />
+        </ProfileField>
+        <ProfileField label="项目经历概述" htmlFor="profile-project" note="AI 撰写招呼语时只会引用这里写到的事实">
+          <textarea id="profile-project" className="area-input" placeholder="代表性项目" value={valueOf(null, 'projectSummary') || ''} onChange={editText(null, 'projectSummary')} />
+        </ProfileField>
+        <ProfileTags label="核心成就" value={profile.highlights} placeholder="回车添加" onChange={(next) => onEdit(null, 'highlights', next)} />
+      </div>
+    </section>
+
+    <section className="profile-group">
+      <h2>偏好与禁区</h2>
+      <div className="profile-fields">
+        <ProfileTags label="规避关键词" value={profile.preference.avoidKeywords} placeholder="回车添加，如 外包" note="命中时降低匹配分，岗位仍会保留" onChange={(next) => onEdit('preference', 'avoidKeywords', next)} />
+        <ProfileTags label="硬性排除" value={profile.preference.dealbreakers} placeholder="回车添加" note="命中时匹配分直接判为不合适" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
+        <ProfileField label="给 AI 的说明" htmlFor="profile-notes">
+          <textarea id="profile-notes" className="area-input" value={valueOf('preference', 'notes') || ''} onChange={editText('preference', 'notes')} />
+        </ProfileField>
+      </div>
+    </section>
+
+    <section className="profile-group">
+      <div className="danger-row">
+        <div>
+          <h2>清除画像</h2>
+          <p className="group-note">清空全部画像字段，并使已有匹配分缓存失效。不可撤销。</p>
+        </div>
+        <button type="button" className="s-btn s-btn-danger" onClick={onClear}>清除画像</button>
+      </div>
+    </section>
+  </TabsContent>;
 }
 
-function DraftPreview({ draft: d }) {
-  const rows = [['目标岗位', d.target.jobTitles], ['目标城市', d.target.cities], ['期望薪资', d.target.salaryMinK || d.target.salaryMaxK ? `${d.target.salaryMinK ?? ''}-${d.target.salaryMaxK ?? ''}k` : ''], ['工作年限', d.basics.yearsOfExperience != null ? `${d.basics.yearsOfExperience} 年` : ''], ['姓名', d.basics.name], ['目标行业', d.target.industries], ['公司规模', d.target.companySizes], ['办公方式', d.target.workModes], ['学历', d.basics.education], ['当前职位', d.basics.currentTitle], ['技能', d.capabilities.skills], ['优势', d.capabilities.strengths], ['行业经验', d.capabilities.industryExperience], ['工作概述', d.workSummary], ['项目概述', d.projectSummary], ['核心成就', d.highlights], ['规避关键词', d.preference.avoidKeywords], ['硬性排除', d.preference.dealbreakers], ['给 AI 的说明', d.preference.notes]];
-  return <dl className="space-y-1 text-sm">{rows.filter(([, v]) => v && v.length).map(([label, value]) => <div key={label} className="whitespace-pre-wrap"><dt className="inline font-medium">{label}：</dt><dd className="inline">{Array.isArray(value) ? value.join('、') : value}</dd></div>)}</dl>;
+function ProfileField({ label, note, htmlFor, children }) {
+  return <div className="profile-field">
+    {htmlFor ? <label className="field-label" htmlFor={htmlFor}>{label}</label> : <div className="field-label">{label}</div>}
+    <div className="field-control">{children}{note ? <p className="field-note">{note}</p> : null}</div>
+  </div>;
+}
+
+function ProfileTags({ label, value = [], onChange, placeholder, note }) {
+  const [input, setInput] = useState('');
+  const inputId = `profile-tags-${label}`;
+  const commit = () => {
+    const next = [...value];
+    for (const part of toList(input)) if (!next.some((item) => item.toLowerCase() === part.toLowerCase())) next.push(part);
+    if (next.length !== value.length) onChange(next);
+    setInput('');
+  };
+  return <ProfileField label={label} note={note} htmlFor={inputId}>
+    <div className="chip-box">
+      {value.map((item, index) => <span className="chip" key={`${item}-${index}`}>{item}<button type="button" aria-label={`删除 ${item}`} onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))}>×</button></span>)}
+      <input id={inputId} className="chip-input" aria-label={label} placeholder={value.length ? '' : (placeholder || '回车添加')} value={input} onChange={(event) => setInput(event.target.value)} onBlur={commit} onKeyDown={(event) => {
+        if (['Enter', ',', '，'].includes(event.key)) { event.preventDefault(); commit(); }
+        else if (event.key === 'Backspace' && !input && value.length) onChange(value.slice(0, -1));
+      }} />
+    </div>
+  </ProfileField>;
+}
+
+function DraftPreview({ draft, onApply, onDiscard }) {
+  const rows = DRAFT_ROWS.map(([label, read]) => [label, read(draft)]).filter(([, value]) => value && value.length);
+  return <div className="draft-box">
+    <h3>画像草稿</h3>
+    <dl>{rows.map(([label, value]) => <div className="draft-line" key={label}><dt>{label}：</dt><dd>{Array.isArray(value) ? value.join('、') : value}</dd></div>)}</dl>
+    <div className="draft-actions">
+      <button type="button" className="s-btn s-btn-primary" onClick={() => onApply(false)}>合并到画像</button>
+      <button type="button" className="s-btn s-btn-outline" onClick={() => onApply(true)}>替换现有画像</button>
+      <button type="button" className="s-btn s-btn-ghost" onClick={onDiscard}>放弃</button>
+    </div>
+  </div>;
 }

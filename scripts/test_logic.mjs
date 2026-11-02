@@ -11,6 +11,9 @@ import { loadSettings, saveSettings } from '../src/common/settingsStore.js';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
+import {
+  MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
+} from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters } from '../src/common/filters.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
@@ -247,6 +250,92 @@ test('画像合并保留已有偏好与非空字段', () => {
   assert.equal(result.preference.notes, '已有说明');
   assert.deepEqual(result.preference.dealbreakers, ['出差', '夜班']);
 });
+test('超过 10 MB 的文件拒绝导入，并写明文件名和大小', () => {
+  const limit = MAX_PROFILE_IMPORT_BYTES;
+  const big = { name: '简历.pdf', size: limit + 1 };
+  assert.throws(() => assertFilesWithinLimit([big]), (error) => {
+    assert.match(error.message, /简历\.pdf/);
+    assert.match(error.message, /10\.0 MB/);
+    assert.match(error.message, /超过 10 MB，已拒绝导入/);
+    return true;
+  });
+  const larger = { name: '材料.md', size: Math.round(12.5 * 1024 * 1024) };
+  assert.throws(() => assertFilesWithinLimit([{ name: 'ok.txt', size: limit }, larger]), /材料\.md/);
+  assert.match(assertFilesWithinLimit([{ name: '刚好.pdf', size: limit }])[0].name, /刚好\.pdf/);
+});
+test('画像 JSON 只能单独导入，字段不对时指出具体问题', () => {
+  const profile = parseProfileJson('{"target":{"jobTitles":["测试工程师"],"salaryMinK":"18"},"basics":{"yearsOfExperience":0}}');
+  assert.deepEqual(profile.target.jobTitles, ['测试工程师']);
+  assert.equal(profile.basics.yearsOfExperience, 0);
+  assert.throws(() => parseProfileJson('{'), /无法解析/);
+  assert.throws(() => parseProfileJson('[]'), /根节点必须是对象/);
+  assert.throws(() => parseProfileJson('{"foo":1}'), /缺少 target、basics、capabilities/);
+  assert.throws(() => parseProfileJson('{"target":"前端"}'), /画像字段校验失败：target 应为对象/);
+  assert.throws(() => parseProfileJson('{"target":{"salaryMinK":"很多"}}'), /target\.salaryMinK 不是有效数字/);
+  assert.throws(() => parseProfileJson('{"basics":{"yearsOfExperience":-1}}'), /yearsOfExperience 不能为负数/);
+  assert.throws(() => planJsonFile([{ name: 'a.json', size: 10 }, { name: 'b.json', size: 10 }]), /画像 JSON 请单独导入/);
+  assert.throws(() => planJsonFile([{ name: '简历.pdf', size: 10 }]), /不是画像 JSON/);
+  assert.equal(planJsonFile([{ name: '画像.json', size: 20 }]).name, '画像.json');
+});
+test('简历文件区分单个 PDF/DOCX 与多个文本材料', () => {
+  assert.equal(planResumeFiles([{ name: '简历.pdf', size: 100 }]).kind, 'resume');
+  assert.equal(planResumeFiles([{ name: 'a.md', size: 1 }, { name: 'b.txt', size: 1 }]).kind, 'materials');
+  assert.throws(() => planResumeFiles([{ name: 'a.pdf', size: 1 }, { name: 'b.txt', size: 1 }]), /PDF 或 DOCX 请单独导入/);
+  assert.throws(() => planResumeFiles([{ name: '画像.json', size: 1 }]), /画像 JSON 请单独导入/);
+  assert.throws(() => planResumeFiles([{ name: '简历.exe', size: 1 }]), /不是支持的简历文件/);
+});
+test('合并草稿去重、补空，摘要保留原内容并追加', () => {
+  const current = sanitizeProfile({
+    basics: { education: '本科' },
+    capabilities: { skills: ['React'] },
+    workSummary: '已有工作',
+    preference: { notes: '已有说明', dealbreakers: ['出差'] },
+  });
+  const draft = sanitizeProfile({
+    basics: { education: '硕士', currentTitle: '测试工程师' },
+    capabilities: { skills: ['react', 'Vue'] },
+    workSummary: '新工作',
+    preference: { notes: '新说明', dealbreakers: ['夜班'] },
+  });
+  const merged = applyProfileDraft(current, draft, false);
+  assert.equal(merged.basics.education, '本科');
+  assert.equal(merged.basics.currentTitle, '测试工程师');
+  assert.deepEqual(merged.capabilities.skills, ['React', 'Vue']);
+  assert.deepEqual(merged.preference.dealbreakers, ['出差', '夜班']);
+  assert.equal(merged.workSummary, '已有工作\n\n新工作');
+  assert.equal(merged.preference.notes, '已有说明\n\n新说明');
+  assert.equal(applyProfileDraft(current, draft, true), draft);
+  const contained = sanitizeProfile({ workSummary: '已有工作\n\n新工作' });
+  assert.equal(applyProfileDraft(contained, sanitizeProfile({ workSummary: '新工作' }), false).workSummary, '已有工作\n\n新工作');
+});
+
+await testAsync('多个 md/txt 按 10000 字分段抽取后合并，空文件不调用抽取', async () => {
+  const text = `${'甲'.repeat(10000)}乙`;
+  const calls = [];
+  const draft = await combineMaterialExtracts([
+    { name: '经历.md', text },
+    { name: '补充.txt', text: '第二份材料' },
+  ], async (prompt) => {
+    calls.push(prompt);
+    if (prompt.includes('第二份材料')) return { capabilities: { skills: ['Vue'] }, workSummary: '第二段经历' };
+    if (prompt.endsWith('乙')) return { capabilities: { skills: ['TypeScript'] }, workSummary: '后半经历', projectSummary: '后半项目' };
+    return { capabilities: { skills: ['React'] }, workSummary: '前半经历', projectSummary: '前半项目' };
+  });
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].slice('材料：经历.md\n'.length).length, 10000);
+  assert.ok(calls[1].startsWith('材料：经历.md\n') && calls[1].endsWith('乙'));
+  assert.ok(calls[2].startsWith('材料：补充.txt\n'));
+  assert.deepEqual(draft.capabilities.skills, ['React', 'TypeScript', 'Vue']);
+  assert.equal(draft.workSummary, '前半经历\n后半经历\n第二段经历');
+  assert.equal(draft.projectSummary, '前半项目\n后半项目');
+  let called = false;
+  await assert.rejects(
+    combineMaterialExtracts([{ name: '空白.txt', text: '  \n' }], async () => { called = true; return {}; }),
+    /空白\.txt/,
+  );
+  assert.equal(called, false);
+});
+
 test('招呼提示保留岗位隐私设置并要求真实表达', () => {
   const messages = buildMatchPrompt(emptyProfile(), { title: '前端', company: '测试公司' }, { includeCompany: false });
   assert.ok(messages[0].content.includes('未知年限不是零'));
@@ -976,6 +1065,28 @@ test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () =>
   assert.equal(nextNavIndex(2, 'Home', 4), 0);
   assert.equal(nextNavIndex(2, 'End', 4), 3);
   assert.equal(nextNavIndex(1, 'Enter', 4), -1);
+});
+
+test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const tab = fs.readFileSync(path.join(root, 'src/react/settings/ProfileTab.jsx'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, 'src/react/settings/SettingsShell.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
+  assert.doesNotMatch(tab, /完整度/);
+  assert.match(tab, /简历文件/);
+  assert.match(tab, /粘贴文本/);
+  assert.match(tab, /画像 JSON/);
+  assert.match(tab, /抽取时文本会发给当前启用的 AI，确认后才写入画像。/);
+  assert.match(tab, /只用于匹配打分，不会写进招呼语/);
+  assert.match(tab, /AI 撰写招呼语时只会引用这里写到的事实/);
+  assert.match(tab, /命中时降低匹配分，岗位仍会保留/);
+  assert.match(tab, /命中时匹配分直接判为不合适/);
+  assert.match(tab, /合并到画像/);
+  assert.match(tab, /替换现有画像/);
+  assert.match(shell, /aria-label="画像完整度"/);
+  assert.match(shell, /score\.missing\.map/);
+  assert.match(css, /max-width:\s*1080px/);
+  assert.match(css, /max-width:\s*860px/);
 });
 
 test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
