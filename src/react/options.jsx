@@ -29,7 +29,13 @@ export default function Options() {
   const [preset, setPreset] = useState(PRESETS[0].key);
   const [results, setResults] = useState({});
   const fileRef = useRef(null);
-  const report = useCallback((message, error = false) => setNotice({ message, error }), []);
+  const report = useCallback((message, error = false) => {
+    if (message == null) {
+      setNotice((current) => (current?.error ? null : current));
+      return;
+    }
+    setNotice({ message, error: !!error });
+  }, []);
   const { enqueue, flush } = useSaveQueue(report);
   useInitialSettings({ settingsRef, providersRef, profileRef, setSettings, setProviders, setProfile, report });
   const updateSettings = (patch) => {
