@@ -683,18 +683,17 @@ function renderFilters() {
 //  通用与隐私
 // ============================================================
 function renderGeneral() {
-  mainEl.appendChild(sectionHead('通用与隐私', '控制抓取行为与发送给 AI 的数据范围。数据保存在本机，AI 操作会向所配置服务发送相关内容。'));
+  mainEl.appendChild(sectionHead('通用与隐私'));
   const save = debounce(async (patch) => {
     settings = await send(MSG.SETTINGS_SAVE, { patch });
   }, 200);
 
   // 运行模式
   const modePanel = h('div', { class: 'panel' }, [
-    h('div', { class: 'panel-title', text: '运行模式' }),
-    h('div', { class: 'panel-desc', text: '自动 = 跟随当前站点；也可锁定只看某个平台。' }),
+    h('div', { class: 'panel-title', text: '运行平台' }),
     (() => {
       const seg = h('div', { class: 'segmented' });
-      [[MODE.auto, '自动'], [MODE.boss, 'BOSS 直聘'], [MODE.qcwy, '前程无忧']].forEach(([v, l]) => {
+      [[MODE.auto, '跟随当前网站'], [MODE.boss, '只用 BOSS 直聘'], [MODE.qcwy, '只用前程无忧']].forEach(([v, l]) => {
         seg.appendChild(h('button', {
           class: settings.mode === v ? 'active' : '',
           text: l,
@@ -708,15 +707,15 @@ function renderGeneral() {
 
   // 抓取行为
   const cap = h('div', { class: 'panel' }, [h('div', { class: 'panel-title', text: '抓取与分析' })]);
-  cap.appendChild(setRow('自动收录岗位', '浏览列表时自动抓取', settings.autoCapture, (v) => save({ autoCapture: v })));
-  cap.appendChild(setRow('自动 AI 分析', '新收录岗位自动打分（消耗 token）', settings.autoScore, (v) => save({ autoScore: v })));
-  cap.appendChild(setRow('显示收录角标', '收录岗位时在页面右下角短暂显示。', settings.showBadge, (v) => save({ showBadge: v })));
+  cap.appendChild(setRow('自动收录岗位', '', settings.autoCapture, (v) => save({ autoCapture: v })));
+  cap.appendChild(setRow('自动 AI 分析', '每个新岗位消耗一次接口调用。', settings.autoScore, (v) => save({ autoScore: v })));
+  cap.appendChild(setRow('显示收录角标', '显示在招聘网站页面右下角。', settings.showBadge, (v) => save({ showBadge: v })));
   cap.appendChild(setRow('合并重复岗位', '', settings.dedupe, (v) => save({ dedupe: v })));
   const maxInput = h('input', { type: 'number', value: settings.maxJobs, style: 'width:100px' });
   maxInput.addEventListener('input', () => save({ maxJobs: Number(maxInput.value) || 800 }));
   cap.appendChild(
     h('div', { class: 'set-row' }, [
-      h('div', {}, [h('div', { class: 's-label', text: '岗位库上限' }), h('div', { class: 's-desc', text: '超出按时间淘汰（收藏不淘汰）' })]),
+      h('div', {}, [h('div', { class: 's-label', text: '岗位库上限' }), h('div', { class: 's-desc', text: '超出后先淘汰最早收录的，收藏的岗位不会被淘汰' })]),
       maxInput,
     ]),
   );
@@ -725,16 +724,17 @@ function renderGeneral() {
   // 隐私
   const priv = h('div', { class: 'panel' }, [
     h('div', { class: 'panel-title', text: '隐私' }),
-    h('div', { class: 'panel-desc', text: 'API Key 和数据保存在本机；使用 AI 时相关内容会发送至所配置的服务。脱敏无法保证移除所有个人信息。' }),
   ]);
-  priv.appendChild(setRow('发送前脱敏', '隐去手机号、邮箱、联系方式、个人链接等', settings.privacy.redactPII, (v) => save({ privacy: { redactPII: v } })));
-  priv.appendChild(setRow('发送岗位公司名', '公司名一般为公开招聘信息，发送可提升分析质量', settings.privacy.sendCompanyName, (v) => save({ privacy: { sendCompanyName: v } })));
+  priv.appendChild(setRow('发送前脱敏', '不能保证移除所有个人信息', settings.privacy.redactPII, (v) => save({ privacy: { redactPII: v } })));
+  priv.appendChild(setRow('发送岗位公司名', '', settings.privacy.sendCompanyName, (v) => save({ privacy: { sendCompanyName: v } })));
+  priv.appendChild(setRow('发送招呼语前确认', '', settings.privacy.confirmBeforeSend, (v) => save({ privacy: { confirmBeforeSend: v } })));
   mainEl.appendChild(priv);
 
   // 数据管理
   mainEl.appendChild(
     h('div', { class: 'panel' }, [
-      h('div', { class: 'panel-title', text: '数据' }),
+      h('div', { class: 'panel-title', text: '岗位数据' }),
+      h('div', { class: 'panel-desc', text: '只有 JSON 可以用来恢复。' }),
       h('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, [
         h('button', { class: 'btn', text: '导出岗位 (JSON)', onclick: () => exportData('json') }),
         h('button', { class: 'btn', text: '导出岗位 (CSV)', onclick: () => exportData('csv') }),
@@ -742,7 +742,7 @@ function renderGeneral() {
           class: 'btn btn-danger',
           text: '清空岗位库',
           onclick: () => showModal({
-            title: '清空岗位库？', body: '删除全部已收录岗位，不可撤销。', confirmText: '清空', danger: true,
+            title: '清空岗位库？', body: '删除全部已收录岗位，不可撤销。建议先导出 JSON。', confirmText: '清空', danger: true,
             onConfirm: async () => { await send(MSG.JOB_CLEAR_REQUEST); toast('已清空'); },
           }),
         }),
