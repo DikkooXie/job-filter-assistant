@@ -61,7 +61,7 @@ export default function FiltersTab({ settings, updateSettings }) {
       <label className="filter-switch-row">
         <span>
           <span className="filter-switch-label">启用本地筛选</span>
-          <span className="filter-hint">关闭时列表显示全部岗位，只标注风险词</span>
+          <span className="filter-hint">关闭时列表显示全部岗位，并标注命中的规则</span>
         </span>
         <input
           className="filter-switch"

@@ -79,22 +79,21 @@ export function evaluateJob(job, filters) {
   return result;
 }
 
-// 批量：返回保留的岗位（附带评估元信息挂在 _filter 上）
+// 批量：评估结果挂在 _filter 上。
+// 开启过滤时只返回 keep 的岗位；关闭时全部返回，keep:false 的岗位带着命中原因供列表标注。
 export function applyFilters(jobs, filters) {
-  if (!filters || !filters.enabled) {
-    return jobs.map((j) => ({ ...j, _filter: { keep: true, risks: collectRisks(j, filters) } }));
-  }
+  const enabled = !!(filters && filters.enabled);
   const out = [];
   for (const j of jobs) {
     const ev = evaluateJob(j, filters);
-    if (ev.keep) out.push({ ...j, _filter: ev });
+    if (!enabled || ev.keep) out.push({ ...j, _filter: ev });
   }
   return out;
 }
 
-function collectRisks(job, filters) {
-  const hay = buildHaystack(job);
-  return arr(filters && filters.riskKeywords).filter((rk) => rk && hay.includes(rk.toLowerCase()));
+// 自动打分的候选：过滤开启时跳过会被隐藏的岗位，关闭时全部打分。
+export function autoScoreUids(jobs, filters) {
+  return applyFilters(jobs, filters).map((j) => j.uid);
 }
 
 function buildHaystack(job) {
