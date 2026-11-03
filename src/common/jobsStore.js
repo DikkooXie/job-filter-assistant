@@ -22,6 +22,7 @@ export async function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {})
   const byUid = new Map(existing.map((j) => [j.uid, j]));
   let added = 0;
   let updated = 0;
+  const addedUids = [];
 
   for (const raw of incoming) {
     if (!raw || !raw.uid) continue;
@@ -42,6 +43,7 @@ export async function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {})
     } else {
       byUid.set(raw.uid, { ...raw, savedAt: now, lastSeenAt: now, star: false, match: null });
       added++;
+      addedUids.push(raw.uid);
     }
   }
 
@@ -55,7 +57,7 @@ export async function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {})
   }
 
   await saveJobs(list);
-  return { jobs: list, added, updated };
+  return { jobs: list, added, updated, addedUids };
 }
 
 export async function deleteJob(uid) {

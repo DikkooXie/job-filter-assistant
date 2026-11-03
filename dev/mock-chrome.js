@@ -105,7 +105,7 @@
       openOptionsPage: () => console.log('[mock] openOptionsPage'),
       getURL: (p) => '/' + p,
     },
-    storage: { local: { get: async()=>({}), set: async()=>{}, remove: async()=>{} } },
+    storage: { local: { get: async()=>({}), set: async()=>{}, remove: async()=>{} }, onChanged: { addListener: ()=>{}, removeListener: ()=>{} } },
     // 测试辅助：模拟用户在网站上点开另一个岗位（触发 CURRENT_JOB 广播）
     __mockSwitchJob: (platform, jobKey, isChat) => {
       state.ctx = { platform, jobKey, isChat: !!isChat, url: platform==='boss'?`https://www.zhipin.com/web/geek/jobs`:`https://we.51job.com/pc/search` };

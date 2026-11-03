@@ -13,6 +13,7 @@ import { sanitizeProvider } from '../common/ai/providers.js';
 import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js';
 import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor } from '../common/ai/prompts.js';
 import { redactText } from '../common/ai/privacy.js';
+import { autoScoreUids } from '../common/filters.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
 const tabContext = new Map();
@@ -146,16 +147,17 @@ async function onJobsCaptured(msg, sender) {
   if (!settings.autoCapture) return { added: 0, updated: 0, skipped: true };
   const jobs = normalizeResponse(msg.platform, msg.payload, { url: msg.url });
   if (!jobs.length) return { added: 0, updated: 0 };
-  const { jobs: all, added, updated } = await mergeJobs(jobs, {
+  const { jobs: all, added, updated, addedUids } = await mergeJobs(jobs, {
     dedupe: settings.dedupe,
     maxJobs: settings.maxJobs,
   });
   broadcast(MSG.JOBS_UPDATED, { count: all.length, added, updated });
 
-  // 自动打分（可选）：仅对新加入的、且已有可用供应商与画像时
-  if (settings.autoScore && added > 0) {
-    const newUids = jobs.slice(0, added).map((j) => j.uid);
-    scoreBatch(newUids, {}).catch(() => {});
+  // 自动打分（可选）：只给新加入的岗位打分；过滤开启时跳过会被隐藏的岗位
+  if (settings.autoScore && addedUids.length) {
+    const fresh = new Set(addedUids);
+    const uids = autoScoreUids(all.filter((j) => fresh.has(j.uid)), settings.filters);
+    if (uids.length) scoreBatch(uids, {}).catch(() => {});
   }
   return { added, updated, total: all.length };
 }
