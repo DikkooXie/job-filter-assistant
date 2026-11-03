@@ -36,7 +36,7 @@ export function emptyProfile() {
     // 求职偏好与禁区
     preference: {
       avoidKeywords: [], // 不想要的岗位特征
-      dealbreakers: [], // 硬性排除
+      dealbreakers: [], // 雷点：AI 语义判断，命中降分
       notes: '', // 自由备注给 AI 的额外说明
     },
     updatedAt: new Date().toISOString(),

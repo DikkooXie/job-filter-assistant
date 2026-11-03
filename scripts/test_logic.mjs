@@ -345,6 +345,43 @@ test('招呼提示保留岗位隐私设置并要求真实表达', () => {
   assert.ok(!messages[1].content.includes('测试公司'));
 });
 
+test('匹配提示包含雷点语义规则，且雷点不否决岗位', () => {
+  const profile = emptyProfile();
+  profile.preference.dealbreakers = ['大小周'];
+  const messages = buildMatchPrompt(profile, { title: '前端', description: '每周工作六天' });
+  const system = messages[0].content;
+  assert.ok(system.includes('雷点'));
+  assert.ok(system.includes('preference.dealbreakers'));
+  assert.ok(system.includes('不要因为它把 eligible 置为 false'));
+  // 雷点不交给代码字面匹配，只在画像里出现
+  assert.ok(!messages[1].content.includes('规避关键词字面命中'));
+});
+
+test('规避关键词命中由代码先匹配并写进提示词', () => {
+  const profile = emptyProfile();
+  profile.preference.avoidKeywords = ['外包', '驻场', '不存在的词'];
+  const job = { title: '前端工程师', description: '本岗位为外包驻场项目' };
+  const messages = buildMatchPrompt(profile, job);
+  const user = messages[1].content;
+  assert.ok(user.includes('【规避关键词字面命中】'));
+  const hitSection = user.slice(user.indexOf('【规避关键词字面命中】'), user.indexOf('请按以下 JSON 结构输出'));
+  assert.ok(hitSection.includes('外包'));
+  assert.ok(hitSection.includes('驻场'));
+  assert.ok(!hitSection.includes('不存在的词'));
+  assert.ok(messages[0].content.includes('字面命中只是线索'));
+});
+
+test('未配置规避关键词时不输出命中区块', () => {
+  const messages = buildMatchPrompt(emptyProfile(), { title: '前端', description: '外包项目' });
+  assert.ok(!messages[1].content.includes('【规避关键词字面命中】'));
+});
+
+test('低分不等于不合格：没有硬门槛时 eligible 保持 true', () => {
+  const m = sanitizeMatch({ score: 30, risks: ['命中雷点：大小周'] });
+  assert.equal(m.eligible, true);
+  assert.deepEqual(m.blockers, []);
+});
+
 // ---------- 筛选 ----------
 section('本地筛选');
 const sampleJob = bossJobs[0];
@@ -1195,8 +1232,9 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   assert.match(tab, /抽取时文本会发给当前启用的 AI，确认后才写入画像。/);
   assert.match(tab, /只用于匹配打分，不会写进招呼语/);
   assert.match(tab, /AI 撰写招呼语时只会引用这里写到的事实/);
-  assert.match(tab, /命中时降低匹配分，岗位仍会保留/);
-  assert.match(tab, /命中时 AI 判为不合适，岗位仍会保留/);
+  assert.match(tab, /代码先匹配，命中时 AI 降低匹配分/);
+  assert.match(tab, /AI 理解岗位描述后判断，命中时明显降分/);
+  assert.ok(!tab.includes('一票否决'));
   assert.match(tab, /合并到画像/);
   assert.match(tab, /替换现有画像/);
   assert.match(shell, /aria-label="画像完整度"/);

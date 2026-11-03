@@ -27,7 +27,7 @@ const DRAFT_ROWS = [
   ['项目概述', (d) => d.projectSummary],
   ['核心成就', (d) => d.highlights],
   ['规避关键词', (d) => d.preference.avoidKeywords],
-  ['一票否决', (d) => d.preference.dealbreakers],
+  ['雷点', (d) => d.preference.dealbreakers],
   ['给 AI 的说明', (d) => d.preference.notes],
 ];
 
@@ -142,8 +142,8 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
     <section className="profile-group">
       <h2>偏好与禁区</h2>
       <div className="profile-fields">
-        <ProfileTags label="规避关键词" value={profile.preference.avoidKeywords} placeholder="回车添加，如 外包" note="命中时降低匹配分，岗位仍会保留" onChange={(next) => onEdit('preference', 'avoidKeywords', next)} />
-        <ProfileTags label="一票否决" value={profile.preference.dealbreakers} placeholder="回车添加" note="命中时 AI 判为不合适，岗位仍会保留" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
+        <ProfileTags label="规避关键词" value={profile.preference.avoidKeywords} placeholder="回车添加，如 外包" note="代码先匹配，命中时 AI 降低匹配分，岗位仍会保留" onChange={(next) => onEdit('preference', 'avoidKeywords', next)} />
+        <ProfileTags label="雷点" value={profile.preference.dealbreakers} placeholder="回车添加，如 大小周" note="AI 理解岗位描述后判断，命中时明显降分，岗位仍会保留" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
         <ProfileField label="给 AI 的说明" htmlFor="profile-notes">
           <textarea id="profile-notes" className="area-input" value={valueOf('preference', 'notes') || ''} onChange={editText('preference', 'notes')} />
         </ProfileField>
