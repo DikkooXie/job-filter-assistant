@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prototype:list": "vite --host 127.0.0.1 --port 5291 --strictPort --open /sidepanel-prototype.html",
     "build": "vite build",
     "test": "node scripts/test_logic.mjs",
     "release": "node scripts/release.mjs"
