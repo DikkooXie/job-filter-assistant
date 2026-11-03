@@ -133,7 +133,7 @@ export default function GeneralTab({ settings, updateSettings, exportData, setCo
 
     {/* #7 负责「关于与更新」内部，这里只留页底挂载位。 */}
     <div className="gen-update-slot">
-      <UpdatePanel onConfirm={setConfirm} />
+      <UpdatePanel onConfirm={setConfirm} updateChannel={settings.updateChannel} onUpdateChannel={(updateChannel) => updateSettings({ updateChannel })} />
     </div>
   </TabsContent>;
 }

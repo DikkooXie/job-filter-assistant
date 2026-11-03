@@ -1,8 +1,11 @@
 // 发版：构建 → 把 dist/ 的内容打成 zip（manifest.json 在 zip 根目录）→ 用 gh 创建 GitHub Release。
 // 用法：
 //   npm run release -- --dry-run            只构建并打包，不发布
-//   npm run release -- --notes "更新说明"    发布（版本号取 manifest.json 的 version）
+//   npm run release -- --notes "更新说明"    发布正式版（版本号取 manifest.json 的 version，成为 /releases/latest）
 //   npm run release -- --notes-file CHANGES.md
+//   npm run release -- --prerelease --notes "预览说明"
+// 预览包：发之前把 manifest version 改成四段，且必须大于已安装版本（正式 1.0.3 → 预览 1.0.3.1）。
+// 不带 --prerelease 时行为与现网一致，会创建正式 Release。不要用它发预览，也不要为此把正式三段版本号抬高。
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -20,7 +23,11 @@ const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: 'inherit'
 const manifest = JSON.parse(readFileSync(resolve(projectDir, 'manifest.json'), 'utf8'));
 const version = manifest.version;
 const tag = `v${version}`;
+const prerelease = flag('--prerelease');
 if (!manifest.key) throw new Error('manifest.json 缺少 key，发布后用户更新会丢失数据');
+if (prerelease && !/^\d+(?:\.\d+){3}$/.test(version)) {
+  throw new Error(`预览包请使用四段版本号，且必须大于已安装版本（例如正式版 1.0.3 发 1.0.3.1）。当前 manifest version 为 ${version}`);
+}
 
 const git = (...argv) => execFileSync('git', argv, { cwd: projectDir, encoding: 'utf8' }).trim();
 if (!flag('--dry-run')) {
@@ -60,6 +67,9 @@ run('gh', [
   '--repo', REPO,
   '--target', head,
   '--title', tag,
+  ...(prerelease ? ['--prerelease'] : []),
   ...(notesFile ? ['--notes-file', notesFile] : ['--notes', notes]),
 ]);
-console.log(`\n已发布 ${tag}。已安装的用户在「设置 → 通用与隐私 → 关于与更新」里点「检查更新」即可升级。`);
+console.log(prerelease
+  ? `\n已发布预览版 ${tag}。此发布不会改变 /releases/latest。在扩展里把更新通道切到「预览」后点「检查更新」。`
+  : `\n已发布 ${tag}。已安装的用户在「设置 → 通用与隐私 → 关于与更新」里点「检查更新」即可升级。`);

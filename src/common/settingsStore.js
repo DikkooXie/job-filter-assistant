@@ -1,6 +1,7 @@
 // 设置与 AI 供应商列表的 storage 读写。
 import { STORAGE_KEYS, defaultSettings, defaultFilters } from './constants.js';
 import { sanitizeProviderList } from './ai/providers.js';
+import { normalizeUpdateChannel } from './update.js';
 
 const SET_KEY = STORAGE_KEYS.settings;
 const PROV_KEY = STORAGE_KEYS.aiProviders;
@@ -24,6 +25,7 @@ export function mergeSettings(input) {
     ...input,
     privacy: { ...d.privacy, ...(isObj(input.privacy) ? input.privacy : {}) },
     filters: { ...defaultFilters(), ...(isObj(input.filters) ? input.filters : {}) },
+    updateChannel: normalizeUpdateChannel(input.updateChannel),
   };
 }
 
