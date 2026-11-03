@@ -180,6 +180,17 @@
   border-bottom: 1px solid var(--s-border);
 }
 
+.settings-heading {
+  min-width: 0;
+}
+
+.settings-lead {
+  margin: 4px 0 0;
+  color: var(--s-ink-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .settings-header h1 {
   margin: 0;
   color: var(--s-ink-1);

@@ -2,9 +2,9 @@
 // 且不能在 UpdatePanel 读取 location.hash 之前被改写成 #general。
 
 export const SETTINGS_PAGES = [
-  { id: 'profile', label: '个人画像' },
+  { id: 'profile', label: '个人画像', lead: 'AI 按这些信息给岗位打匹配分，不会隐藏岗位。' },
   { id: 'ai', label: 'AI 接口' },
-  { id: 'filters', label: '岗位筛选' },
+  { id: 'filters', label: '岗位筛选', lead: '按规则直接决定列表里显示哪些岗位，不经过 AI。' },
   { id: 'general', label: '通用与隐私' },
 ];
 

@@ -27,7 +27,7 @@ const DRAFT_ROWS = [
   ['项目概述', (d) => d.projectSummary],
   ['核心成就', (d) => d.highlights],
   ['规避关键词', (d) => d.preference.avoidKeywords],
-  ['硬性排除', (d) => d.preference.dealbreakers],
+  ['一票否决', (d) => d.preference.dealbreakers],
   ['给 AI 的说明', (d) => d.preference.notes],
 ];
 
@@ -90,7 +90,7 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
       <h2>求职目标</h2>
       <div className="profile-fields">
         <ProfileTags label="目标岗位" value={profile.target.jobTitles} placeholder="回车添加，如 前端工程师" onChange={(next) => onEdit('target', 'jobTitles', next)} />
-        <ProfileTags label="目标城市" value={profile.target.cities} placeholder="回车添加，如 广州" onChange={(next) => onEdit('target', 'cities', next)} />
+        <ProfileTags label="目标城市" value={profile.target.cities} placeholder="回车添加，如 广州" note="符合的岗位匹配分更高" onChange={(next) => onEdit('target', 'cities', next)} />
         <ProfileField label="期望月薪" note="只用于匹配打分，不会写进招呼语">
           <div className="salary-row">
             <input className="num-input" type="number" aria-label="期望月薪下限" placeholder="下限" value={profile.target.salaryMinK ?? ''} onChange={editText('target', 'salaryMinK', 'number')} />
@@ -143,7 +143,7 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
       <h2>偏好与禁区</h2>
       <div className="profile-fields">
         <ProfileTags label="规避关键词" value={profile.preference.avoidKeywords} placeholder="回车添加，如 外包" note="命中时降低匹配分，岗位仍会保留" onChange={(next) => onEdit('preference', 'avoidKeywords', next)} />
-        <ProfileTags label="硬性排除" value={profile.preference.dealbreakers} placeholder="回车添加" note="命中时匹配分直接判为不合适" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
+        <ProfileTags label="一票否决" value={profile.preference.dealbreakers} placeholder="回车添加" note="命中时 AI 判为不合适，岗位仍会保留" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
         <ProfileField label="给 AI 的说明" htmlFor="profile-notes">
           <textarea id="profile-notes" className="area-input" value={valueOf('preference', 'notes') || ''} onChange={editText('preference', 'notes')} />
         </ProfileField>

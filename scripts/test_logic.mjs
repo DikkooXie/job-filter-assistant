@@ -1161,7 +1161,7 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   assert.match(tab, /只用于匹配打分，不会写进招呼语/);
   assert.match(tab, /AI 撰写招呼语时只会引用这里写到的事实/);
   assert.match(tab, /命中时降低匹配分，岗位仍会保留/);
-  assert.match(tab, /命中时匹配分直接判为不合适/);
+  assert.match(tab, /命中时 AI 判为不合适，岗位仍会保留/);
   assert.match(tab, /合并到画像/);
   assert.match(tab, /替换现有画像/);
   assert.match(shell, /aria-label="画像完整度"/);

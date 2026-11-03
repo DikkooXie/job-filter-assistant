@@ -76,7 +76,7 @@ export default function FiltersTab({ settings, updateSettings }) {
       <h2>关键词</h2>
       <div className="filter-fields">
         <TagEditor label="包含任一" value={filters.keywordsInclude || []} onChange={(value) => update({ keywordsInclude: value })} />
-        <TagEditor label="排除" value={filters.keywordsExclude || []} onChange={(value) => update({ keywordsExclude: value })} />
+        <TagEditor label="排除关键词" hint="命中的岗位不显示" value={filters.keywordsExclude || []} onChange={(value) => update({ keywordsExclude: value })} />
         <TagEditor label="风险词" tone="risk" hint="只在岗位上标注提醒，筛选关闭时也生效" value={filters.riskKeywords || []} onChange={(value) => update({ riskKeywords: value })} />
       </div>
     </section>
@@ -84,7 +84,7 @@ export default function FiltersTab({ settings, updateSettings }) {
       <h2>公司与城市</h2>
       <div className="filter-fields">
         <TagEditor label="屏蔽公司" value={filters.excludeCompanies || []} onChange={(value) => update({ excludeCompanies: value })} />
-        <TagEditor label="城市" value={filters.cities || []} onChange={(value) => update({ cities: value })} />
+        <TagEditor label="只看这些城市" hint="其他城市的岗位不显示" value={filters.cities || []} onChange={(value) => update({ cities: value })} />
       </div>
     </section>
     <section className="filter-group">

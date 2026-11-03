@@ -55,6 +55,7 @@ export function ProfileRail({ score }) {
 }
 
 export default function SettingsShell({ page, title, status, onRetry, version, notice, onDismissNotice, busy, rail, children }) {
+  const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
   useEffect(() => {
     document.title = `${title} · 岗位筛选助手`;
   }, [title]);
@@ -76,7 +77,10 @@ export default function SettingsShell({ page, title, status, onRetry, version, n
     <div className="settings-main">
       <div className={page === 'profile' ? 'settings-frame is-profile' : 'settings-frame'}>
         <header className="settings-header">
-          <h1>{title}</h1>
+          <div className="settings-heading">
+            <h1>{title}</h1>
+            {lead && <p className="settings-lead">{lead}</p>}
+          </div>
           <SaveStatus status={status} onRetry={onRetry} />
         </header>
         {notice && <div className={notice.error ? 'settings-notice is-error' : 'settings-notice'} role={notice.error ? 'alert' : 'status'}>
