@@ -102,6 +102,7 @@ export function defaultSettings() {
     dedupe: true,
     maxJobs: 800, // 岗位库上限，超出按时间淘汰
     activeProviderId: '', // 当前启用的 AI 供应商
+    updateChannel: 'stable', // 检查更新通道：stable 正式版 / preview 预发布。旧数据缺省按稳定
     privacy: {
       redactPII: true, // 发送前脱敏
       sendCompanyName: true, // 岗位公司名一般是公开信息，默认发送

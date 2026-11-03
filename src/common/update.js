@@ -3,7 +3,10 @@
 
 export const RELEASE_REPO = 'DikkooXie/job-filter-assistant';
 export const RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
+export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases`;
 export const RELEASE_PAGE = `https://github.com/${RELEASE_REPO}/releases/latest`;
+export const NO_PREVIEW_MESSAGE = '暂无预览版';
+export const AHEAD_OF_STABLE_MESSAGE = '当前高于正式版，请手动下载正式 zip 覆盖后重载';
 export const MAX_PACKAGE_BYTES = 40 * 1024 * 1024;
 // 解压后总大小与文件数上限，防止压缩炸弹
 export const MAX_UNZIPPED_BYTES = 200 * 1024 * 1024;
@@ -30,15 +33,35 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-/** GitHub releases/latest JSON → { version, tag, name, notes, publishedAt, zipUrl, zipSize, pageUrl } */
-export function parseRelease(json) {
+/** 缺省、空值和其他写法都按稳定通道，避免旧设置或脏数据走到预览。 */
+export function normalizeUpdateChannel(value) {
+  return value === 'preview' ? 'preview' : 'stable';
+}
+
+/** 稳定通道仍请求 /releases/latest；预览通道只拉最近 20 条发布列表。 */
+export function releaseRequest(channel) {
+  const mode = normalizeUpdateChannel(channel);
+  if (mode === 'preview') return { channel: 'preview', url: `${RELEASES_API}?per_page=20` };
+  return { channel: 'stable', url: RELEASE_API };
+}
+
+function zipAsset(json) {
+  const assets = Array.isArray(json?.assets) ? json.assets : [];
+  return assets.find((asset) => /\.zip$/i.test(asset?.name || '') && asset?.browser_download_url) || null;
+}
+
+/**
+ * GitHub Release JSON → { version, tag, name, notes, publishedAt, zipUrl, zipSize, pageUrl }。
+ * 默认拒绝 draft / prerelease。仅 channel 为 preview 时接受 prerelease，draft 仍然拒绝。
+ */
+export function parseRelease(json, options = {}) {
+  const channel = normalizeUpdateChannel(options?.channel);
   if (!json || typeof json !== 'object') throw new Error('发布信息格式不正确');
-  if (json.draft || json.prerelease) throw new Error('最新发布不是正式版本');
+  if (json.draft || (json.prerelease && channel !== 'preview')) throw new Error('最新发布不是正式版本');
   const tag = String(json.tag_name || '');
   const version = tag.replace(/^v/i, '');
   if (!parseVersion(version)) throw new Error(`发布版本号不正确：${tag || '空'}`);
-  const assets = Array.isArray(json.assets) ? json.assets : [];
-  const zip = assets.find((a) => /\.zip$/i.test(a?.name || '') && a?.browser_download_url);
+  const zip = zipAsset(json);
   if (!zip) throw new Error('该版本没有附带安装包（.zip）');
   if (!String(zip.browser_download_url).startsWith(DOWNLOAD_PREFIX)) throw new Error('安装包地址不是本项目的 GitHub 发布地址');
   const digest = /^sha256:([0-9a-f]{64})$/i.exec(String(zip.digest || ''));
@@ -52,6 +75,54 @@ export function parseRelease(json) {
     zipSize: Number(zip.size) || 0,
     zipSha256: digest ? digest[1].toLowerCase() : '',
     pageUrl: json.html_url || RELEASE_PAGE,
+  };
+}
+
+/** 发布列表里第一个带 zip 的 prerelease（跳过 draft 和正式版）。没有则返回 null。 */
+export function selectPreviewRelease(list) {
+  if (!Array.isArray(list)) throw new Error('发布列表格式不正确');
+  const hit = list.find((item) => item && item.prerelease === true && !item.draft && zipAsset(item));
+  if (!hit) return null;
+  return parseRelease(hit, { channel: 'preview' });
+}
+
+export function previewUnavailable(current) {
+  return {
+    channel: 'preview',
+    current: String(current ?? ''),
+    hasUpdate: false,
+    previewUnavailable: true,
+    aheadOfStable: false,
+    message: NO_PREVIEW_MESSAGE,
+  };
+}
+
+/** 预览检查的纯结果：有包则比较版本，没有则走「暂无预览版」。 */
+export function resolvePreviewCheck(list, current) {
+  const found = selectPreviewRelease(list);
+  if (!found) return previewUnavailable(current);
+  return { ...assessUpdate(found, current, 'preview'), previewUnavailable: false };
+}
+
+/**
+ * 把已解析的发布和当前版本合成检查结果。
+ * 稳定通道上正式版更旧时只提示手动覆盖，hasUpdate 保持 false，避免静默降级。
+ */
+export function assessUpdate(release, current, channel = 'stable') {
+  const mode = normalizeUpdateChannel(channel);
+  const cmp = compareVersions(release.version, current);
+  const hasUpdate = cmp > 0;
+  const aheadOfStable = mode === 'stable' && cmp < 0;
+  let message = '';
+  if (aheadOfStable) message = AHEAD_OF_STABLE_MESSAGE;
+  else if (!hasUpdate) message = `已是最新版本（${current}）`;
+  return {
+    ...release,
+    current: String(current ?? ''),
+    channel: mode,
+    hasUpdate,
+    aheadOfStable,
+    message,
   };
 }
 

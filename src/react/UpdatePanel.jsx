@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { RELEASE_PAGE } from '../common/update.js';
+import { RELEASE_PAGE, normalizeUpdateChannel } from '../common/update.js';
 import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../ui/update.js';
 import './update-panel.css';
 
@@ -99,8 +99,9 @@ function ManualSteps({ pageUrl, open, onToggle }) {
   </details>;
 }
 
-export default function UpdatePanel({ onConfirm }) {
+export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpdateChannel }) {
   const { version } = chrome.runtime.getManifest();
+  const channel = normalizeUpdateChannel(updateChannel);
   const [folder, setFolder] = useState({ state: 'none', name: '' });
   const [release, setRelease] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -129,12 +130,25 @@ export default function UpdatePanel({ onConfirm }) {
     setError(''); setMessage('');
     try { await fn(); } catch (e) { setError(e?.message || String(e)); }
   };
+  const changeChannel = (next) => {
+    const value = normalizeUpdateChannel(next);
+    if (value === channel || installing || checking) return;
+    setRelease(null);
+    setError('');
+    setMessage('');
+    onUpdateChannel?.(value);
+  };
   const check = () => run(async () => {
     setChecking(true);
     try {
-      const next = await fetchLatestRelease();
+      const next = await fetchLatestRelease(channel);
+      if (next.previewUnavailable) {
+        setRelease(null);
+        setMessage(next.message);
+        return;
+      }
       setRelease(next);
-      if (!next.hasUpdate) setMessage(`已是最新版本（${next.current}）`);
+      if (!next.hasUpdate) setMessage(next.message);
     } finally { setChecking(false); }
   });
   const firstTime = folder.state === 'none';
@@ -173,6 +187,18 @@ export default function UpdatePanel({ onConfirm }) {
     <h2 id="update-panel-title" className="update-title">关于与更新</h2>
     <p className="update-lead">解压出来的文件夹就是扩展本身。请放在固定位置，不要删除或移动。</p>
 
+    <fieldset className="update-channel">
+      <legend>更新通道</legend>
+      <div className="update-channel-options" role="radiogroup" aria-label="更新通道">
+        {[['stable', '稳定'], ['preview', '预览']].map(([value, label]) => <label key={value} className="update-channel-option">
+          <input type="radio" name="update-channel" value={value} checked={channel === value} disabled={installing || checking} onChange={() => changeChannel(value)} />
+          <span className="update-channel-dot" aria-hidden="true" />
+          <span>{label}</span>
+        </label>)}
+      </div>
+      <p className="update-hint">预览只检查 GitHub 预发布包。正式版更旧时不会自动降级。</p>
+    </fieldset>
+
     <div className="update-row">
       <div className="update-identity">
         <div className="update-version-line">
@@ -203,7 +229,12 @@ export default function UpdatePanel({ onConfirm }) {
       {!canAutoUpdate && <p className="update-status" role="status">当前浏览器不支持扩展内自动更新，请按下方步骤手动更新。</p>}
     </div>}
 
-    {release?.hasUpdate && <ReleaseNotes release={release} />}
+    {release?.aheadOfStable && <div className="update-rollback">
+      <a href={pageUrl || RELEASE_PAGE} target="_blank" rel="noreferrer">正式版发布页</a>
+      <button type="button" className="update-btn update-btn-outline" onClick={openExtensionsPage}>打开扩展管理页</button>
+    </div>}
+
+    {(release?.hasUpdate || release?.aheadOfStable) && <ReleaseNotes release={release} />}
     {canAutoUpdate && <p className="update-keep">更新后扩展会自动重新加载，岗位、画像和配置都会保留。</p>}
     <ManualSteps pageUrl={pageUrl} open={manualOpen} onToggle={setManualOpen} />
     <p className="update-id"><span>扩展 ID</span> <code>{chrome.runtime.id}</code></p>

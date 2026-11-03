@@ -27,6 +27,98 @@
   line-height: 1.65;
 }
 
+.update-channel {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.update-channel legend {
+  margin: 0 0 8px;
+  padding: 0;
+  color: var(--s-ink-1);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.update-channel-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 160px));
+  gap: 10px;
+}
+
+.update-channel-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--s-border);
+  border-radius: 10px;
+  background: var(--s-field);
+  color: var(--s-ink-1);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.update-channel-option:has(input:checked) {
+  background: var(--s-accent-soft);
+  border-color: var(--s-accent-line);
+}
+
+.update-channel-option:has(input:focus-visible) {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--s-focus);
+}
+
+.update-channel-option:has(input:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.update-channel-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.update-channel-option input:focus {
+  outline: none;
+}
+
+.update-channel-dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--s-border-strong);
+  border-radius: 99px;
+  background: transparent;
+}
+
+.update-channel-option:has(input:checked) .update-channel-dot {
+  border-color: var(--s-accent);
+  background: var(--s-accent);
+}
+
+.update-channel .update-hint {
+  margin-top: 8px;
+}
+
 .update-row {
   display: flex;
   align-items: center;
@@ -270,6 +362,20 @@
   line-height: 1.45;
 }
 
+.update-rollback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.update-rollback a {
+  color: var(--s-accent);
+  font-size: 12.5px;
+  text-underline-offset: 2px;
+}
+
 .update-keep {
   margin-top: 12px;
   color: var(--s-ink-3);
@@ -345,6 +451,10 @@
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
+  }
+
+  .update-channel-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

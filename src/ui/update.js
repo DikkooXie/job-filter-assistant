@@ -2,7 +2,7 @@
 // 纯逻辑在 ../common/update.js。
 import { unzipSync, strFromU8 } from '../vendor/fflate.module.js';
 import {
-  RELEASE_API, MAX_PACKAGE_BYTES, compareVersions, parseRelease,
+  MAX_PACKAGE_BYTES, parseRelease, releaseRequest, resolvePreviewCheck, assessUpdate, previewUnavailable,
   packageManifestError, isSameInstall, planWrites, unzipGuard, toHex, staleAssets,
 } from '../common/update.js';
 
@@ -84,15 +84,38 @@ export function extensionsPageUrl() {
   return `${scheme}://extensions/?id=${chrome.runtime.id}`;
 }
 
-/** 查询 GitHub 最新正式版。返回 parseRelease 结果加 { current, hasUpdate }。 */
-export async function fetchLatestRelease() {
-  const res = await fetch(RELEASE_API, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
-  if (res.status === 404) throw new Error('还没有发布任何版本');
+async function fetchGithub(url) {
+  const res = await fetch(url, { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+  if (res.status === 404) {
+    const error = new Error('还没有发布任何版本');
+    error.status = 404;
+    throw error;
+  }
   if (res.status === 403 || res.status === 429) throw new Error('GitHub 请求过于频繁，请稍后再试');
   if (!res.ok) throw new Error(`检查更新失败（HTTP ${res.status}）`);
-  const release = parseRelease(await res.json());
+  return res.json();
+}
+
+/**
+ * 按通道查询可安装版本。
+ * stable：/releases/latest，拒绝 prerelease（与现网一致）。
+ * preview：最近 20 条里第一个带 zip 的 prerelease；没有则返回「暂无预览版」，不抛错。
+ * 正式版不比当前新时 hasUpdate 为 false；稳定通道上当前更高则带 aheadOfStable，不静默降级。
+ */
+export async function fetchLatestRelease(channel = 'stable') {
+  const request = releaseRequest(channel);
   const current = selfManifest().version;
-  return { ...release, current, hasUpdate: compareVersions(release.version, current) > 0 };
+  if (request.channel === 'preview') {
+    try {
+      const json = await fetchGithub(request.url);
+      return resolvePreviewCheck(json, current);
+    } catch (error) {
+      if (error?.status === 404) return previewUnavailable(current);
+      throw error;
+    }
+  }
+  const release = parseRelease(await fetchGithub(request.url));
+  return { ...assessUpdate(release, current, 'stable'), previewUnavailable: false };
 }
 
 async function download(url, onProgress) {

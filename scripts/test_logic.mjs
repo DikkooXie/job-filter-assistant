@@ -7,7 +7,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 import { defaultFilters, defaultSettings, STORAGE_KEYS } from '../src/common/constants.js';
-import { loadSettings, saveSettings } from '../src/common/settingsStore.js';
+import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
@@ -23,6 +23,8 @@ import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanit
 import { redactText } from '../src/common/ai/privacy.js';
 import {
   parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
+  RELEASE_API, RELEASES_API, NO_PREVIEW_MESSAGE, AHEAD_OF_STABLE_MESSAGE,
+  normalizeUpdateChannel, releaseRequest, selectPreviewRelease, resolvePreviewCheck, assessUpdate,
 } from '../src/common/update.js';
 
 let pass = 0;
@@ -630,6 +632,8 @@ test('版本解析与比较', () => {
   assert.equal(compareVersions('1.10.0', '1.9.9'), 1);
   assert.equal(compareVersions('v1.0', '1.0.0'), 0);
   assert.equal(compareVersions('1.0.0', '1.0.1'), -1);
+  assert.equal(compareVersions('1.0.3.1', '1.0.3'), 1);
+  assert.equal(compareVersions('1.0.3', '1.0.3.0'), 0);
   assert.throws(() => compareVersions('x', '1'));
 });
 test('解析 Release：正常', () => {
@@ -644,6 +648,83 @@ test('解析 Release：拒绝预发布、无 zip、非 GitHub 地址', () => {
   assert.throws(() => parseRelease(release({ assets: [{ name: 'a.zip', browser_download_url: 'https://evil.example/a.zip' }] })));
   assert.throws(() => parseRelease(release({ tag_name: 'latest' })));
   assert.throws(() => parseRelease(release({ assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/someone/else/releases/download/v1/a.zip' }] })), /本项目/);
+});
+test('更新通道缺省为稳定，预览才请求发布列表', () => {
+  assert.equal(normalizeUpdateChannel(undefined), 'stable');
+  assert.equal(normalizeUpdateChannel(''), 'stable');
+  assert.equal(normalizeUpdateChannel('beta'), 'stable');
+  assert.equal(normalizeUpdateChannel('preview'), 'preview');
+  assert.equal(releaseRequest().url, RELEASE_API);
+  assert.equal(releaseRequest('stable').url, RELEASE_API);
+  assert.equal(releaseRequest('nope').channel, 'stable');
+  assert.equal(releaseRequest('preview').channel, 'preview');
+  assert.equal(releaseRequest('preview').url, `${RELEASES_API}?per_page=20`);
+  assert.equal(mergeSettings(null).updateChannel, 'stable');
+  assert.equal(mergeSettings({ mode: 'boss' }).updateChannel, 'stable');
+  assert.equal(mergeSettings({ updateChannel: 'preview', mode: 'boss' }).updateChannel, 'preview');
+  assert.equal(mergeSettings({ updateChannel: 'preview', mode: 'boss' }).mode, 'boss');
+  assert.equal(mergeSettings({ updateChannel: 'nightly' }).updateChannel, 'stable');
+  assert.equal(defaultSettings().updateChannel, 'stable');
+});
+test('稳定通道拒绝 prerelease 和 draft，预览通道接受 prerelease', () => {
+  assert.throws(() => parseRelease(release({ prerelease: true }), { channel: 'stable' }), /正式版本/);
+  assert.throws(() => parseRelease(release({ draft: true })), /正式版本/);
+  assert.throws(() => parseRelease(release({ draft: true, prerelease: true }), { channel: 'preview' }), /正式版本/);
+  const preview = parseRelease(release({
+    prerelease: true,
+    tag_name: 'v1.0.3.1',
+    assets: [{ name: 'a.zip', size: 12, browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.0.3.1/a.zip' }],
+  }), { channel: 'preview' });
+  assert.equal(preview.version, '1.0.3.1');
+  assert.equal(preview.zipSize, 12);
+  assert.throws(() => parseRelease(release({
+    prerelease: true,
+    assets: [{ name: 'a.zip', browser_download_url: 'https://evil.example/a.zip' }],
+  }), { channel: 'preview' }), /本项目/);
+});
+test('预览列表取第一个带 zip 的 prerelease，没有则暂无预览版', () => {
+  const zip = (tag) => ({ name: 'a.zip', browser_download_url: `https://github.com/DikkooXie/job-filter-assistant/releases/download/${tag}/a.zip` });
+  const draft = release({ tag_name: 'v1.0.3.9', prerelease: true, draft: true, assets: [zip('v1.0.3.9')] });
+  const stable = release({ tag_name: 'v1.0.3', prerelease: false, assets: [zip('v1.0.3')] });
+  const noZip = release({ tag_name: 'v1.0.3.1', prerelease: true, assets: [] });
+  const first = release({ tag_name: 'v1.0.3.2', prerelease: true, assets: [zip('v1.0.3.2')] });
+  const later = release({ tag_name: 'v1.0.3.3', prerelease: true, assets: [zip('v1.0.3.3')] });
+  assert.equal(selectPreviewRelease([draft, stable, noZip, first, later]).version, '1.0.3.2');
+  const empty = resolvePreviewCheck([stable, draft, noZip], '1.0.3');
+  assert.equal(empty.previewUnavailable, true);
+  assert.equal(empty.hasUpdate, false);
+  assert.equal(empty.aheadOfStable, false);
+  assert.equal(empty.message, NO_PREVIEW_MESSAGE);
+  assert.equal(resolvePreviewCheck([], '1.0.3').message, '暂无预览版');
+  assert.throws(() => selectPreviewRelease({ message: 'nope' }), /格式不正确/);
+  const newer = resolvePreviewCheck([first], '1.0.3');
+  assert.equal(newer.hasUpdate, true);
+  assert.equal(newer.previewUnavailable, false);
+  assert.equal(newer.version, '1.0.3.2');
+  assert.equal(newer.channel, 'preview');
+});
+test('稳定通道上正式版更旧时只提示手动覆盖，不标记可更新', () => {
+  const stable = parseRelease(release({ tag_name: 'v1.0.3' }));
+  const ahead = assessUpdate(stable, '1.0.3.1', 'stable');
+  assert.equal(ahead.hasUpdate, false);
+  assert.equal(ahead.aheadOfStable, true);
+  assert.equal(ahead.message, AHEAD_OF_STABLE_MESSAGE);
+  assert.equal(ahead.channel, 'stable');
+  const same = assessUpdate(stable, '1.0.3', 'stable');
+  assert.equal(same.hasUpdate, false);
+  assert.equal(same.aheadOfStable, false);
+  assert.match(same.message, /^已是最新版本（1\.0\.3）$/);
+  const newer = assessUpdate(parseRelease(release({ tag_name: 'v1.0.4' })), '1.0.3', 'stable');
+  assert.equal(newer.hasUpdate, true);
+  assert.equal(newer.aheadOfStable, false);
+  assert.equal(newer.message, '');
+  const previewCurrent = assessUpdate(parseRelease(release({
+    tag_name: 'v1.0.3.1',
+    prerelease: true,
+    assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.0.3.1/a.zip' }],
+  }), { channel: 'preview' }), '1.0.3.1', 'preview');
+  assert.equal(previewCurrent.hasUpdate, false);
+  assert.equal(previewCurrent.aheadOfStable, false);
 });
 await testAsync('manifest key 计算出固定扩展 ID', async () => {
   assert.equal(await extensionIdFromKey(selfManifest.key), SELF_ID);
@@ -1214,6 +1295,33 @@ await testAsync('保存筛选补丁时 storage 里的 salaryMaxK 原样保留', 
   }
 });
 
+await testAsync('旧设置没有 updateChannel 时按稳定读回，非法值不会落库', async () => {
+  const previous = globalThis.chrome;
+  globalThis.chrome = memoryChrome();
+  try {
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.settings]: { mode: 'boss', showBadge: false, maxJobs: 500 },
+    });
+    const loaded = await loadSettings();
+    assert.equal(loaded.updateChannel, 'stable');
+    assert.equal(loaded.mode, 'boss');
+    assert.equal(loaded.showBadge, false);
+    assert.equal(loaded.maxJobs, 500);
+    assert.equal(loaded.autoCapture, true);
+    const preview = await saveSettings({ updateChannel: 'preview' });
+    assert.equal(preview.updateChannel, 'preview');
+    assert.equal(preview.showBadge, false);
+    assert.equal(preview.mode, 'boss');
+    const junk = await saveSettings({ updateChannel: 'nightly' });
+    assert.equal(junk.updateChannel, 'stable');
+    assert.equal(junk.showBadge, false);
+    assert.equal((await loadSettings()).updateChannel, 'stable');
+  } finally {
+    if (previous === undefined) delete globalThis.chrome;
+    else globalThis.chrome = previous;
+  }
+});
+
 const { summarizeJobs } = await import('../src/react/settings/jobStats.js');
 test('岗位库数量只统计列表和收藏', () => {
   assert.deepEqual(summarizeJobs(null), { total: 0, starred: 0 });
@@ -1235,6 +1343,21 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /type="radio"/);
   assert.match(page, /gen-update-slot/);
   assert.match(page, /UpdatePanel/);
+  assert.match(page, /updateChannel/);
+  const panel = fs.readFileSync(path.join(root, 'src/react/UpdatePanel.jsx'), 'utf8');
+  const updater = fs.readFileSync(path.join(root, 'src/ui/update.js'), 'utf8');
+  const script = fs.readFileSync(path.join(root, 'scripts/release.mjs'), 'utf8');
+  assert.match(panel, /更新通道/);
+  assert.match(panel, /\['stable', '稳定'\]/);
+  assert.match(panel, /\['preview', '预览'\]/);
+  assert.match(panel, /fetchLatestRelease\(channel\)/);
+  assert.match(panel, /aheadOfStable/);
+  assert.match(panel, /正式版发布页/);
+  assert.match(panel, /打开扩展管理页/);
+  assert.match(updater, /resolvePreviewCheck/);
+  assert.match(updater, /parseRelease\(await fetchGithub\(request\.url\)\)/);
+  assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
+  assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);
   assert.match(css, /:focus-visible/);
   assert.match(css, /width:\s*36px/);
