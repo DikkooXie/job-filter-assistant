@@ -166,6 +166,8 @@ npm run release -- --prerelease --notes "预览说明"
 python scripts/make_icons.py
 ```
 
+本地 `npm run build` 产物会显示「岗位筛选助手 · dev」；发布脚本构建的安装包保留正式名称。开发版保留相同的扩展身份，名称标记不会创建独立的数据空间或保证与正式版并存。
+
 UI 可视化预览（无需装扩展）：`dev/` 下有 mock 版页面，用 `python -m http.server` 起服务后访问
 `/dev/sidepanel.html` 等即可在普通浏览器里走查界面。
 

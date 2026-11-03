@@ -2,6 +2,7 @@
 // 均要求模型返回严格 JSON，配合 client.chatJson 使用。
 import { redactProfileForAi, redactJobForAi } from './privacy.js';
 import { jobText } from '../filters.js';
+import { getDealbreakers } from '../profile.js';
 
 // —— 简历文本 -> 画像草稿 ——
 export function buildResumeExtractPrompt(resumeText) {
@@ -48,10 +49,10 @@ export function buildMatchPrompt(profile, job, opts = {}) {
   const includeName = !!opts.includeName;
   const p = redactProfileForAi(profile, { includeName });
   const j = redactJobForAi(job, { includeCompany });
-  // 规避关键词先由代码做字面匹配，命中项交给 AI 复核；雷点只交给 AI 语义判断。
+  // 历史字段共同构成雷点，字面命中仅作为语义判断的线索。
   const pref = (profile && profile.preference) || {};
-  const avoidKeywords = strArr(pref.avoidKeywords);
-  const avoidHits = avoidKeywords.filter((k) => jobText(j).includes(k.toLowerCase()));
+  const dealbreakers = getDealbreakers({ dealbreakers: strArr(pref.dealbreakers), avoidKeywords: strArr(pref.avoidKeywords) });
+  const hits = dealbreakers.filter((k) => jobText(j).includes(k.toLowerCase()));
 
   const system =
     '你是求职匹配分析助手。基于「求职者画像」评估「岗位」的匹配度，站在求职者视角给出理性、务实的判断，' +
@@ -65,10 +66,10 @@ export function buildMatchPrompt(profile, job, opts = {}) {
     '3) 只依据画像与岗位中已有信息判断，信息不足时保守评估，绝不编造求职者没有的经历或技能。未知年限不是零，不能仅因未知认定经验不达标。\n' +
     '4) 招呼语要像求职者给招聘者发的自然短消息：结合岗位名称及 JD 中具体职责或技术，挑选画像里有证据的一项相关经历说明契合；有可靠公司信息时可自然提及，不能推测公司业务、文化或招聘需求。' +
     '实习写实习，参与写参与；不要把计划、测评推断、岗位要求或未核实成果说成自己的经历，不编造年限、数字、业绩和热情。信息不足就简洁表达真实意向，不要硬凑亮点。避免模板套话、堆砌技能、夸张自评和重复公司名；以礼貌沟通或询问机会收尾。\n' +
-    '5) 雷点判断：画像 preference.dealbreakers 是求职者明确不喜欢的岗位特征。要结合岗位描述做语义判断，不只认字面——介绍写得委婉或换个说法也算命中。' +
+    '5) 雷点判断：画像 preference.dealbreakers 和 preference.avoidKeywords 都是求职者明确不喜欢的岗位特征。要结合岗位描述做语义判断，不只认字面——介绍写得委婉或换个说法也算命中。' +
     '命中时在 risks 或 gaps 里写明命中的是哪条雷点，并明显降低 score（雷点明确命中可降到 40 分以下）。' +
     '雷点属于求职者的偏好，不是岗位的硬性门槛：不要因为它把 eligible 置为 false，也不要因此否定岗位其余信息的可信度。\n' +
-    '6) 规避关键词判断：画像 preference.avoidKeywords 的命中项已由系统先做字面匹配，列在用户消息的「规避关键词字面命中」里。' +
+    '6) 雷点字面匹配：系统已对全部雷点做字面匹配，命中项列在用户消息的「雷点字面命中」里。' +
     '字面命中只是线索，要结合上下文确认岗位是否真的属于该情况（例如「外包」出现在「拒绝外包团队」中就不算命中）；确认命中后同样降分并写入 risks。';
   const schema = `{
   "score": 0-100 的整数综合匹配分（四维加权后取整）,
@@ -94,8 +95,8 @@ export function buildMatchPrompt(profile, job, opts = {}) {
   const user =
     `【求职者画像】\n${JSON.stringify(p, null, 1)}\n\n` +
     `【岗位信息】\n${JSON.stringify(j, null, 1)}\n\n` +
-    (avoidKeywords.length
-      ? `【规避关键词字面命中】\n${avoidHits.length ? avoidHits.join('、') : '无'}\n（仅作线索，需结合上下文确认是否真的命中）\n\n`
+    (dealbreakers.length
+      ? `【雷点字面命中】\n${hits.length ? hits.join('、') : '无'}\n（仅作线索，需结合上下文确认是否真的命中）\n\n`
       : '') +
     `请按以下 JSON 结构输出匹配分析：\n${schema}`;
   return [

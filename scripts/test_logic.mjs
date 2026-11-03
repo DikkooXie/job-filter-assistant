@@ -7,10 +7,11 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 import { defaultFilters, defaultSettings, STORAGE_KEYS } from '../src/common/constants.js';
+import { isDevBuild, toDevManifest } from '../src/common/build.js';
 import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
-import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft } from '../src/common/profile.js';
+import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import {
   MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
 } from '../src/common/profileImport.js';
@@ -57,6 +58,20 @@ function section(t) {
 // 保证 clone 后 `node scripts/test_logic.mjs` 可直接运行。相对脚本自身解析，与 cwd 无关。
 const fixtureDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const loadFixture = (name) => JSON.parse(fs.readFileSync(path.join(fixtureDir, name), 'utf8'));
+
+section('开发构建标识');
+test('开发构建添加标识且不修改原 manifest，重复转换不叠加', () => {
+  const original = { name: '助手', short_name: '助手', action: { default_title: '打开助手' }, key: 'example' };
+  const dev = toDevManifest(original);
+  assert.equal(dev.name, '助手 · dev');
+  assert.equal(dev.short_name, '助手 dev');
+  assert.equal(dev.action.default_title, '打开助手 · dev');
+  assert.equal(dev.key, original.key);
+  assert.equal(original.name, '助手');
+  assert.equal(isDevBuild(original), false);
+  assert.equal(isDevBuild(dev), true);
+  assert.deepEqual(toDevManifest(dev), dev);
+});
 
 // ---------- URL 匹配 ----------
 section('平台 URL 匹配');
@@ -353,18 +368,18 @@ test('匹配提示包含雷点语义规则，且雷点不否决岗位', () => {
   assert.ok(system.includes('雷点'));
   assert.ok(system.includes('preference.dealbreakers'));
   assert.ok(system.includes('不要因为它把 eligible 置为 false'));
-  // 雷点不交给代码字面匹配，只在画像里出现
-  assert.ok(!messages[1].content.includes('规避关键词字面命中'));
+  assert.ok(messages[1].content.includes('【雷点字面命中】\n无'));
 });
 
 test('规避关键词命中由代码先匹配并写进提示词', () => {
   const profile = emptyProfile();
-  profile.preference.avoidKeywords = ['外包', '驻场', '不存在的词'];
+  profile.preference.avoidKeywords = ['外包', '不存在的词'];
+  profile.preference.dealbreakers = ['驻场'];
   const job = { title: '前端工程师', description: '本岗位为外包驻场项目' };
   const messages = buildMatchPrompt(profile, job);
   const user = messages[1].content;
-  assert.ok(user.includes('【规避关键词字面命中】'));
-  const hitSection = user.slice(user.indexOf('【规避关键词字面命中】'), user.indexOf('请按以下 JSON 结构输出'));
+  assert.ok(user.includes('【雷点字面命中】'));
+  const hitSection = user.slice(user.indexOf('【雷点字面命中】'), user.indexOf('请按以下 JSON 结构输出'));
   assert.ok(hitSection.includes('外包'));
   assert.ok(hitSection.includes('驻场'));
   assert.ok(!hitSection.includes('不存在的词'));
@@ -373,7 +388,17 @@ test('规避关键词命中由代码先匹配并写进提示词', () => {
 
 test('未配置规避关键词时不输出命中区块', () => {
   const messages = buildMatchPrompt(emptyProfile(), { title: '前端', description: '外包项目' });
-  assert.ok(!messages[1].content.includes('【规避关键词字面命中】'));
+  assert.ok(!messages[1].content.includes('【雷点字面命中】'));
+});
+
+test('历史雷点合并去重，编辑时删除两处并保留其他数据', () => {
+  const pref = { avoidKeywords: ['外包', 'Java'], dealbreakers: ['java', '大小周'], notes: '保留' };
+  assert.deepEqual(getDealbreakers(pref), ['java', '大小周', '外包']);
+  const updated = updateDealbreakers(pref, ['大小周', '外包', '驻场']);
+  assert.deepEqual(updated.avoidKeywords, ['外包']);
+  assert.deepEqual(updated.dealbreakers, ['大小周', '驻场']);
+  assert.equal(updated.notes, '保留');
+  assert.deepEqual(getDealbreakers(updated), ['大小周', '驻场', '外包']);
 });
 
 test('低分不等于不合格：没有硬门槛时 eligible 保持 true', () => {
@@ -1232,8 +1257,8 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   assert.match(tab, /抽取时文本会发给当前启用的 AI，确认后才写入画像。/);
   assert.match(tab, /只用于匹配打分，不会写进招呼语/);
   assert.match(tab, /AI 撰写招呼语时只会引用这里写到的事实/);
-  assert.match(tab, /代码先匹配，命中时 AI 降低匹配分/);
-  assert.match(tab, /AI 理解岗位描述后判断，命中时明显降分/);
+  assert.match(tab, /字面或 AI 语义命中都会降低匹配分，岗位仍会保留/);
+  assert.ok(!tab.includes('label="规避关键词"'));
   assert.ok(!tab.includes('一票否决'));
   assert.match(tab, /合并到画像/);
   assert.match(tab, /替换现有画像/);

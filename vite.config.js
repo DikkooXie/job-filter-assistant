@@ -1,13 +1,24 @@
-import { cp, mkdir } from 'node:fs/promises';
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { isDevBuild, toDevManifest } from './src/common/build.js';
 
 const projectDir = fileURLToPath(new URL('.', import.meta.url));
 const pagesDir = resolve(projectDir, 'extension-pages');
 const outDir = resolve(projectDir, 'dist');
+
+// 本地构建默认标 dev；发版脚本以 JFA_RELEASE=1 构建，保留正式名称。
+async function markDevBuild(buildDir) {
+  if (process.env.JFA_RELEASE === '1') return;
+  const path = resolve(buildDir, 'manifest.json');
+  const manifest = JSON.parse(await readFile(path, 'utf8'));
+  if (isDevBuild(manifest)) return;
+  await writeFile(path, `${JSON.stringify(toDevManifest(manifest), null, 2)}\n`);
+  console.log(`已标记为开发构建：${toDevManifest(manifest).name}`);
+}
 
 function copyExtensionFiles() {
   let buildDir = outDir;
@@ -22,6 +33,7 @@ function copyExtensionFiles() {
         await mkdir(resolve(destination, '..'), { recursive: true });
         await cp(resolve(projectDir, path), destination, { recursive: true });
       }
+      await markDevBuild(buildDir);
     },
   };
 }

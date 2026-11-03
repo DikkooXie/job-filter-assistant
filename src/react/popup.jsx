@@ -4,6 +4,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MSG, MODE } from '../common/constants.js';
 import { send } from '../ui/ui-common.js';
+import { runningDevBuild } from '../common/build.js';
 
 export default function Popup() {
   const [settings, setSettings] = useState(null);
@@ -38,7 +39,7 @@ export default function Popup() {
   const scored = jobs.filter((job) => job.match).length;
   const strong = jobs.filter((job) => ['strong', 'good'].includes(job.match?.verdict)).length;
   return <main className="w-[340px] max-w-full p-4 flex flex-col gap-4">
-    <header className="flex flex-col gap-1"><h1 className="text-base font-semibold">岗位筛选助手</h1><p className="text-xs text-muted-foreground">BOSS直聘 · 前程无忧</p></header>
+    <header className="flex flex-col gap-1"><h1 className="flex items-center gap-2 text-base font-semibold">岗位筛选助手{runningDevBuild() && <span className="rounded border border-border px-1 text-[10px] font-medium leading-4 text-muted-foreground">dev</span>}</h1><p className="text-xs text-muted-foreground">BOSS直聘 · 前程无忧</p></header>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {!settings ? <p className="text-sm text-muted-foreground">{error ? '请重新打开扩展。' : '正在加载…'}</p> : <>
       <p className="text-sm text-muted-foreground">{context.platform ? `当前：${context.platformName}（正在监听）` : '当前不在招聘站点'}</p>

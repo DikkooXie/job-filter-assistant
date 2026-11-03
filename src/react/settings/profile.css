@@ -296,44 +296,47 @@
   color: var(--s-down);
 }
 
-.draft-box {
-  padding: 16px;
-  border-radius: 10px;
-  background: var(--s-surface-2);
+.draft-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100% - 32px));
+  max-width: none;
+  max-height: min(760px, calc(100dvh - 32px));
+  gap: 0;
+  padding: 24px;
+  background: var(--s-surface);
+  color: var(--s-ink-1);
 }
 
-.draft-box h3 {
-  margin: 0 0 10px;
-  color: var(--s-ink-1);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.45;
+.draft-heading p { margin-top: 8px; color: var(--s-ink-2); }
+
+.draft-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 20px 0;
 }
 
 .draft-line {
-  color: var(--s-ink-1);
-  font-size: 13px;
-  line-height: 1.6;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--s-border);
+  font-size: 15px;
+  line-height: 1.65;
 }
 
-.draft-line dt {
-  display: inline;
-  color: var(--s-ink-2);
-  font-weight: 500;
-}
-
-.draft-line dd {
-  display: inline;
-  margin: 0;
-  white-space: pre-wrap;
-}
+.draft-line dt { color: var(--s-ink-2); font-weight: 500; }
+.draft-line dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .draft-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
 }
+
+.draft-actions .s-btn { min-height: 38px; }
 
 .danger-row {
   display: flex;
@@ -350,11 +353,9 @@
   margin: 4px 0 0;
 }
 
-/* 右栏只剩一张完整度卡。窄屏移到内容下方时铺满，不再留出第二列空位。 */
 @media (max-width: 1080px) {
-  .settings-rail {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  .settings-rail { grid-row: 1; }
+  .rail-missing { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); column-gap: 16px; }
 }
 
 @media (max-width: 860px) {
