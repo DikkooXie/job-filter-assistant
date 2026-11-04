@@ -81,6 +81,21 @@ export function exclusionReasons(job) {
   return (job._filter.reasons || []).filter(Boolean);
 }
 
+// 列表警示区方案 A。条目都在分析框里。
+// 命中过滤时只露红 chip「命中过滤条件」；否则有警示才露琥珀「含 N 项警示」。
+// 两种 chip 不同时出现。悬停再展开 items。没有条目时返回 null。
+export function warningZone(job) {
+  const warnings = riskLines(job);
+  const filters = exclusionReasons(job);
+  if (!warnings.length && !filters.length) return null;
+  const items = [
+    ...filters.map((text) => ({ kind: 'filter', text })),
+    ...warnings.map((text) => ({ kind: 'warn', text })),
+  ];
+  if (filters.length) return { chip: 'filter', label: '命中过滤条件', items };
+  return { chip: 'warn', label: `含 ${warnings.length} 项警示`, items };
+}
+
 export function platformLabel(platform) {
   return platform === 'boss' ? 'BOSS' : '51job';
 }

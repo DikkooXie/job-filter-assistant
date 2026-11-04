@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { GREETING_LEVELS, VERDICT_LABELS, DIM_LABELS } from '../../common/ai/prompts.js';
-import { analysisGrade, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines } from './browseModel.js';
+import { analysisGrade, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
@@ -137,10 +137,35 @@ export function ListHeader({
   );
 }
 
+function AnalysisWarnings({ job }) {
+  const zone = warningZone(job);
+  if (!zone) return null;
+  return (
+    <>
+      <div className="warn-chips">
+        <span className={`warn-chip ${zone.chip}`}>
+          <span className="dot" aria-hidden="true" />
+          {zone.label}
+        </span>
+      </div>
+      <div className="warn-list">
+        <div className="warn-list-inner">
+          <ul className="warn-items">
+            {zone.items.map((item, index) => (
+              <li key={`${item.kind}-${index}`} className={item.kind === 'filter' ? 'warn-item filter-hit' : 'warn-item'}>
+                <span className="pfx" aria-hidden="true">·</span>
+                <span>{item.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle, onOpen, onStar, onDelete, onDislike }) {
   const grade = analysisGrade(job.match);
-  const risks = riskLines(job);
-  const reasons = exclusionReasons(job);
   const summary = grade ? (job.match?.summary || '') : '';
   const [confirming, setConfirming] = useState(null);
   const armedAt = useRef(0);
@@ -235,10 +260,8 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
             )}
           </div>
           {summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
+          <AnalysisWarnings job={job} />
         </div>
-        {risks.map((line) => (
-          <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>
-        ))}
         <div className="row-actions">
           <div className="row-actions-inner">
             <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
@@ -282,12 +305,6 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
             </div>
           </div>
         </div>
-        {reasons.length > 0 && (
-          <div className="exclusion">
-            <Filter aria-hidden="true" />
-            <div><strong>开启过滤后将隐藏</strong><span>{reasons.join('；')}</span></div>
-          </div>
-        )}
       </div>
     </article>
   );

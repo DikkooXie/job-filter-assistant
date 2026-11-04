@@ -17,6 +17,7 @@
   --jp-ink: #16202a;
   --jp-secondary: #4b5865;
   --jp-muted: #5e6b75;
+  --jp-summary: #2f3b46;
   --jp-accent: #1c6b5e;
   --jp-accent-soft: rgba(28, 107, 94, .075);
   --jp-accent-line: rgba(28, 107, 94, .28);
@@ -24,6 +25,10 @@
   --jp-warn: #855912;
   --jp-danger: #b23b48;
   --jp-danger-soft: rgba(178, 59, 72, .07);
+  --jp-filter-fg: #c4473a;
+  --jp-filter-bg: rgba(196, 71, 58, .12);
+  --jp-filter-bd: rgba(196, 71, 58, .42);
+  --jp-filter-dot: #e53935;
   --jp-switch: #bdc8c5;
   --jp-float-bg: #202d2a;
   --jp-float-ink: #edf4f0;
@@ -69,6 +74,7 @@
     --jp-ink: #e7edf0;
     --jp-secondary: #b4c1c9;
     --jp-muted: #9baab4;
+    --jp-summary: #c9d1d9;
     --jp-accent: #2dd4bf;
     --jp-accent-soft: rgba(45, 212, 191, .12);
     --jp-accent-line: rgba(45, 212, 191, .34);
@@ -86,6 +92,10 @@
     --jp-warn: #dbb477;
     --jp-danger: #e0818b;
     --jp-danger-soft: rgba(224, 129, 139, .08);
+    --jp-filter-fg: #ff8a80;
+    --jp-filter-bg: rgba(220, 68, 68, .16);
+    --jp-filter-bd: rgba(220, 68, 68, .45);
+    --jp-filter-dot: #ef5350;
     --jp-switch: #47575b;
     --jp-float-bg: #dfeae4;
     --jp-float-ink: #162b24;
@@ -105,6 +115,7 @@
   --jp-ink: #e7edf0;
   --jp-secondary: #b4c1c9;
   --jp-muted: #9baab4;
+  --jp-summary: #c9d1d9;
   --jp-accent: #2dd4bf;
   --jp-accent-soft: rgba(45, 212, 191, .12);
   --jp-accent-line: rgba(45, 212, 191, .34);
@@ -122,6 +133,10 @@
   --jp-warn: #dbb477;
   --jp-danger: #e0818b;
   --jp-danger-soft: rgba(224, 129, 139, .08);
+  --jp-filter-fg: #ff8a80;
+  --jp-filter-bg: rgba(220, 68, 68, .16);
+  --jp-filter-bd: rgba(220, 68, 68, .45);
+  --jp-filter-dot: #ef5350;
   --jp-switch: #47575b;
   --jp-float-bg: #dfeae4;
   --jp-float-ink: #162b24;
@@ -140,6 +155,7 @@
   --jp-ink: #16202a;
   --jp-secondary: #4b5865;
   --jp-muted: #5e6b75;
+  --jp-summary: #2f3b46;
   --jp-accent: #1c6b5e;
   --jp-accent-soft: rgba(28, 107, 94, .075);
   --jp-accent-line: rgba(28, 107, 94, .28);
@@ -147,6 +163,10 @@
   --jp-warn: #855912;
   --jp-danger: #b23b48;
   --jp-danger-soft: rgba(178, 59, 72, .07);
+  --jp-filter-fg: #c4473a;
+  --jp-filter-bg: rgba(196, 71, 58, .12);
+  --jp-filter-bd: rgba(196, 71, 58, .42);
+  --jp-filter-dot: #e53935;
   --jp-switch: #bdc8c5;
   --jp-float-bg: #202d2a;
   --jp-float-ink: #edf4f0;
@@ -596,24 +616,106 @@
 .score-num.low { color: var(--jp-grade-low); }
 .score-num.mid { color: var(--jp-grade-mid); }
 .score-num.high { color: var(--jp-seg-high); }
-.analysis-sub {
-  display: block;
+.job-panel .analysis-sub {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   width: 100%;
   max-width: 100%;
-  margin-top: 5px;
+  margin-top: 6px;
   padding: 0;
   text-align: left;
   font-size: 11px;
-  line-height: 1.35;
-  color: var(--jp-muted);
-  white-space: nowrap;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--jp-summary);
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .analysis-main:hover:not(:disabled),
 .score-num:hover:not(:disabled),
 .analysis-sub:hover:not(:disabled) { color: var(--jp-accent); }
 .analysis-main:hover:not(:disabled) .grade { color: var(--jp-accent); }
+
+/* 警示区方案 A：chip 在摘要下，条目留在分析框内，悬停卡片或分析框再展开。不改操作行。 */
+.warn-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+.warn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.warn-chip .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.warn-chip.warn {
+  color: var(--jp-grade-mid);
+  background: color-mix(in srgb, var(--jp-grade-mid) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--jp-grade-mid) 35%, transparent);
+}
+.warn-chip.warn .dot { background: var(--jp-grade-mid); }
+.warn-chip.filter {
+  color: var(--jp-filter-fg);
+  background: var(--jp-filter-bg);
+  border: 1px solid var(--jp-filter-bd);
+}
+.warn-chip.filter .dot { background: var(--jp-filter-dot); }
+.warn-list {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  transition: grid-template-rows 180ms ease, margin-top 180ms ease, opacity 160ms ease;
+}
+.warn-list-inner { min-height: 0; overflow: hidden; }
+.job-row:hover .warn-list,
+.job-row:focus-within .warn-list,
+.analysis:hover .warn-list,
+.analysis:focus-within .warn-list {
+  grid-template-rows: 1fr;
+  margin-top: 6px;
+  opacity: 1;
+}
+.warn-items {
+  list-style: none;
+  margin: 0;
+  padding: 1px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.warn-item {
+  display: flex;
+  gap: 5px;
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--jp-grade-mid);
+}
+.warn-item .pfx {
+  flex-shrink: 0;
+  opacity: 0.85;
+  margin-top: 0.05em;
+}
+.warn-item.filter-hit { color: var(--jp-filter-fg); }
+.warn-item.filter-hit .pfx { color: var(--jp-filter-dot); }
 
 .row-actions {
   display: grid;
