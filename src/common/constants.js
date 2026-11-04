@@ -89,6 +89,9 @@ export const MSG = {
   OPEN_JOB_CHAT: 'OPEN_JOB_CHAT', // 新建标签页打开岗位并自动进入与 HR 的沟通（保留当前标签），配合剪贴板手动粘贴
   // 打分前让已打开的列表页点对应卡片，触发站点自己的详情请求。内容脚本不能 import，字面量须与 collector 一致。
   FETCH_JOB_CARD: 'FETCH_JOB_CARD',
+  // 空描述时前台打开原岗位并等待 JD。SCRAPE 字面量须与 collector 一致（内容脚本不能 import）。
+  OPEN_ORIGINAL_JOB: 'OPEN_ORIGINAL_JOB',
+  SCRAPE_JOB_DETAIL: 'SCRAPE_JOB_DETAIL',
 };
 
 // content-script 嗅探事件的 window.postMessage 频道

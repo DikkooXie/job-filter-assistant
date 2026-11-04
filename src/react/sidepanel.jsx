@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
+import { decideOpenOriginal } from '../common/ensureDescription.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
 import { pickActiveProvider, profileFingerprint } from '../common/profileFingerprint.js';
 import { applyFilters, evaluateJob } from '../common/filters.js';
@@ -24,6 +25,17 @@ const fmtTime = (value) => {
 const csvCell = (value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
 const cssAttr = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const contextUid = (ctx) => (ctx?.platform && ctx?.jobKey ? `${ctx.platform}:${ctx.jobKey}` : null);
+function openOriginalFromPanel(job) {
+  const action = decideOpenOriginal(job);
+  if (action === 'skip') return;
+  if (action === 'wait') {
+    send(MSG.OPEN_ORIGINAL_JOB, { uid: job.uid, url: job.url }).catch(() => {
+      chrome.tabs.create({ url: job.url, active: true });
+    });
+    return;
+  }
+  chrome.tabs.create({ url: job.url });
+}
 const verdictNames = { strong: '强匹配', good: '较匹配', fair: '一般', weak: '偏低', unscored: '未分析' };
 
 function buildDetailedCsv(items, progress) {
@@ -595,7 +607,7 @@ export default function Sidepanel() {
             try { await setProgress(job.uid, 'sent'); notify('已记录为手动确认发送'); }
             catch (error) { notify(`记录失败：${error.message}`, true); }
           }}
-          onOpenOriginal={() => job?.url && chrome.tabs.create({ url: job.url })}
+          onOpenOriginal={() => openOriginalFromPanel(job)}
           onStar={async () => {
             if (!job) return;
             try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: job.uid })); update(); }

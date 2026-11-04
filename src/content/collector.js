@@ -8,6 +8,7 @@
     PAGE_CONTEXT_CHANGED: 'PAGE_CONTEXT_CHANGED',
     SEND_GREETING: 'SEND_GREETING',
     CURRENT_JOB: 'CURRENT_JOB',
+    SCRAPE_JOB_DETAIL: 'SCRAPE_JOB_DETAIL',
   };
 
   // 判断嗅探到的 URL 是「列表」还是「岗位详情/卡片」
@@ -334,8 +335,87 @@
     return isVisible(target) ? target : null;
   }
 
+  // 详情页可见 JD。只在后台等待嗅探超时后点名，不进列表 DOM 兜底，也不发站点接口。
+  // 最短 20 字与 ensureDescription.cleanDetailText 的 DETAIL_TEXT_MIN 一致。
+  function elementText(el) {
+    if (!el) return '';
+    const raw = typeof el.innerText === 'string' && el.innerText.trim() ? el.innerText : el.textContent;
+    return String(raw || '').replace(/\u00a0/g, ' ').trim();
+  }
+
+  function detailDescriptionSelectors() {
+    if (PLATFORM === 'boss') {
+      return ['.job-sec-text', '.job-detail-section .job-sec-text', '.job-detail .job-sec-text'];
+    }
+    if (PLATFORM === 'qcwy') {
+      return [
+        '.bmsg.job_msg.inbox',
+        '.job_msg.inbox',
+        '.job_msg',
+        '.job-detail .job-word',
+        '.job-word',
+        '[class*="job-describe"]',
+      ];
+    }
+    return [];
+  }
+
+  function longestVisibleText(nodes) {
+    let best = '';
+    const list = nodes && typeof nodes.length === 'number' ? nodes : [];
+    for (const el of list) {
+      if (!isVisible(el)) continue;
+      const text = elementText(el);
+      if (text.length > best.length) best = text;
+    }
+    return best;
+  }
+
+  function scrapeByHeading() {
+    let heads = [];
+    try {
+      heads = document.querySelectorAll('h1, h2, h3, h4, .job-sec-title, .t1, .title');
+    } catch {
+      heads = [];
+    }
+    for (const head of heads) {
+      const label = elementText(head).replace(/\s+/g, '');
+      if (!/^(职位描述|岗位描述|职位信息|工作内容|岗位职责)$/.test(label)) continue;
+      const sibling = head.nextElementSibling;
+      const siblingText = sibling && isVisible(sibling) ? elementText(sibling) : '';
+      if (siblingText.length >= 20) return siblingText;
+      const parent = head.parentElement;
+      const parentText = parent && parent !== document.body && isVisible(parent) ? elementText(parent) : '';
+      if (parentText.length >= 20) return parentText;
+    }
+    return '';
+  }
+
+  function scrapeVisibleJobDetail() {
+    let best = '';
+    for (const sel of detailDescriptionSelectors()) {
+      let nodes = [];
+      try { nodes = document.querySelectorAll(sel); } catch { nodes = []; }
+      const text = longestVisibleText(nodes);
+      if (text.length > best.length) best = text;
+    }
+    if (best.length >= 20) return best;
+    return scrapeByHeading();
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg) return false;
+    if (msg.type === MSG.SCRAPE_JOB_DETAIL) {
+      const jobKey = detectJobKey();
+      const expected = String(msg.jobKey || '');
+      if (expected && jobKey && expected !== jobKey) {
+        sendResponse({ ok: false, description: '', jobKey, mismatch: true });
+        return true;
+      }
+      const description = scrapeVisibleJobDetail();
+      sendResponse({ ok: !!description, description, jobKey: jobKey || '' });
+      return true;
+    }
     // 字面量与 MSG.FETCH_JOB_CARD 一致。先应答再点，避免点卡片触发导航时把响应掐掉。
     if (msg.type === 'FETCH_JOB_CARD') {
       const link = findJobCardLink(msg.jobId);
