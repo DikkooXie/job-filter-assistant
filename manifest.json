@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "岗位筛选助手 · BOSS/前程无忧",
   "short_name": "岗位助手",
-  "version": "1.0.3.1",
+  "version": "1.0.3.2",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtLs3YTg1evo+MFH6ZfnFkg0WNMH7DRXEnkAOPCHddJ+AAOBQJddzNskIKGQOLZda9TrnlJHcDStDn3iDb+4CyNk9t+D/0mKsHUGx03rL2t0PT6bn347NQSU6oJOkYvfCL9Ma5ngj9ZxQ20OCZOQXqMeY2nyxws1L5/fW07PiYssZ62oiDsFPu2vFdsTUA0Tfo30d0c52KupxYbUjf+aVi5KVMi03aRGgNmzRFrpx0v6XujC/QB0k/JeA8uxhROD7A2iNFp16Uv3kZZmBkz8sy8gKwYZ5fKReiEkmLGDUSwSnBsLdAxTn7LPHS3kZDdKTcrswTDVY13XjUKpYR/zDfQIDAQAB",
   "description": "BOSS直聘与前程无忧通用的岗位筛选助手：自动抓取岗位、AI 简历画像、逐岗位匹配分析。支持任意兼容主流协议的 AI 接口。",
   "icons": {
