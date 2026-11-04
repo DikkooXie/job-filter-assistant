@@ -17,7 +17,7 @@ import {
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisGrade, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines,
+  analysisGrade, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
@@ -1512,6 +1512,60 @@ test('搜索无结果不改变失败态；风险和排除原因分开', () => {
   assert.deepEqual(riskLines(risky), ['含「驻场」，沟通时确认相关安排', '要求独立交付，沟通时确认是否接受应届生']);
   assert.deepEqual(exclusionReasons({ _filter: { keep: false, reasons: ['命中排除词：外包'] } }), ['命中排除词：外包']);
   assert.deepEqual(exclusionReasons({ _filter: { keep: true, reasons: ['经验档位不在偏好内'] } }), []);
+});
+
+test('列表警示区：过滤命中只露红 chip，普通警示才计数，没有条目就不出现', () => {
+  assert.equal(warningZone({}), null);
+  assert.equal(warningZone({ match: { summary: '只有摘要', risks: [] }, _filter: { keep: true, risks: [], reasons: ['经验档位不在偏好内'] } }), null);
+  const warnOnly = { _filter: { keep: true, risks: ['销售', '驻场'], reasons: [] }, match: { risks: ['学历要求硕士，高于当前画像'] } };
+  assert.deepEqual(warningZone(warnOnly), {
+    chip: 'warn',
+    label: '含 3 项警示',
+    items: [
+      { kind: 'warn', text: '含「销售」，沟通时确认相关安排' },
+      { kind: 'warn', text: '含「驻场」，沟通时确认相关安排' },
+      { kind: 'warn', text: '学历要求硕士，高于当前画像' },
+    ],
+  });
+  const both = {
+    _filter: { keep: false, risks: ['驻场'], reasons: ['命中排除词：驻场'] },
+    match: { risks: ['学历要求硕士，高于当前画像'] },
+  };
+  const zone = warningZone(both);
+  assert.equal(zone.chip, 'filter');
+  assert.equal(zone.label, '命中过滤条件');
+  assert.deepEqual(zone.items.map((item) => item.kind), ['filter', 'warn', 'warn']);
+  assert.equal(zone.items[0].text, '命中排除词：驻场');
+  assert.equal(warningZone({ _filter: { keep: false, risks: [], reasons: ['城市不匹配'] } }).label, '命中过滤条件');
+});
+
+test('列表卡片把警示区放进分析框，摘要两行省略，操作行结构仍在', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const rowStart = views.indexOf('export function JobRow');
+  const rowEnd = views.indexOf('export function ListFooter');
+  const row = views.slice(rowStart, rowEnd);
+  const zone = views.slice(views.indexOf('function AnalysisWarnings'), rowStart);
+  const analysis = row.indexOf('className={`analysis');
+  const call = row.indexOf('<AnalysisWarnings job={job} />');
+  const actions = row.indexOf('className="row-actions"');
+  assert.ok(analysis >= 0 && call > analysis && actions > call);
+  assert.match(zone, /warn-chips/);
+  assert.match(zone, /warn-list/);
+  assert.match(zone, /warn-item/);
+  assert.doesNotMatch(row, /className="risk"|className="exclusion"|再次点击确认删除/);
+  assert.match(row, /className="act-icon del"/);
+  assert.match(row, /className="act-icon dislike"/);
+  assert.match(row, /className=\{`act-greet/);
+  assert.match(css, /-webkit-line-clamp:\s*2/);
+  assert.match(css, /--jp-summary:\s*#c9d1d9/);
+  assert.match(css, /\.job-row:hover \.warn-list/);
+  assert.match(css, /\.analysis:hover \.warn-list/);
+  assert.match(css, /\.job-row:hover \.row-actions/);
+  const actionCss = css.slice(css.indexOf('.row-actions {'), css.indexOf('.risk, .exclusion'));
+  assert.match(actionCss, /grid-template-rows: 0fr/);
+  assert.doesNotMatch(actionCss, /warn-chip|warn-list|line-clamp/);
 });
 
 test('岗位库只采用已收录列表，空结果不补演示岗位', () => {
