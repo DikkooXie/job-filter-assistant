@@ -1,0 +1,29 @@
+{
+  "code": 0,
+  "message": "Success",
+  "zpData": {
+    "jobCard": {
+      "encryptJobId": "SAMPLE_BOSS_CARD_1",
+      "securityId": "SEC_SAMPLE_CARD",
+      "jobName": "前端工程师",
+      "salaryDesc": "20-35K",
+      "cityName": "杭州",
+      "areaDistrict": "西湖区",
+      "businessDistrict": "西溪",
+      "jobExperience": "3-5年",
+      "jobDegree": "本科",
+      "skills": ["React", "TypeScript"],
+      "jobLabels": ["双休"],
+      "welfareList": ["五险一金"],
+      "brandName": "示例卡片科技",
+      "brandIndustry": "互联网",
+      "brandScaleName": "100-499人",
+      "brandStageName": "B轮",
+      "bossName": "示例经理",
+      "bossTitle": "HRBP",
+      "encryptBrandId": "BRAND_CARD_1",
+      "lid": "LID_CARD_1",
+      "postDescription": "岗位职责：\n1. 负责示例产品的前端开发\n2. 与设计协作还原界面"
+    }
+  }
+}
