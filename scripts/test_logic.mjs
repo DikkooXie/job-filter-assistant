@@ -28,6 +28,10 @@ import {
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import {
+  canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, ignorePending, isGreetGateOpen, nextChip,
+  railSteps, sanitizeComm, suggestionFromChip, suggestionFromDemand, syncLabel,
+} from '../src/react/sidepanel/commTab.js';
+import {
   QUEUE_PREVIEW, SUCCESS_HOLD_MS, batchCounts, cancelRemaining, cardCopy, drawerModel, emptyBatch, enqueueBatch, estimateMinutes, finishPhase, retryFailed, settle as settleItem, stripModel, takeNext, visibleSections,
 } from '../src/react/sidepanel/batchQueue.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
@@ -2478,7 +2482,11 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
   assert.match(row, /aria-label=\{`不喜欢 \$\{name\}`\}/);
   assert.doesNotMatch(row, /arm\('dislike'\)|确认不喜欢/);
   assert.match(sheet, /不喜欢的地方/);
-  assert.match(sheet, /画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。/);
+  assert.match(sheet, /画像不全易误判。用一句话告诉我要避开什么，写入画像。/);
+  assert.match(sheet, /避开/);
+  assert.match(sheet, /写入画像/);
+  assert.match(browse, /\.job-panel \.dislike-sheet \.dislike-context \{[^}]*margin-top:\s*12px/);
+  assert.match(browse, /\.job-panel \.dislike-sheet textarea \{[^}]*margin-top:\s*14px/);
   assert.match(sheet, /placeholder="例如：太偏销售、不要驻场…"/);
   assert.match(sheet, /针对 · <strong>/);
   assert.match(sheet, />取消</);
@@ -2880,6 +2888,100 @@ test('详情页按可见正文刮 JD，标识不一致或过短则不采用', ()
   assert.equal(merged.patched, true);
   assert.equal(merged.jobs[0].description, jd);
   assert.equal(merged.jobs[0].title, '数据岗');
+});
+
+test('沟通 Tab：未招呼门禁、节点数和待确认不造假步骤', () => {
+  assert.equal(isGreetGateOpen({ progressStatus: undefined, record: null }), false);
+  assert.equal(isGreetGateOpen({ progressStatus: 'prepared', record: null }), false);
+  assert.equal(isGreetGateOpen({ progressStatus: 'opened', record: null }), false);
+  assert.equal(isGreetGateOpen({ progressStatus: 'sent', record: null }), true);
+  const greetOnly = confirmedNodes({ progressStatus: 'opened', record: null });
+  assert.equal(greetOnly.length, 1);
+  assert.equal(greetOnly[0].label, '打招呼');
+  assert.equal(canExpandNodes(greetOnly), false);
+  assert.deepEqual(railSteps(greetOnly, true), []);
+
+  const history = sanitizeComm({
+    nodes: [
+      { id: 'greet', label: '打招呼', state: 'done', sub: '11/02', detail: '已发' },
+      { id: 'chat', label: '初聊', state: 'current', detail: '已回复' },
+    ],
+    pending: { id: 'onsite', label: '一面', sub: '周五', hint: '摘自对话' },
+  });
+  assert.equal(isGreetGateOpen({ progressStatus: 'opened', record: history }), true);
+  assert.equal(canExpandNodes(history.nodes), true);
+  assert.equal(history.pending.label, '一面');
+  assert.equal(railSteps(history.nodes, false).length, 0);
+  const openRail = railSteps(history.nodes, true);
+  assert.equal(openRail.filter((step) => !step.ghost).length, 2);
+  assert.equal(openRail.at(-1).ghost, true);
+  assert.equal(openRail.at(-1).mark, '待生长');
+
+  const confirmed = confirmPending(history, 'sent');
+  assert.equal(confirmed.pending, null);
+  assert.equal(confirmed.nodes.at(-1).label, '一面');
+  assert.equal(confirmed.nodes.at(-1).state, 'current');
+  assert.equal(confirmed.nodes.at(-1).detail, '已确认');
+  assert.ok(confirmed.nodes.slice(0, -1).every((node) => node.state === 'done'));
+  assert.equal(ignorePending(history).pending, null);
+  assert.equal(ignorePending(history).nodes.length, 2);
+});
+
+test('沟通 Tab：芯片单选改写，再点回基线；胶囊发送只吃自填', () => {
+  const stage = { label: '一面', sub: '周五' };
+  const baseline = defaultBaseline(stage);
+  assert.equal(baseline, '好的，周五下午都可以。一面是视频还是现场？');
+  assert.equal(nextChip(null, 'outsourcing'), 'outsourcing');
+  assert.equal(nextChip('outsourcing', 'outsourcing'), null);
+  assert.equal(nextChip('outsourcing', 'scope'), 'scope');
+  const selected = suggestionFromChip(baseline, 'outsourcing', stage);
+  assert.equal(selected.text, '好的，周五下午都可以。一面是视频还是现场？另外想确认下：岗位是正式编制还是外包？');
+  assert.equal(selected.emphasis, '岗位是正式编制还是外包？');
+  assert.equal(suggestionFromChip(baseline, null, stage).text, baseline);
+  const swapped = suggestionFromChip(baseline, 'scope', stage);
+  assert.match(swapped.text, /日常主要负责哪些模块、前后端协作怎么分/);
+  assert.doesNotMatch(swapped.text, /外包/);
+  const chat = suggestionFromChip('好的，谢谢回复。', 'overtime', { label: '初聊', sub: '' });
+  assert.equal(chat.text, '好的，谢谢回复。想了解下咱们团队平时加班大概怎样？周末需要到岗吗？');
+  assert.equal(suggestionFromDemand('   ', stage), null);
+  const typed = suggestionFromDemand('也想问问团队规模', stage);
+  assert.equal(typed.source, 'demand');
+  assert.equal(typed.chipId, null);
+  assert.equal(typed.text, '好的，周五下午都可以。也想问问团队规模。');
+  assert.doesNotMatch(typed.text, /外包|加班|工作内容/);
+  const now = new Date(2026, 10, 4, 16, 0, 0);
+  const at = new Date(2026, 10, 4, 14, 22, 0);
+  const synced = syncLabel({ at: at.toISOString(), count: 12 }, now);
+  assert.equal(synced, '已同步 · 今日 14:22 · 12 条');
+  assert.equal(syncLabel(null), '');
+});
+
+test('沟通 Tab 结构按 v3.3 锁稿，建议框不吸底', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const comm = fs.readFileSync(path.join(root, 'src/react/sidepanel/CommTab.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  assert.match(views, /\['flow', '沟通'\]/);
+  assert.doesNotMatch(views, /\['flow', '流程'\]/);
+  assert.doesNotMatch(comm, /回 HR|该问|摘录|精简版|标准版|详细版|标记已发送/);
+  assert.match(comm, /输入沟通需求，或点芯片改上方建议/);
+  assert.match(comm, /aria-label="复制建议"/);
+  assert.match(comm, /aria-label="发送自填需求"/);
+  assert.match(comm, /打开沟通/);
+  assert.match(comm, /isGreetGateOpen/);
+  assert.match(comm, /canExpandNodes/);
+  assert.doesNotMatch(comm, /pill-plus/);
+  assert.doesNotMatch(comm, />\s*\+\s*</);
+  const suggest = css.match(/\.suggest-zone \{[^}]*\}/)?.[0] || '';
+  const sticky = css.match(/\.sticky-comm \{[^}]*\}/)?.[0] || '';
+  assert.doesNotMatch(suggest, /position:\s*sticky/);
+  assert.doesNotMatch(sticky, /position:\s*sticky/);
+  assert.match(sticky, /background:\s*#0f1419/);
+  assert.match(css, /\.comm-drawer \{[^}]*background:\s*#151a21/);
+  assert.match(css, /\.job-panel \.comm-pill \{[^}]*background:\s*#1a222c/);
+  assert.match(css, /\.job-panel \.comm-send \{[^}]*background:\s*#2dd4bf/);
+  assert.match(css, /\.comm-badge\.pending \{[^}]*color:\s*#f0b429/);
+  assert.match(css, /\.job-panel \.sg-copy \{[^}]*border:\s*0/);
 });
 
 // ---------- 汇总 ----------

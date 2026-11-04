@@ -8,6 +8,7 @@ import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
 import { analysisEmptyMessage, analysisTargets, analysisUsesForce, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { sanitizeComm } from './sidepanel/commTab.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
 import { AnalyzeSheet, BatchStrip, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
@@ -15,6 +16,7 @@ import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
 const progressKey = (uid) => `job-progress-v1:${encodeURIComponent(uid)}`;
+const commKey = (uid) => `job-comm-v1:${encodeURIComponent(uid)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const joinList = (value) => Array.isArray(value) ? value.filter(Boolean).join('、') : value == null ? '' : String(value);
 const fmtTime = (value) => {
@@ -83,7 +85,7 @@ export default function Sidepanel() {
     screen: 'list', followLive: false, loadError: null, readError: '', lastViewedUid: null,
     listScroll: 0, restoreList: false, filterOpen: false,
     view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
-    scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), greetings: new Map(), advice: new Map(),
+    scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), comm: new Map(), greetings: new Map(), advice: new Map(),
     saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, noticeTimer: null, notice: '', noticeBatch: false, error: false, loading: true,
     modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
     capsuleUntil: 0, capsuleTimer: null, scrollLockTimer: null, ignoreScrollDismiss: false,
@@ -123,19 +125,23 @@ export default function Sidepanel() {
         send(MSG.JOB_LIST_REQUEST), send(MSG.SETTINGS_GET), send(MSG.PROFILE_GET), send(MSG.AI_PROVIDERS_GET), send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null),
       ]);
       const jobs = jobsForLibrary(listed);
-      const keys = jobs.map((job) => progressKey(job.uid));
+      const keys = jobs.flatMap((job) => [progressKey(job.uid), commKey(job.uid)]);
       const stored = keys.length ? await chrome.storage.local.get(keys) : {};
       if (version !== s.reloadVersion) return;
       const firstLoad = !s.settings;
       Object.assign(s, { jobs, settings, profile, providers, activeCtx, loading: false, loadError: null, readError: '' });
       const jobIds = new Set(jobs.map((job) => job.uid));
       for (const uid of s.progress.keys()) if (!jobIds.has(uid)) s.progress.delete(uid);
+      for (const uid of s.comm.keys()) if (!jobIds.has(uid)) s.comm.delete(uid);
       for (const uid of s.checked) if (!jobIds.has(uid)) s.checked.delete(uid);
       if (s.lastViewedUid && !jobIds.has(s.lastViewedUid)) s.lastViewedUid = null;
       jobs.forEach((job) => {
         const value = stored[progressKey(job.uid)];
         const current = s.progress.get(job.uid);
         if (value && csvProgressLabels[value.status] && (!current || value.at >= current.at)) s.progress.set(job.uid, value);
+        const commValue = stored[commKey(job.uid)];
+        if (commValue) s.comm.set(job.uid, sanitizeComm(commValue));
+        else s.comm.delete(job.uid);
       });
       if (firstLoad && settings.mode !== MODE.auto) s.view.platform = settings.mode;
       const captured = noteCapturedJobs({ ready: s.seenReady, seen: s.seenIds, fresh: s.freshIds }, jobs);
@@ -207,6 +213,13 @@ export default function Sidepanel() {
     await chrome.storage.local.set({ [progressKey(uid)]: value });
     s.progress.set(uid, value);
   };
+  const saveComm = async (uid, record) => {
+    const value = sanitizeComm(record);
+    s.comm.set(uid, value);
+    update();
+    try { await chrome.storage.local.set({ [commKey(uid)]: value }); }
+    catch (error) { notify(error.message || '沟通记录保存失败', true); }
+  };
   const showModelNotice = () => { s.modelNotice = true; update(); };
   const requireProviders = () => {
     if (s.providers.length) return true;
@@ -234,19 +247,20 @@ export default function Sidepanel() {
     finally { s.tailoring.delete(job.uid); update(); }
   };
   const copyText = async (text) => { try { await navigator.clipboard.writeText(text); notify('已复制'); } catch { notify('复制失败', true); } };
-  const sendGreeting = async (job) => {
-    const text = greetingValue(job).trim();
-    if (!text) { notify('招呼语为空', true); return; }
-    if (s.settings.privacy?.confirmBeforeSend && !confirm(`确认打开 ${job.company || '该招聘方'} 的岗位并尝试进入沟通？\n招呼语将复制，请核对会话后手动发送。\n\n${text}`)) return;
-    s.greetings.set(job.uid, text); saveGreeting(job.uid, text);
-    try { await navigator.clipboard.writeText(text); } catch { notify('复制失败，请先手动复制招呼语', true); return; }
-    if (!job.url) { notify('招呼语已复制，该岗位没有可打开的链接，请手动打开岗位页粘贴发送', true); return; }
+  const openCommunication = async (job, text, { saveAsGreeting = false } = {}) => {
+    const content = String(text || '').trim();
+    if (!content) { notify(saveAsGreeting ? '招呼语为空' : '没有可复制的内容', true); return; }
+    if (s.settings.privacy?.confirmBeforeSend && !confirm(`确认打开 ${job.company || '该招聘方'} 的岗位并尝试进入沟通？\n内容将复制，请核对会话后手动发送。\n\n${content}`)) return;
+    if (saveAsGreeting) { s.greetings.set(job.uid, content); saveGreeting(job.uid, content); }
+    try { await navigator.clipboard.writeText(content); } catch { notify('复制失败，请先手动复制', true); return; }
+    if (!job.url) { notify('内容已复制，该岗位没有可打开的链接，请手动打开岗位页粘贴发送', true); return; }
     try {
-      const result = await send(MSG.OPEN_JOB_CHAT, { url: job.url, platform: job.platform, text });
+      const result = await send(MSG.OPEN_JOB_CHAT, { url: job.url, platform: job.platform, text: content });
       if (result?.mode === 'navigating') { if (s.progress.get(job.uid)?.status !== 'sent') await setProgress(job.uid, 'opened'); notify('已尝试打开沟通；请核对招聘方后粘贴并发送'); }
       else notify(`已打开岗位，未确认进入沟通；请核对后粘贴发送${result?.note ? `（${result.note}）` : ''}`, true);
-    } catch (error) { notify(`招呼语已复制，请手动打开岗位页粘贴发送（${error.message}）`, true); }
+    } catch (error) { notify(`内容已复制，请手动打开岗位页粘贴发送（${error.message}）`, true); }
   };
+  const sendGreeting = (job) => openCommunication(job, greetingValue(job), { saveAsGreeting: true });
   const settleIdle = () => {
     if (isPending(s.batch)) return;
     const before = s.batch.phase;
@@ -580,7 +594,7 @@ export default function Sidepanel() {
           followLive={s.followLive}
           progressStatus={job ? s.progress.get(job.uid)?.status : undefined}
           greeting={job ? greetingValue(job) : ''}
-          greetLevel={s.view.greetLevel}
+          comm={job ? s.comm.get(job.uid) : null}
           advice={job ? s.advice.get(job.uid) : null}
           scoring={!!job && s.scoring.has(job.uid)}
           tailoring={!!job && s.tailoring.has(job.uid)}
@@ -591,16 +605,19 @@ export default function Sidepanel() {
           onRegenerate={() => job && regenerate(job)}
           onTailor={() => job && tailor(job)}
           onGreeting={(text) => { if (!job) return; s.greetings.set(job.uid, text); saveGreeting(job.uid, text, true); update(); }}
-          onGreetLevel={(level) => {
-            if (!job) return;
-            s.view.greetLevel = level;
-            const text = normalizeGreetings(job.match)[level] || '';
-            s.greetings.set(job.uid, text);
-            saveGreeting(job.uid, text);
-            update();
-          }}
           onCopy={copyText}
           onSend={() => job && sendGreeting(job)}
+          onOpenChat={(text) => job && openCommunication(job, text)}
+          onComm={async (record) => {
+            if (!job) return;
+            await saveComm(job.uid, record);
+            const advanced = sanitizeComm(record).nodes.some((node) => node.id !== 'greet');
+            if (advanced && s.progress.get(job.uid)?.status !== 'sent') {
+              try { await setProgress(job.uid, 'sent'); update(); }
+              catch (error) { notify(error.message || '记录失败', true); }
+            }
+          }}
+          onNotice={notify}
           onMarkSent={async () => {
             if (!job) return;
             if (!confirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`)) return;
