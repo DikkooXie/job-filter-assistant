@@ -100,7 +100,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
     requestAnimationFrame(() => logButtonRef.current?.focus());
   }, []);
   useEffect(() => {
-    document.title = `${logOpen ? '更新日志' : title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
+    document.title = `${logOpen ? '更新日志' : title} · Offercome${dev ? ' · dev' : ''}`;
   }, [title, dev, logOpen]);
   useEffect(() => {
     if (logOpen) return;
@@ -118,7 +118,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
     <aside className="settings-sidebar">
       <div className="settings-brand">
         <span className="settings-brand-mark"><Icon name="filters" /></span>
-        <span className="settings-brand-name">岗位筛选助手</span>
+        <span className="settings-brand-name">Offercome</span>
         {dev && <span className="settings-dev">dev</span>}
       </div>
       <nav className="settings-nav" aria-label="设置页面" onKeyDown={onNavKeyDown}>
