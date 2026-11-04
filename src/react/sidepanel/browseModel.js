@@ -98,3 +98,50 @@ export function analysisGrade(match) {
   if (score <= 80) return { score, filled: 4, tone: 'mid', label: '沟通确认' };
   return { score, filled: 5, tone: 'high', label: '匹配' };
 }
+
+// 新收录胶囊展开后自动收回的时间。点击胶囊或滚动列表会提前收回。
+export const FRESH_CAPSULE_MS = 8000;
+// 胶囊收回后，新岗位行在列表里连续可见这么久，就清掉这一条 NEW。
+export const FRESH_MARK_VISIBLE_MS = 2000;
+
+function idSet(value) {
+  if (value instanceof Set) return new Set(value);
+  if (Array.isArray(value)) return new Set(value.filter(Boolean));
+  return new Set();
+}
+
+// 会话内比较岗位 id。首次成功读取只建立基线，不算新收录；之后多出来的 id 记入 fresh。
+// 不读写存储。岗位从库里消失时，同步从 fresh 去掉。
+export function noteCapturedJobs(session, jobs) {
+  const present = new Set();
+  const order = [];
+  for (const job of jobs || []) {
+    const uid = job?.uid;
+    if (!uid || present.has(uid)) continue;
+    present.add(uid);
+    order.push(uid);
+  }
+  const fresh = idSet(session?.fresh);
+  for (const uid of fresh) if (!present.has(uid)) fresh.delete(uid);
+  if (session?.ready !== true) {
+    return { ready: true, seen: present, fresh, arrived: [] };
+  }
+  const seen = idSet(session?.seen);
+  const arrived = [];
+  for (const uid of order) {
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    fresh.add(uid);
+    arrived.push(uid);
+  }
+  return { ready: true, seen, fresh, arrived };
+}
+
+// 智能分析抽屉的范围。unscored 只跑已选里还没有分析结果的岗位；force 原样返回已选，交给 AI_MATCH_SCORE 的 force。
+// 画像指纹项本轮不可选，不返回岗位。
+export function analysisTargets(jobs, mode) {
+  const list = (jobs || []).filter((job) => job?.uid);
+  if (mode === 'force') return list.slice();
+  if (mode === 'unscored') return list.filter((job) => !job.match);
+  return [];
+}

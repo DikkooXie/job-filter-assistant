@@ -5,9 +5,9 @@ import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
-import { filterVisibleJobs, librarySurface, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { analysisTargets, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
-import { FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
+import { AnalyzeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
 import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -71,7 +71,9 @@ export default function Sidepanel() {
     view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), greetings: new Map(), advice: new Map(),
     saveTimers: new Map(), batchBusy: false, reloadVersion: 0, noticeTimer: null, notice: '', error: false, loading: true,
-    modelNotice: false,
+    modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
+    capsuleUntil: 0, capsuleTimer: null, scrollLockTimer: null, ignoreScrollDismiss: false,
+    moreOpen: false, analyzeOpen: false,
   };
   const s = state.current;
   const update = () => redraw();
@@ -83,6 +85,20 @@ export default function Sidepanel() {
     s.noticeTimer = setTimeout(() => { s.notice = ''; update(); }, 2600);
   };
   const setView = (patch) => { Object.assign(s.view, patch); update(); };
+  const armCapsule = () => {
+    s.capsuleUntil = Date.now() + FRESH_CAPSULE_MS;
+    s.ignoreScrollDismiss = true;
+    clearTimeout(s.capsuleTimer);
+    clearTimeout(s.scrollLockTimer);
+    s.scrollLockTimer = setTimeout(() => { s.ignoreScrollDismiss = false; }, 500);
+    s.capsuleTimer = setTimeout(() => { s.capsuleUntil = 0; update(); }, FRESH_CAPSULE_MS);
+  };
+  const dismissCapsule = () => {
+    if (s.capsuleUntil <= Date.now()) return;
+    clearTimeout(s.capsuleTimer);
+    s.capsuleUntil = 0;
+    update();
+  };
   const reload = async () => {
     const version = ++s.reloadVersion;
     const first = !s.settings;
@@ -107,6 +123,12 @@ export default function Sidepanel() {
         if (value && csvProgressLabels[value.status] && (!current || value.at >= current.at)) s.progress.set(job.uid, value);
       });
       if (firstLoad && settings.mode !== MODE.auto) s.view.platform = settings.mode;
+      const captured = noteCapturedJobs({ ready: s.seenReady, seen: s.seenIds, fresh: s.freshIds }, jobs);
+      s.seenReady = captured.ready;
+      s.seenIds = captured.seen;
+      s.freshIds = captured.fresh;
+      if (captured.arrived.length) armCapsule();
+      else if (captured.fresh.size === 0) { clearTimeout(s.capsuleTimer); s.capsuleUntil = 0; }
       if (s.followLive) {
         const uid = contextUid(activeCtx);
         s.selectedUid = uid && jobs.some((job) => job.uid === uid) ? uid : null;
@@ -145,6 +167,8 @@ export default function Sidepanel() {
       chrome.storage.onChanged.removeListener(onStorage);
       s.reloadVersion++;
       clearTimeout(s.noticeTimer);
+      clearTimeout(s.capsuleTimer);
+      clearTimeout(s.scrollLockTimer);
       for (const [uid, timer] of s.saveTimers) { clearTimeout(timer); send(MSG.GREETING_SAVE, { uid, text: s.greetings.get(uid) || '' }).catch(() => {}); }
       s.saveTimers.clear();
     };
@@ -200,7 +224,7 @@ export default function Sidepanel() {
       else notify(`已打开岗位，未确认进入沟通；请核对后粘贴发送${result?.note ? `（${result.note}）` : ''}`, true);
     } catch (error) { notify(`招呼语已复制，请手动打开岗位页粘贴发送（${error.message}）`, true); }
   };
-  const batchAnalyze = async (list, recordPrepared = false) => {
+  const batchAnalyze = async (list, { force = false } = {}) => {
     if (s.batchBusy || !list.length) return;
     if (!requireProviders()) return;
     s.batchBusy = true;
@@ -212,14 +236,9 @@ export default function Sidepanel() {
       for (let index = 0; index < uids.length; index += 1) {
         const uid = uids[index];
         const job = s.jobs.find((item) => item.uid === uid);
-        notify(`批量分析 ${index + 1}/${uids.length}…`);
+        notify(`正在分析 ${index + 1}/${uids.length}…`);
         try {
-          const match = await send(MSG.AI_MATCH_SCORE, { uid, job });
-          if (recordPrepared) {
-            const greeting = String(job.greetingDraft || normalizeGreetings(match).standard || '').trim();
-            if (!greeting) throw new Error('未生成招呼语，请重新分析');
-            if (!s.progress.has(uid)) await setProgress(uid, 'prepared');
-          }
+          await send(MSG.AI_MATCH_SCORE, { uid, job, force });
           ok += 1;
         } catch (error) {
           fail += 1;
@@ -233,7 +252,7 @@ export default function Sidepanel() {
         update();
         if (index < uids.length - 1) await sleep(500);
       }
-      notify(fail ? `批量分析完成：成功 ${ok}，失败 ${fail}（${firstErr}）` : `批量分析完成：成功 ${ok}`, !!fail);
+      notify(fail ? `分析完成：成功 ${ok}，失败 ${fail}（${firstErr}）` : `分析完成：成功 ${ok}`, !!fail);
     } catch (error) { notify(error.message, true); }
     finally { uids.forEach((uid) => s.scoring.delete(uid)); s.batchBusy = false; update(); }
   };
@@ -256,6 +275,10 @@ export default function Sidepanel() {
     if (s.screen !== 'detail') {
       s.listScroll = listRef.current ? listRef.current.scrollTop : 0;
       s.lastViewedUid = null;
+    }
+    if (uid && s.freshIds.delete(uid) && s.freshIds.size === 0) {
+      clearTimeout(s.capsuleTimer);
+      s.capsuleUntil = 0;
     }
     s.screen = 'detail';
     s.followLive = follow;
@@ -304,6 +327,65 @@ export default function Sidepanel() {
   const filterCount = (s.view.platform !== 'all' ? 1 : 0) + (s.view.verdict !== 'all' ? 1 : 0);
   const viewChanged = viewConditionsChanged(s.view);
   const devBuild = runningDevBuild();
+  const selecting = checked.length > 0;
+  if (!selecting) { s.moreOpen = false; s.analyzeOpen = false; }
+  const capsuleOn = s.capsuleUntil > Date.now() && s.freshIds.size > 0;
+  const freshCount = capsuleOn ? s.freshIds.size : 0;
+  const freshKey = [...s.freshIds].sort().join('\n');
+
+  const showFresh = () => {
+    clearTimeout(s.capsuleTimer);
+    s.capsuleUntil = 0;
+    const target = list.find((job) => s.freshIds.has(job.uid));
+    update();
+    if (!target) {
+      if (s.freshIds.size) notify('新岗位不在当前筛选结果里');
+      return;
+    }
+    s.ignoreScrollDismiss = true;
+    clearTimeout(s.scrollLockTimer);
+    s.scrollLockTimer = setTimeout(() => { s.ignoreScrollDismiss = false; }, 500);
+    const node = panelRef.current?.querySelector(`[data-job-uid="${cssAttr(target.uid)}"]`);
+    node?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  const onListScroll = () => {
+    if (s.ignoreScrollDismiss || s.capsuleUntil <= Date.now()) return;
+    dismissCapsule();
+  };
+  const deleteChecked = async () => {
+    s.moreOpen = false;
+    update();
+    const targets = checked.slice();
+    if (!targets.length) return;
+    const noun = targets.length === 1
+      ? `岗位「${targets[0].title || '未命名岗位'}」`
+      : `已选的 ${targets.length} 个岗位`;
+    if (!confirm(`确定删除${noun}？此操作无法撤销。`)) return;
+    try {
+      let jobs = s.jobs;
+      for (const job of targets) {
+        jobs = jobsForLibrary(await send(MSG.JOB_DELETE, { uid: job.uid }));
+        s.checked.delete(job.uid);
+        s.freshIds.delete(job.uid);
+        if (s.lastViewedUid === job.uid) s.lastViewedUid = null;
+      }
+      s.jobs = jobs;
+      if (s.freshIds.size === 0) { clearTimeout(s.capsuleTimer); s.capsuleUntil = 0; }
+      notify(targets.length === 1 ? '已删除岗位' : `已删除 ${targets.length} 个岗位`);
+    } catch (error) { notify(error.message, true); }
+    update();
+  };
+  const startAnalysis = (mode) => {
+    const targets = analysisTargets(checked, mode);
+    s.analyzeOpen = false;
+    if (!targets.length) {
+      notify(mode === 'unscored' ? '所选岗位都已有分析结果' : '未选择岗位');
+      update();
+      return;
+    }
+    update();
+    batchAnalyze(targets, { force: mode === 'force' });
+  };
 
   useLayoutEffect(() => {
     if (!s.restoreList || s.screen !== 'list') return;
@@ -321,6 +403,37 @@ export default function Sidepanel() {
     else node.focus();
   });
 
+  useEffect(() => {
+    const root = listRef.current;
+    if (!root || s.screen !== 'list' || !s.freshIds.size) return undefined;
+    const timers = new Map();
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const uid = entry.target.getAttribute('data-job-uid');
+        if (!uid || !s.freshIds.has(uid)) return;
+        if (!entry.isIntersecting || s.capsuleUntil > Date.now()) {
+          clearTimeout(timers.get(uid));
+          timers.delete(uid);
+          return;
+        }
+        if (timers.has(uid)) return;
+        timers.set(uid, setTimeout(() => {
+          timers.delete(uid);
+          if (s.capsuleUntil > Date.now() || !s.freshIds.has(uid)) return;
+          s.freshIds.delete(uid);
+          update();
+        }, FRESH_MARK_VISIBLE_MS));
+      });
+    }, { root, threshold: 0.4 });
+    root.querySelectorAll('[data-job-uid]').forEach((node) => {
+      if (s.freshIds.has(node.getAttribute('data-job-uid'))) observer.observe(node);
+    });
+    return () => {
+      observer.disconnect();
+      timers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [freshKey, capsuleOn, s.screen]);
+
   const showListChrome = s.screen !== 'detail';
   return (
     <div className="job-panel" ref={panelRef} data-screen={s.screen} data-surface={s.screen === 'detail' ? 'detail' : surface}>
@@ -328,6 +441,7 @@ export default function Sidepanel() {
         <ListHeader
           total={s.jobs.length}
           shown={s.settings ? list.length : 0}
+          freshCount={freshCount}
           view={s.view}
           filterEnabled={!!s.settings?.filters?.enabled}
           settingsReady={!!s.settings}
@@ -342,6 +456,7 @@ export default function Sidepanel() {
           onOpenCurrent={openCurrentJob}
           onOptions={() => send(MSG.OPEN_OPTIONS)}
           onReset={resetView}
+          onShowFresh={showFresh}
           dev={devBuild}
         />
       )}
@@ -401,7 +516,7 @@ export default function Sidepanel() {
         : surface === 'error' ? <SurfaceState kind="error" message={s.loadError} onRetry={reload} />
           : surface === 'empty' ? <SurfaceState kind="empty" onBrowseBoss={openBossBrowse} />
             : (
-              <div className="list-scroll" ref={listRef}>
+              <div className="list-scroll" ref={listRef} onScroll={onListScroll}>
                 {profileScore < 40 && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
                 {list.length === 0
                   ? <SurfaceState kind="nomatch" viewChanged={viewChanged} onReset={resetView} />
@@ -411,6 +526,7 @@ export default function Sidepanel() {
                       job={item}
                       checked={s.checked.has(item.uid)}
                       returned={s.lastViewedUid === item.uid}
+                      isNew={s.freshIds.has(item.uid)}
                       progressStatus={s.progress.get(item.uid)?.status}
                       onToggle={() => { if (s.checked.has(item.uid)) s.checked.delete(item.uid); else s.checked.add(item.uid); update(); }}
                       onOpen={openDetail}
@@ -428,30 +544,26 @@ export default function Sidepanel() {
           allSelected={allSelected}
           indeterminate={checked.length > 0 && !allSelected}
           busy={s.batchBusy}
+          menuOpen={s.moreOpen}
           onToggleAll={() => {
             if (allSelected) list.forEach((item) => s.checked.delete(item.uid));
             else list.forEach((item) => s.checked.add(item.uid));
+            s.moreOpen = false;
             update();
           }}
-          onClear={() => { list.forEach((item) => s.checked.delete(item.uid)); update(); }}
-          onAnalyze={() => batchAnalyze(checked)}
-          onPrepare={() => {
-            const remaining = checked.filter((item) => !s.progress.has(item.uid));
-            if (!remaining.length) notify('所选岗位均已有处理记录');
-            else batchAnalyze(remaining, true);
-          }}
-          onNext={() => {
-            const next = checked.find((item) => s.progress.get(item.uid)?.status === 'prepared');
-            if (!next) notify('没有待处理的已准备岗位，请先准备未处理岗位');
-            else { openDetail(next.uid, 'flow'); sendGreeting(next); }
-          }}
-          onExportVisible={() => batchExport(list)}
-          onExportSelected={() => batchExport(checked)}
-          onClearLibrary={async () => {
-            if (!confirm('确定清空所有已收录岗位？此操作不可撤销。')) return;
-            try { s.jobs = jobsForLibrary(await send(MSG.JOB_CLEAR_REQUEST)); s.checked.clear(); s.lastViewedUid = null; notify('已清空岗位库'); }
-            catch (error) { notify(error.message, true); }
-          }}
+          onToggleMenu={(open) => { s.moreOpen = open; update(); }}
+          onDeleteSelected={deleteChecked}
+          onExportSelected={() => { s.moreOpen = false; batchExport(checked); }}
+          onAnalyze={() => { s.moreOpen = false; s.filterOpen = false; s.analyzeOpen = true; update(); }}
+          onWorkbench={() => send(MSG.OPEN_OPTIONS)}
+        />
+      )}
+      {s.analyzeOpen && (
+        <AnalyzeSheet
+          selectedCount={checked.length}
+          busy={s.batchBusy}
+          onClose={() => { s.analyzeOpen = false; update(); }}
+          onStart={startAnalysis}
         />
       )}
       {s.filterOpen && (
@@ -474,6 +586,8 @@ async function deleteJob(target, s, update, notify) {
   try {
     s.jobs = jobsForLibrary(await send(MSG.JOB_DELETE, { uid: target.uid }));
     s.checked.delete(target.uid);
+    s.freshIds.delete(target.uid);
+    if (s.freshIds.size === 0) { clearTimeout(s.capsuleTimer); s.capsuleUntil = 0; }
     if (s.lastViewedUid === target.uid) s.lastViewedUid = null;
     update();
   } catch (error) { notify(error.message, true); }
