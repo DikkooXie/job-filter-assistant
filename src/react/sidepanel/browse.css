@@ -375,9 +375,16 @@
 .model-notice-close:hover { background: var(--jp-inset); color: var(--jp-ink); }
 
 .list-scroll { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; }
-.job-row { padding: 13px 16px 12px; border-bottom: 1px solid var(--jp-line); min-width: 0; }
-.job-row:hover { background: var(--jp-accent-soft); }
-.job-row.just-viewed { background: var(--jp-accent-soft); }
+.continuous-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.job-row {
+  padding: 12px 12px 10px;
+  border: 1px solid var(--jp-line);
+  border-radius: 10px;
+  background: var(--jp-surface-2);
+  min-width: 0;
+}
+.job-row:hover { background: color-mix(in srgb, var(--jp-ink) 4%, var(--jp-surface-2)); }
+.job-row.just-viewed { background: var(--jp-accent-soft); border-color: var(--jp-accent-line); }
 .row-top { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
 .row-top > input { margin-top: 4px; width: 15px; height: 15px; flex-shrink: 0; }
 .job-title {
@@ -397,7 +404,8 @@
 .company { color: var(--jp-secondary); font-size: 12px; overflow-wrap: anywhere; min-width: 0; }
 .source {
   color: var(--jp-muted);
-  background: var(--jp-surface-2);
+  background: transparent;
+  border: 1px solid var(--jp-line-strong);
   font-size: 10px;
   line-height: 16px;
   padding: 0 4px;
@@ -425,17 +433,33 @@
 .detail-content .pre { white-space: pre-wrap; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .section-head h3 { margin: 0; }
-.skills { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; font-size: 11px; color: var(--jp-secondary); min-width: 0; }
-.skills li + li::before { content: "·"; margin: 0 6px; color: var(--jp-muted); }
+.skills { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.skills li {
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--jp-secondary);
+  background: var(--jp-field);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
 .row-assessment {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 10px;
-  row-gap: 3px;
-  margin-top: 7px;
-  padding-top: 6px;
-  border-top: 1px solid var(--jp-line);
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--jp-inset);
+  min-width: 0;
+}
+.assessment-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1;
   min-width: 0;
 }
 .match-summary {
@@ -448,17 +472,25 @@
   color: var(--jp-secondary);
 }
 .match-result { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-.match-result strong { font-size: 19px; font-weight: 650; line-height: 1.15; letter-spacing: -.02em; }
-.match-result > span { font-size: 11px; }
+.row-assessment .match-result strong { font-size: 13px; font-weight: 650; line-height: 1.2; letter-spacing: 0; }
+.row-assessment .match-result > span { font-size: 12px; }
 .match-summary.strong .match-result { color: var(--jp-accent); }
 .match-summary.good .match-result { color: var(--jp-secondary); }
 .match-summary.fair .match-result,
 .match-summary.weak .match-result { color: var(--jp-warn); }
-.match-summary.none { font-size: 11px; color: var(--jp-secondary); }
+.match-summary.none { font-size: 12px; color: var(--jp-muted); }
+.match-summary.is-risk {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--jp-warn);
+  text-align: left;
+}
+.match-summary.is-risk svg { width: 13px; height: 13px; margin-top: 1px; }
 .match-summary:hover:not(:disabled) { color: var(--jp-accent); }
+.match-summary.is-risk:hover:not(:disabled) { color: var(--jp-warn); }
 .match-reason {
-  grid-column: 1 / -1;
   width: 100%;
+  max-width: 100%;
   min-width: 0;
   padding: 0;
   text-align: left;
@@ -472,14 +504,17 @@
 .flow-link {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
+  flex-shrink: 0;
   min-height: 26px;
-  font-size: 11px;
-  color: var(--jp-secondary);
+  font-size: 12px;
+  color: var(--jp-accent);
   white-space: nowrap;
 }
 .flow-link svg { width: 12px; height: 12px; }
-.flow-link:hover, .flow-link.progressed { color: var(--jp-accent); }
+.flow-link:hover { color: var(--jp-accent); }
+.flow-link.progressed { font-weight: 600; }
+.row-assessment .risk { margin-top: 0; }
 .risk, .exclusion { min-width: 0; }
 .risk {
   display: flex;

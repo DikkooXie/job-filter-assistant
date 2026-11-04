@@ -58,11 +58,17 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
         </div>
         {mode === 'paste' ? <div className="paste-box">
           <textarea className="area-input" aria-label="简历文本" placeholder="在此粘贴简历文本" value={paste} onChange={(event) => setPaste(event.target.value)} />
-          <button type="button" className="s-btn s-btn-primary" onClick={() => {
-            const text = paste.trim();
-            if (!text) report('请先粘贴简历文本', true);
-            else onExtractText(text);
-          }}>抽取画像</button>
+          <div className="paste-bar">
+            <div className="paste-helpers">
+              <span className="paste-count">{paste.length} 字</span>
+              <button type="button" className="paste-clear" onClick={() => setPaste('')}>清空</button>
+            </div>
+            <button type="button" className="s-btn paste-submit" onClick={() => {
+              const text = paste.trim();
+              if (!text) report('请先粘贴简历文本', true);
+              else onExtractText(text);
+            }}>抽取画像</button>
+          </div>
         </div> : <div
           className={over ? 'dropzone is-over' : 'dropzone'}
           onDragEnter={(event) => { event.preventDefault(); dragDepth.current += 1; setOver(true); }}
