@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
+import markUrl from '../../../icons/128.png';
 import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
-import { GREETING_LEVELS, DIM_LABELS } from '../../common/ai/prompts.js';
+import { DIM_LABELS } from '../../common/ai/prompts.js';
 import { analysisGrade, analysisSummary, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
 import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
+import { CommTab } from './CommTab.jsx';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
   ['match', '分析'],
   ['company', '公司'],
   ['resume', '简历'],
-  ['flow', '流程'],
+  ['flow', '沟通'],
 ];
 const DIM_KEYS = ['skill', 'experience', 'requirement', 'location'];
 
@@ -251,7 +253,7 @@ export function DislikeSheet({ job, saving, onClose, onSave }) {
       <section className="sheet dislike-sheet" role="dialog" aria-modal="true" aria-labelledby="dislike-title" ref={ref}>
         <div className="sheet-handle" aria-hidden="true" />
         <h2 id="dislike-title">不喜欢的地方</h2>
-        <p className="sheet-sub">画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。</p>
+        <p className="sheet-sub">画像不全易误判。用一句话告诉我要避开什么，写入画像。</p>
         <p className="dislike-context">针对 · <strong>{title}</strong>{salary ? ` · ${salary}` : ''}{city ? ` · ${city}` : ''}</p>
         <textarea
           id="dislike-note"
@@ -311,6 +313,7 @@ export function ListHeader({
     <header className="app-header">
       <div className="app-heading">
         <div className="heading-title">
+          <img className="sp-logo" src={markUrl} alt="Offercome" width={28} height={28} />
           <h1>岗位库</h1>
           {dev && <span className="dev-mark">dev</span>}
           <span className="library-count-slot" aria-live="polite">
@@ -711,35 +714,10 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
   );
 }
 
-function FlowStatus({ status }) {
-  const steps = [
-    ['准备招呼语', status === 'prepared' || status === 'opened' || status === 'sent'],
-    ['尝试打开沟通', status === 'opened' || status === 'sent'],
-    ['手动确认发送', status === 'sent'],
-  ];
-  const currentIndex = steps.findIndex(([, done]) => !done);
-  return (
-    <div>
-      <p className="flow-now"><span>当前进度</span><strong>{flowStatusLabel(status)}</strong></p>
-      <ol className="milestones" aria-label="打招呼进度">
-        {steps.map(([label, done], index) => {
-          const current = !done && index === currentIndex;
-          return (
-            <li key={label} className={done ? 'done' : current ? 'current' : ''} aria-current={current ? 'step' : undefined}>
-              <span className="milestone-dot" aria-hidden="true" />
-              {label}
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
 export function JobDetail({
-  mode, job, sub, followLive, progressStatus, greeting, greetLevel, advice, scoring, tailoring,
-  hasProfile, dev, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onGreetLevel, onCopy,
-  onSend, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
+  mode, job, sub, followLive, progressStatus, greeting, advice, scoring, tailoring,
+  hasProfile, dev, comm, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onCopy,
+  onSend, onOpenChat, onComm, onNotice, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
 }) {
   const titleRef = useRef(null);
   const [accepting, setAccepting] = useState(null);
@@ -805,7 +783,7 @@ export function JobDetail({
                 <button type="button" key={key} role="tab" aria-selected={sub === key} tabIndex={sub === key ? 0 : -1} onClick={() => onSub(key)}>{label}</button>
               ))}
             </div>
-            <div className="detail-content" role="tabpanel">
+            {sub !== 'flow' && <div className="detail-content" role="tabpanel">
               {sub === 'info' && (
                 <>
                   <Facts rows={[
@@ -873,36 +851,26 @@ export function JobDetail({
                       </>
                     )
               )}
-              {sub === 'flow' && (
-                <>
-                  <FlowStatus status={progressStatus} />
-                  {!job.match ? (
-                      <div className="detail-actions">
-                        <p>还没有可编辑的招呼语。可以先做一次分析。</p>
-                        <button type="button" className="jp-btn jp-btn-primary" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '生成招呼语'}</button>
-                      </div>
-                    ) : (
-                      <div className="greeting-box">
-                        <div className="level-row">
-                          {GREETING_LEVELS.map((level) => (
-                            <button type="button" key={level.key} className={`jp-btn${greetLevel === level.key ? ' jp-btn-primary' : ''}`} onClick={() => onGreetLevel(level.key)}>{level.label}</button>
-                          ))}
-                        </div>
-                        <label htmlFor="greeting-text">招呼语</label>
-                        <textarea id="greeting-text" rows={6} aria-label="招呼语" placeholder="编辑要发给招聘方的招呼语" value={greeting} onChange={(event) => onGreeting(event.target.value)} />
-                        <div className="char-count">{greeting.length} 字</div>
-                        <div className="flow-actions">
-                          <button type="button" className="jp-btn" disabled={scoring} onClick={onRegenerate}>{scoring ? '生成中…' : '重新生成'}</button>
-                          <button type="button" className="jp-btn" onClick={() => onCopy(greeting)}>复制</button>
-                          <button type="button" className="jp-btn jp-btn-primary" onClick={onSend}>打开沟通并复制</button>
-                          <button type="button" className="jp-btn" onClick={onMarkSent}>标记已发送</button>
-                        </div>
-                      </div>
-                    )}
-                </>
-              )}
-            </div>
-            <footer className="detail-sticky">
+            </div>}
+            {sub === 'flow' && (
+              <CommTab
+                job={job}
+                progressStatus={progressStatus}
+                record={comm}
+                greeting={greeting}
+                scoring={scoring}
+                onGreeting={onGreeting}
+                onCopy={onCopy}
+                onAnalyze={onAnalyze}
+                onRegenerate={onRegenerate}
+                onSendGreeting={onSend}
+                onMarkSent={onMarkSent}
+                onOpenChat={onOpenChat}
+                onComm={onComm}
+                onNotice={onNotice}
+              />
+            )}
+            {sub !== 'flow' && <footer className="detail-sticky">
               <button type="button" className="jp-btn jp-btn-primary detail-open" disabled={!job.url} onClick={onOpenOriginal}>
                 <ExternalLink aria-hidden="true" />打开原岗位
               </button>
@@ -915,7 +883,7 @@ export function JobDetail({
               <button type="button" className="detail-act detail-act-del" aria-label={`删除 ${job.title || ''}`} onClick={onDelete}>
                 <Trash2 aria-hidden="true" />
               </button>
-            </footer>
+            </footer>}
             {accepting && (
               <AcceptRiskSheet
                 risk={accepting}

@@ -23,6 +23,18 @@ async function boot() {
 function render() {
   app.innerHTML = '';
   const scored = jobs.filter((j) => j.match).length;
+  app.appendChild(
+    h('div', { class: 'popup-header' }, [
+      h('img', {
+        class: 'popup-logo',
+        src: new URL('../../icons/32.png', import.meta.url).href,
+        alt: '',
+        width: '28',
+        height: '28',
+      }),
+      h('div', { class: 'popup-title', text: 'Offercome' }),
+    ]),
+  );
   const strong = jobs.filter((j) => j.match && (j.match.verdict === 'strong' || j.match.verdict === 'good')).length;
 
   // 当前站点上下文
