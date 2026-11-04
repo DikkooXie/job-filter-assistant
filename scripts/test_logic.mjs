@@ -2478,7 +2478,11 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
   assert.match(row, /aria-label=\{`不喜欢 \$\{name\}`\}/);
   assert.doesNotMatch(row, /arm\('dislike'\)|确认不喜欢/);
   assert.match(sheet, /不喜欢的地方/);
-  assert.match(sheet, /画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。/);
+  assert.match(sheet, /画像不全易误判。用一句话告诉我要避开什么，写入画像。/);
+  assert.match(sheet, /避开/);
+  assert.match(sheet, /写入画像/);
+  assert.match(browse, /\.job-panel \.dislike-sheet \.dislike-context \{[^}]*margin-top:\s*12px/);
+  assert.match(browse, /\.job-panel \.dislike-sheet textarea \{[^}]*margin-top:\s*14px/);
   assert.match(sheet, /placeholder="例如：太偏销售、不要驻场…"/);
   assert.match(sheet, /针对 · <strong>/);
   assert.match(sheet, />取消</);
