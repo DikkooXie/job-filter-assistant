@@ -10,7 +10,11 @@ import { defaultFilters, defaultSettings, STORAGE_KEYS } from '../src/common/con
 import { isDevBuild, toDevManifest } from '../src/common/build.js';
 import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
-import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
+import { normalizeResponse, matchPlatformApi, parseSalary, jobKeyFromPageUrl, preferDetailJobKey } from '../src/common/platforms.js';
+import {
+  ENSURE_DESC_GAP_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, ensureGapWait, filterCapturedJobs,
+  hasJobDescription, jobNeedsDescription, runEnsureDescription, shouldReuseMatchCache,
+} from '../src/common/ensureDescription.js';
 import { mergeJobs } from '../src/common/jobsStore.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import { pickActiveProvider, profileFingerprint, withProfileFp } from '../src/common/profileFingerprint.js';
@@ -221,6 +225,39 @@ test('详情无 URL 时回退响应体 encryptId', () => {
   const j = normalizeResponse('boss', { code: 0, zpData: { jobInfo: { encryptId: 'BODY_KEY', jobName: 'X' } } })[0];
   assert.equal(j.uid, 'boss:BODY_KEY');
 });
+test('打开原岗位时，页面路径上的 id 盖过响应体里的纯数字 id', () => {
+  const j = normalizeResponse('boss', {
+    code: 0,
+    zpData: { jobInfo: { jobId: '12345', jobName: '前端', postDescription: '岗位职责：页面里的描述' } },
+  }, {
+    url: 'https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=SEC',
+    pageUrl: 'https://www.zhipin.com/job_detail/ENCRYPT_PAGE.html',
+  })[0];
+  assert.equal(j.uid, 'boss:ENCRYPT_PAGE');
+  assert.equal(j.jobId, 'ENCRYPT_PAGE');
+  assert.ok(j.description.includes('页面里的描述'));
+});
+test('详情页上另一条非数字 id 仍信响应体，查询参数仍优先于页面', () => {
+  const other = normalizeResponse('boss', {
+    code: 0,
+    zpData: { jobInfo: { encryptId: 'OTHER_ENCRYPT', jobName: '相关岗位', postDescription: '岗位职责：相关' } },
+  }, {
+    url: 'https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=SEC',
+    pageUrl: 'https://www.zhipin.com/job_detail/PAGE_KEY.html',
+  })[0];
+  assert.equal(other.uid, 'boss:OTHER_ENCRYPT');
+  const query = normalizeResponse('boss', {
+    code: 0,
+    zpData: { jobInfo: { encryptId: 'BODY_KEY', jobName: 'X' } },
+  }, {
+    url: 'https://www.zhipin.com/wapi/zpgeek/job/detail.json?encryptJobId=URL_KEY',
+    pageUrl: 'https://www.zhipin.com/job_detail/PAGE_KEY.html',
+  })[0];
+  assert.equal(query.uid, 'boss:URL_KEY');
+  assert.equal(jobKeyFromPageUrl('https://www.zhipin.com/job_detail/PAGE_KEY.html'), 'PAGE_KEY');
+  assert.equal(preferDetailJobKey('', 'PAGE_KEY', '99'), 'PAGE_KEY');
+  assert.equal(preferDetailJobKey('URL_KEY', 'PAGE_KEY', '99'), 'URL_KEY');
+});
 
 // ---------- BOSS 列表抽屉 job/card ----------
 section('BOSS 卡片归一化（boss_job_card.sample.json）');
@@ -319,6 +356,7 @@ await testAsync('mergeJobs 用卡片 JD 补全列表岗位，之后的空 JD 不
 section('BOSS 嗅探 URL');
 function installSniffer() {
   const posts = [];
+  const listeners = [];
   const location = {
     href: 'https://www.zhipin.com/web/geek/recommend',
     origin: 'https://www.zhipin.com',
@@ -326,6 +364,7 @@ function installSniffer() {
   const fakeWindow = {
     location,
     postMessage(data, origin) { posts.push({ data, origin }); },
+    addEventListener(type, fn) { if (type === 'message') listeners.push(fn); },
     fetch: async () => ({ clone: () => ({ json: async () => ({ code: 0, zpData: {} }) }) }),
   };
   function XMLHttpRequest() {}
@@ -336,7 +375,15 @@ function installSniffer() {
     fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/sniffer.js'), 'utf8'),
     ctx,
   );
-  return { posts, fetch: fakeWindow.fetch };
+  return {
+    posts,
+    fetch: fakeWindow.fetch,
+    replay() {
+      for (const fn of listeners) {
+        fn({ source: fakeWindow, data: { source: 'job-helper:sniffer', type: 'replay-request' } });
+      }
+    },
+  };
 }
 async function sniffedUrls(urls) {
   const { posts, fetch } = installSniffer();
@@ -367,13 +414,34 @@ await testAsync('嗅探命中推荐详情、卡片和原有列表，不命中无
     'https://www.zhipin.com/wapi/zpgeek/search/joblist.json?page=1',
   ]);
 });
+await testAsync('collector 挂上之前嗅到的详情可以重放，且不会把队列越放越大', async () => {
+  const sniffed = installSniffer();
+  await sniffed.fetch('https://www.zhipin.com/wapi/zpgeek/job/detail.json?encryptJobId=a');
+  await Promise.resolve();
+  await Promise.resolve();
+  const before = sniffed.posts.length;
+  sniffed.replay();
+  sniffed.replay();
+  const replayed = sniffed.posts.slice(before).map((item) => item.data.url);
+  assert.deepEqual(replayed, [
+    'https://www.zhipin.com/wapi/zpgeek/job/detail.json?encryptJobId=a',
+    'https://www.zhipin.com/wapi/zpgeek/job/detail.json?encryptJobId=a',
+  ]);
+});
 
 section('BOSS 详情请求被当成当前岗位');
-function installCollector(hostname) {
+function installCollector(hostname, href) {
   const sent = [];
   const listeners = [];
-  const location = { href: `https://${hostname}/web/geek/recommend`, hostname, origin: `https://${hostname}` };
-  const fakeWindow = { location, addEventListener: (type, fn) => type === 'message' && listeners.push(fn) };
+  const timers = [];
+  const links = new Map();
+  const chromeListeners = [];
+  const location = { href: href || `https://${hostname}/web/geek/recommend`, hostname, origin: `https://${hostname}` };
+  const fakeWindow = {
+    location,
+    addEventListener: (type, fn) => type === 'message' && listeners.push(fn),
+    postMessage: (data) => sent.push({ type: 'window', data }),
+  };
   const ctx = {
     window: fakeWindow,
     location,
@@ -384,16 +452,18 @@ function installCollector(hostname) {
       documentElement: {},
       head: { appendChild() {} },
       getElementById: () => null,
-      querySelector: () => null,
-      querySelectorAll: () => [],
+      querySelector: (sel) => links.get(sel) || null,
+      querySelectorAll: (sel) => (links.has(sel) ? [links.get(sel)] : []),
     },
     MutationObserver: class { observe() {} },
-    setTimeout: () => 0,
+    Date,
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    setTimeout: (fn) => { timers.push(fn); return timers.length; },
     clearTimeout: () => {},
     chrome: {
       runtime: {
         sendMessage: (msg) => { sent.push(msg); return Promise.resolve(); },
-        onMessage: { addListener() {} },
+        onMessage: { addListener(fn) { chromeListeners.push(fn); } },
       },
       storage: {
         local: { get: async () => ({}) },
@@ -407,10 +477,16 @@ function installCollector(hostname) {
   );
   return {
     sent,
-    emit(url, payload) {
+    emit(url, payload, extra) {
       for (const fn of listeners) {
-        fn({ source: fakeWindow, data: { source: 'job-helper:sniffer', platform: 'boss', url, payload } });
+        fn({ source: fakeWindow, data: { source: 'job-helper:sniffer', platform: 'boss', url, payload, ...extra } });
       }
+    },
+    links,
+    chromeListeners,
+    runLastTimer() {
+      const fn = timers.pop();
+      if (fn) fn();
     },
   };
 }
@@ -430,6 +506,34 @@ test('推荐详情和卡片上报当前岗位，推荐列表不上报', () => {
   assert.deepEqual(current, ['REC_JOB', 'CARD_JOB']);
   assert.equal(captured.length, 3);
   assert.ok(captured[2].includes('recommend/job/list'));
+  assert.equal(boss.sent.find((msg) => msg.type === 'JOBS_CAPTURED').pageUrl, 'https://www.zhipin.com/web/geek/recommend');
+  assert.equal(boss.sent.find((msg) => msg.type === 'window').data.type, 'replay-request');
+  boss.emit('https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1', {
+    zpData: { jobList: [] },
+  }, { replay: true });
+  assert.equal(boss.sent.filter((msg) => msg.type === 'JOBS_CAPTURED').length, 3);
+});
+test('详情页把页面上的岗位 id 交给当前岗位，并点开对应列表卡', () => {
+  const boss = installCollector('www.zhipin.com', 'https://www.zhipin.com/job_detail/PAGE_KEY.html');
+  boss.emit('https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=SEC', {
+    zpData: { jobInfo: { jobId: '12345', postDescription: '岗位职责：页面里的描述' } },
+  });
+  const current = boss.sent.filter((msg) => msg.type === 'CURRENT_JOB').map((msg) => msg.jobKey);
+  assert.deepEqual(current, ['PAGE_KEY']);
+  assert.equal(boss.sent.find((msg) => msg.type === 'JOBS_CAPTURED').pageUrl, 'https://www.zhipin.com/job_detail/PAGE_KEY.html');
+  const link = {
+    clicked: false,
+    click() { link.clicked = true; },
+    getBoundingClientRect: () => ({ width: 180, height: 48 }),
+  };
+  boss.links.set('a[href*="job_detail/PAGE_KEY"]', link);
+  let response = null;
+  const handled = boss.chromeListeners[0]({ type: 'FETCH_JOB_CARD', jobId: 'PAGE_KEY' }, {}, (value) => { response = value; });
+  assert.equal(handled, true);
+  assert.deepEqual(response, { ok: true, clicked: true });
+  assert.equal(link.clicked, false);
+  boss.runLastTimer();
+  assert.equal(link.clicked, true);
 });
 
 // ---------- 51job 归一化（合成样本，结构仿真机） ----------
@@ -1212,10 +1316,13 @@ function runCollector(stored) {
     };
     return el;
   };
-  const fakeWindow = { addEventListener: (type, fn) => type === 'message' && listeners.message.push(fn) };
+  const fakeWindow = {
+    addEventListener: (type, fn) => type === 'message' && listeners.message.push(fn),
+    postMessage() {},
+  };
   const ctx = {
     window: fakeWindow,
-    location: { href: 'https://example.com/', hostname: 'example.com' },
+    location: { href: 'https://example.com/', hostname: 'example.com', origin: 'https://example.com' },
     URL,
     document: {
       createElement: makeEl,
@@ -1224,6 +1331,7 @@ function runCollector(stored) {
       querySelectorAll: () => [],
     },
     MutationObserver: class { observe() {} },
+    Date,
     setTimeout: () => 0, // 不触发兜底抓取与淡出计时
     clearTimeout: () => {},
     chrome: {
@@ -2370,6 +2478,108 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.match(background, /autoQueue: uids/);
   assert.match(background, /sidePanelIsOpen/);
   assert.match(background, /contextTypes: \['SIDE_PANEL'\]/);
+});
+
+section('空 JD 分析前补抓');
+test('已有描述或没有定位信息的岗位不补抓，间隔不小于现有限速', () => {
+  assert.equal(jobNeedsDescription({ uid: 'qcwy:1', platform: 'qcwy', description: '岗位职责：已有', url: 'https://jobs.51job.com/a/1.html' }), false);
+  assert.equal(jobNeedsDescription({ uid: 'boss:1', platform: 'boss', description: '  ', jobId: 'abc', url: 'https://www.zhipin.com/job_detail/abc.html' }), true);
+  assert.equal(jobNeedsDescription({ uid: 'boss:2', description: '' }), false);
+  assert.equal(hasJobDescription({ description: '  正文 ' }), true);
+  assert.ok(ENSURE_DESC_GAP_MS >= 500);
+  assert.ok(ENSURE_DESC_TIMEOUT_MS >= 3000 && ENSURE_DESC_TIMEOUT_MS <= 10000);
+  assert.equal(ensureGapWait(0, 5000), 0);
+  assert.equal(ensureGapWait(1000, 1200), 300);
+  assert.equal(ensureGapWait(1000, 1800), 0);
+  const known = filterCapturedJobs(
+    [{ uid: 'boss:1', description: '岗位职责：新' }, { uid: 'boss:2', description: '另一条' }],
+    [{ uid: 'boss:1', description: '' }],
+    false,
+  );
+  assert.deepEqual(known.map((job) => job.uid), ['boss:1']);
+  assert.equal(filterCapturedJobs([{ uid: 'boss:2' }], [], true).length, 1);
+  assert.equal(shouldReuseMatchCache({ force: false, cached: { score: 1 }, hadDescription: false, hasDescription: true }), false);
+  assert.equal(shouldReuseMatchCache({ force: false, cached: { score: 1 }, hadDescription: true, hasDescription: true }), true);
+  assert.equal(shouldReuseMatchCache({ force: true, cached: { score: 1 }, hadDescription: true, hasDescription: true }), false);
+});
+await testAsync('补抓优先点卡片，点不到才短开；失败或超时仍把原岗位交回去', async () => {
+  const empty = { uid: 'boss:abc', platform: 'boss', jobId: 'abc', description: '', url: 'https://www.zhipin.com/job_detail/abc.html' };
+  const calls = [];
+  const clicked = await runEnsureDescription(empty, {
+    now: () => 1000,
+    sleep: async (ms) => { calls.push(`sleep:${ms}`); },
+    clickCard: async () => { calls.push('click'); return true; },
+    openUrl: async () => { calls.push('open'); return 7; },
+    closeTab: async (id) => { calls.push(`close:${id}`); },
+    waitForDescription: async () => ({ ...empty, description: '岗位职责：点卡得到' }),
+  }, { lastAt: 0 });
+  assert.equal(clicked.action, 'click');
+  assert.ok(clicked.job.description.includes('点卡得到'));
+  assert.deepEqual(calls, ['click']);
+
+  const opened = [];
+  const state = { lastAt: 1000 };
+  const timed = await runEnsureDescription(empty, {
+    now: () => 1200,
+    sleep: async (ms) => { opened.push(`sleep:${ms}`); },
+    clickCard: async () => false,
+    openUrl: async () => { opened.push('open'); return 9; },
+    closeTab: async (id) => { opened.push(`close:${id}`); },
+    waitForDescription: async () => empty,
+  }, state);
+  assert.equal(timed.action, 'timeout');
+  assert.equal(timed.job.description, '');
+  assert.deepEqual(opened, ['sleep:300', 'open', 'close:9']);
+  assert.equal(state.lastAt, 1200);
+
+  const failed = await runEnsureDescription(empty, {
+    now: () => 5000,
+    sleep: async () => {},
+    clickCard: async () => { throw new Error('没有列表'); },
+    openUrl: async () => null,
+    closeTab: async () => { throw new Error('不应关闭'); },
+    waitForDescription: async () => { throw new Error('不应等待'); },
+  }, { lastAt: 0 });
+  assert.equal(failed.action, 'failed');
+  assert.equal(failed.job, empty);
+});
+await testAsync('多次补抓串行，不会同时点开两张卡', async () => {
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  const order = [];
+  const queued = createEnsureQueue(async (job) => {
+    order.push(`start:${job.uid}`);
+    if (job.uid === 'a') await gate;
+    order.push(`end:${job.uid}`);
+    return job;
+  });
+  const first = queued({ uid: 'a' });
+  const second = queued({ uid: 'b' });
+  await Promise.resolve();
+  assert.deepEqual(order, ['start:a']);
+  release();
+  await Promise.all([first, second]);
+  assert.deepEqual(order, ['start:a', 'end:a', 'start:b', 'end:b']);
+});
+test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗位库', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const legacy = fs.readFileSync(path.join(root, 'src/ui/sidepanel.js'), 'utf8');
+  const scoreStart = background.indexOf('async function scoreOne');
+  const promptAt = background.indexOf('buildMatchPrompt(profile, job', scoreStart);
+  const ensureAt = background.indexOf('queueEnsure(job)', scoreStart);
+  assert.ok(scoreStart > 0 && ensureAt > scoreStart && ensureAt < promptAt);
+  assert.match(background, /shouldReuseMatchCache\(/);
+  assert.match(background, /pageUrl: msg\.pageUrl/);
+  assert.match(background, /filterCapturedJobs\(/);
+  assert.match(background, /await sleep\(400\)/);
+  assert.match(background, /MSG\.FETCH_JOB_CARD/);
+  assert.match(background, /active: false/);
+  assert.doesNotMatch(background, /wapi\/zpgeek/);
+  assert.match(sidepanel, /changes\[STORAGE_KEYS\.jobs\]/);
+  assert.match(sidepanel, /await sleep\(500\)/);
+  assert.match(legacy, /changes\[STORAGE_KEYS\.jobs\]/);
 });
 
 // ---------- 汇总 ----------

@@ -16,6 +16,10 @@ import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorR
 import { redactText } from '../common/ai/privacy.js';
 import { autoScoreUids } from '../common/filters.js';
 import { optionsUrlHash } from '../common/optionsLink.js';
+import {
+  ENSURE_DESC_POLL_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, filterCapturedJobs,
+  hasJobDescription, jobCardId, jobUrl, runEnsureDescription, shouldReuseMatchCache,
+} from '../common/ensureDescription.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
 const tabContext = new Map();
@@ -167,9 +171,12 @@ async function openOptions(page) {
 // —— 岗位收录 ——
 async function onJobsCaptured(msg, sender) {
   const settings = await loadSettings();
-  if (!settings.autoCapture) return { added: 0, updated: 0, skipped: true };
-  const jobs = normalizeResponse(msg.platform, msg.payload, { url: msg.url });
-  if (!jobs.length) return { added: 0, updated: 0 };
+  const normalized = normalizeResponse(msg.platform, msg.payload, { url: msg.url, pageUrl: msg.pageUrl });
+  if (!normalized.length) return { added: 0, updated: 0 };
+  // 关闭自动收录时不新增岗位，但打开原岗位后仍把 JD 补进已经收录的那一条。
+  const existing = settings.autoCapture ? [] : await loadJobs();
+  const jobs = filterCapturedJobs(normalized, existing, settings.autoCapture);
+  if (!jobs.length) return { added: 0, updated: 0, skipped: !settings.autoCapture };
   const { jobs: all, added, updated, addedUids } = await mergeJobs(jobs, {
     dedupe: settings.dedupe,
     maxJobs: settings.maxJobs,
@@ -403,15 +410,31 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   const provider = await getActiveProvider();
   if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
   const [profile, settings, jobs] = await Promise.all([loadProfile(), loadSettings(), loadJobs()]);
-  const job = jobArg || jobs.find((j) => j.uid === uid);
+  let job = jobs.find((j) => j.uid === uid) || jobArg;
   if (!job) throw new Error('岗位不存在');
+
+  const hadDescription = hasJobDescription(job);
+  if (!hadDescription) {
+    try {
+      await queueEnsure(job);
+    } catch {
+      // 补抓失败仍用现有岗位打分
+    }
+    const fresh = (await loadJobs()).find((item) => item.uid === job.uid);
+    if (fresh) job = fresh;
+  }
 
   const fp = profileFingerprint(profile, provider);
   const cache = await getMatchCache();
   // 提示词更新后重新生成，避免复用旧版招呼语。
   // v4：两个历史偏好字段统一作为雷点进行字面与语义判断。
   const cacheKey = `${job.uid}::prompt-v4::${fp}`;
-  if (!force && cache[cacheKey]) {
+  if (shouldReuseMatchCache({
+    force,
+    cached: cache[cacheKey],
+    hadDescription,
+    hasDescription: hasJobDescription(job),
+  })) {
     const match = withProfileFp(cache[cacheKey], fp);
     await setJobMatch(job.uid, match);
     return match;
@@ -483,6 +506,61 @@ function broadcast(type, payload) {
 }
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// 空 JD：先点已打开列表里的对应卡片，点不到再短开原岗位，等被动嗅探写回正文。超时仍打分。
+const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, {
+  now: () => Date.now(),
+  sleep,
+  clickCard: clickJobCard,
+  openUrl: openJobPage,
+  closeTab: (tabId) => chrome.tabs.remove(tabId),
+  waitForDescription: waitForJobDescription,
+}, state));
+
+async function clickJobCard(job) {
+  const jobId = jobCardId(job);
+  if (!jobId) return false;
+  const meta = PLATFORM_META[job.platform];
+  const globs = meta ? meta.hosts.map((host) => `*://${host}/*`) : [];
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query(globs.length ? { url: globs } : {});
+  } catch {
+    return false;
+  }
+  tabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  for (const tab of tabs) {
+    if (sameJobPage(tab.url, job.url)) continue;
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: MSG.FETCH_JOB_CARD, jobId });
+      if (res && res.clicked) return true;
+    } catch {
+      // 这个标签没有内容脚本，试下一个
+    }
+  }
+  return false;
+}
+
+async function openJobPage(job) {
+  const url = jobUrl(job);
+  if (!url) return null;
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({}); } catch { tabs = []; }
+  if (tabs.some((tab) => sameJobPage(tab.url, url))) return 'existing';
+  const tab = await chrome.tabs.create({ url, active: false });
+  return tab && tab.id != null ? tab.id : null;
+}
+
+async function waitForJobDescription(uid) {
+  const deadline = Date.now() + ENSURE_DESC_TIMEOUT_MS;
+  for (;;) {
+    const list = await loadJobs();
+    const found = list.find((item) => item.uid === uid);
+    if (found && hasJobDescription(found)) return found;
+    if (Date.now() >= deadline) return found || null;
+    await sleep(ENSURE_DESC_POLL_MS);
+  }
 }
 
 // 清理关闭的 tab 上下文

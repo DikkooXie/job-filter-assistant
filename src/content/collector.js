@@ -23,25 +23,48 @@
     return 'list';
   }
 
+  // 与 platforms.jobKeyFromPageUrl / preferDetailJobKey 保持一致（内容脚本不能 import）。
+  function jobKeyFromPageUrl(pageUrl) {
+    const text = String(pageUrl || '');
+    const matched = text.match(/job_detail\/([\w-]+)\.html/)
+      || text.match(/[?&]encryptJobId=([\w-]+)/)
+      || text.match(/[?&]jobId=([\w-]+)/)
+      || text.match(/\/job\/(\d+)/)
+      || text.match(/jobs\.51job\.com\/[^/]*\/(\d+)\.html/)
+      || text.match(/[?&]jobid=(\d+)/i);
+    return matched ? matched[1] : '';
+  }
+
+  function preferDetailJobKey(queryKey, pageKey, bodyKey) {
+    const query = queryKey ? String(queryKey) : '';
+    const page = pageKey ? String(pageKey) : '';
+    const body = bodyKey ? String(bodyKey) : '';
+    if (query) return query;
+    if (page && (!body || page === body)) return page;
+    if (page && body && /^\d+$/.test(body) && !/^\d+$/.test(page)) return page;
+    return body || page || '';
+  }
+
   // 从详情请求里取出岗位标识（BOSS: encryptJobId；51job: jobid）
   function jobKeyFromDetail(url, payload) {
     // 1) 优先请求 URL 上的查询参数
+    let queryKey = '';
     try {
       const q = new URL(url, location.href).searchParams;
-      const fromQuery = q.get('encryptJobId') || q.get('jobId') || q.get('jobid');
-      if (fromQuery) return fromQuery;
+      queryKey = q.get('encryptJobId') || q.get('jobId') || q.get('jobid') || '';
     } catch {}
-    // 2) 回退：从响应体里挖（字段名依平台而异，尽量宽松）
+    // 2) 响应体。整页详情有时只有内部数字 id，这时用当前页 job_detail/<id> 对齐列表 uid。
+    let bodyKey = '';
     try {
       const zp = payload && (payload.zpData || payload.resultbody || payload.resultBody);
       const detailObj = zp && zp.jobDetail && typeof zp.jobDetail === 'object' ? zp.jobDetail : null;
       const info = zp && (zp.jobInfo || zp.jobCard || detailObj || (zp.job && zp.job.item) || zp);
       if (info) {
         const k = info.encryptId || info.encryptJobId || info.jobId || info.jobid;
-        if (k) return String(k);
+        if (k) bodyKey = String(k);
       }
     } catch {}
-    return null;
+    return preferDetailJobKey(queryKey, jobKeyFromPageUrl(location.href), bodyKey) || null;
   }
 
   function platformOfHost(host) {
@@ -58,26 +81,49 @@
   }
 
   let captured = 0;
+  // 打开详情页时，同一次响应可能先被当场收到，又被 replay 再投递一次。短时间内同一 URL 只处理一遍。
+  const handledUrlAt = new Map();
+  function duplicateCapture(d) {
+    const key = `${d.platform}\n${d.url || ''}`;
+    const now = Date.now();
+    const prev = handledUrlAt.get(key);
+    handledUrlAt.set(key, now);
+    if (handledUrlAt.size > 40) {
+      for (const [item, at] of handledUrlAt) {
+        if (now - at > 1500) handledUrlAt.delete(item);
+      }
+    }
+    return typeof prev === 'number' && now - prev < 1500;
+  }
 
   // —— 接收 sniffer 转发 ——
   window.addEventListener('message', (ev) => {
     if (ev.source !== window) return;
     const d = ev.data;
-    if (!d || d.source !== CHANNEL) return;
+    if (!d || d.source !== CHANNEL || d.type === 'replay-request') return;
+    if (!d.platform || d.payload == null) return;
+    // 当场收到的照常处理。重放只补「当时还没人听」的那次，避免同一响应入库两遍。
+    const seen = duplicateCapture(d);
+    if (d.replay && seen) return;
+    const capturedMsg = { platform: d.platform, url: d.url, pageUrl: location.href, payload: d.payload };
     if (apiKind(d.url) === 'detail') {
       // 点开某个岗位：上报「当前岗位」，让面板实时切换
       const jobKey = jobKeyFromDetail(d.url, d.payload);
       if (jobKey) send(MSG.CURRENT_JOB, { platform: d.platform, jobKey });
       // 详情响应同样丢给归一化：命中列表结构则收录，否则被安全忽略
-      send(MSG.JOBS_CAPTURED, { platform: d.platform, url: d.url, payload: d.payload });
+      send(MSG.JOBS_CAPTURED, capturedMsg);
       return;
     }
     if (d.platform === 'boss') recordBossOnline(d.payload); // 记录每个岗位的 HR 在线状态
-    send(MSG.JOBS_CAPTURED, { platform: d.platform, url: d.url, payload: d.payload });
+    send(MSG.JOBS_CAPTURED, capturedMsg);
     captured++;
     flashBadge();
     scheduleReapplyFresh(); // 新一批卡片渲染后，若排序开着则重排
   });
+  // 把 document_start 阶段已经嗅到、当时还没人听的响应再投递一次。
+  try {
+    window.postMessage({ source: CHANNEL, type: 'replay-request' }, location.origin);
+  } catch {}
 
   // —— 识别当前详情页岗位标识 & 是否聊天页 ——
   function detectJobKey() {
@@ -254,8 +300,50 @@
   //  一键发送招呼语：DOM 自动化（等价于用户手动在聊天框打字并点发送）
   //  安全：仅在识别到聊天输入框时才填入；找不到就报错，绝不误填到搜索框。
   // ============================================================
+  function cssAttr(value) {
+    const text = String(value || '');
+    try {
+      if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(text);
+    } catch {}
+    return text.replace(/["\\]/g, '');
+  }
+
+  // 点列表里对应的卡片，让站点自己去拉详情。不拼接口、不带令牌。
+  function findJobCardLink(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) return null;
+    const safe = cssAttr(id);
+    const selectors = [
+      `a[href*="job_detail/${safe}"]`,
+      `a[href*="/${safe}.html"]`,
+      `a[href*="jobid=${safe}"]`,
+      `a[href*="jobId=${safe}"]`,
+    ];
+    for (const sel of selectors) {
+      let nodes = [];
+      try { nodes = document.querySelectorAll(sel); } catch { nodes = []; }
+      for (const el of nodes) {
+        if (isVisible(el)) return el;
+      }
+    }
+    let card = null;
+    try { card = document.querySelector(`[data-jobid="${safe}"]`); } catch { card = null; }
+    if (!card) return null;
+    const inner = card.matches && card.matches('a') ? card : card.querySelector('a[href]');
+    const target = inner || card;
+    return isVisible(target) ? target : null;
+  }
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.type !== MSG.SEND_GREETING) return false;
+    if (!msg) return false;
+    // 字面量与 MSG.FETCH_JOB_CARD 一致。先应答再点，避免点卡片触发导航时把响应掐掉。
+    if (msg.type === 'FETCH_JOB_CARD') {
+      const link = findJobCardLink(msg.jobId);
+      sendResponse({ ok: !!link, clicked: !!link });
+      if (link) setTimeout(() => { try { link.click(); } catch {} }, 80);
+      return true;
+    }
+    if (msg.type !== MSG.SEND_GREETING) return false;
     (async () => {
       try {
         const r = await fillAndSend(String(msg.text || ''));

@@ -1,4 +1,4 @@
-import { MSG, MODE } from '../common/constants.js';
+import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
 import { scoreProfile } from '../common/profile.js';
 import { applyFilters } from '../common/filters.js';
 import { VERDICT_LABELS, GREETING_LEVELS, normalizeGreetings, DIM_LABELS } from '../common/ai/prompts.js';
@@ -62,6 +62,9 @@ async function boot() {
       // 网站上点开了新岗位：取消手动固定，跟随网站，实时刷新当前岗位视图
       onCurrentJobChanged();
     }
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes[STORAGE_KEYS.jobs]) reload();
   });
 }
 

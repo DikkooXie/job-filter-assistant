@@ -7,6 +7,24 @@
   window[FLAG] = true;
 
   const CHANNEL = 'job-helper:sniffer';
+  const REPLAY = 'replay-request';
+  // 详情页的接口经常在 collector（document_idle）挂上监听之前就返回。
+  // 先记在这里，等 collector 发 replay-request 再投递一次，打开原岗位才补得上 JD。
+  const recent = [];
+
+  function deliver(message) {
+    try {
+      window.postMessage(message, location.origin);
+    } catch {}
+  }
+
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window) return;
+    const data = ev.data;
+    if (!data || data.source !== CHANNEL || data.type !== REPLAY) return;
+    const copy = recent.slice();
+    for (const message of copy) deliver({ ...message, replay: true });
+  });
 
   // 独立副本：内容脚本不能 import。列表与 platforms.matchPlatformApi 一致；
   // 详情覆盖 job/detail、pc/recommend/job/detail、job/card、geek/job/detail（collector 也按详情处理）。
@@ -32,9 +50,10 @@
   }
 
   function post(platform, url, payload) {
-    try {
-      window.postMessage({ source: CHANNEL, platform, url, payload }, location.origin);
-    } catch {}
+    const message = { source: CHANNEL, platform, url, payload };
+    recent.push(message);
+    if (recent.length > 30) recent.shift();
+    deliver(message);
   }
 
   // —— fetch ——
