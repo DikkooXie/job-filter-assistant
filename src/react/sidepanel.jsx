@@ -415,6 +415,8 @@ export default function Sidepanel() {
                       onToggle={() => { if (s.checked.has(item.uid)) s.checked.delete(item.uid); else s.checked.add(item.uid); update(); }}
                       onOpen={openDetail}
                       onStar={async () => { try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid })); update(); } catch (error) { notify(error.message, true); } }}
+                      onDelete={() => deleteJob(item, s, update, notify)}
+                      onDislike={() => dislikeJob(item, s, update, notify)}
                     />
                   ))}</div>}
               </div>
@@ -468,8 +470,7 @@ export default function Sidepanel() {
 
 const DETAIL_SUBS = ['info', 'match', 'company', 'resume', 'flow'];
 
-async function removeSelected(target, s, update, notify) {
-  if (!confirm(`确定删除岗位「${target.title}」？此操作无法撤销。`)) return;
+async function deleteJob(target, s, update, notify) {
   try {
     s.jobs = jobsForLibrary(await send(MSG.JOB_DELETE, { uid: target.uid }));
     s.checked.delete(target.uid);
@@ -477,3 +478,11 @@ async function removeSelected(target, s, update, notify) {
     update();
   } catch (error) { notify(error.message, true); }
 }
+
+async function removeSelected(target, s, update, notify) {
+  if (!confirm(`确定删除岗位「${target.title}」？此操作无法撤销。`)) return;
+  await deleteJob(target, s, update, notify);
+}
+
+// 不喜欢的原因写入画像属于 #26。列表这里只完成满行确认，确认后调用本函数，不另建存储或消息。
+function dislikeJob() {}

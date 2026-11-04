@@ -17,7 +17,7 @@ import {
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, librarySurface, returnFocusTarget, riskLines,
+  analysisGrade, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, librarySurface, returnFocusTarget, riskLines,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
@@ -1551,12 +1551,65 @@ test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () =>
   const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
   const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
   assert.match(browse, /\.continuous-list\s*\{[^}]*gap:\s*10px/);
-  assert.match(browse, /\.row-assessment\s*\{[^}]*background:\s*var\(--jp-inset\)/);
-  assert.match(browse, /\.row-assessment\s*\{[^}]*border:\s*0/);
-  assert.doesNotMatch(browse, /\.row-assessment\s*\{[^}]*border-top/);
+  assert.match(browse, /\.analysis\s*\{[^}]*background:\s*var\(--jp-inset\)/);
+  assert.match(browse, /\.analysis\s*\{[^}]*border:\s*0/);
+  assert.doesNotMatch(browse, /\.analysis\s*\{[^}]*border-top/);
   assert.doesNotMatch(browse, /\.job-row\s*\{[^}]*border-bottom/);
-  assert.match(views, /assessment-copy/);
-  assert.match(views, /className=\{`flow-link/);
+  assert.match(views, /className=\{`analysis/);
+  assert.doesNotMatch(views, /flow-link/);
+});
+
+test('列表分级按分数分五档，未分析没有格子', () => {
+  assert.equal(analysisGrade(null), null);
+  assert.equal(analysisGrade({}), null);
+  assert.equal(analysisGrade({ verdict: 'good' }), null);
+  assert.equal(analysisGrade({ score: '无' }), null);
+  assert.deepEqual(analysisGrade({ score: -4 }), { score: 0, filled: 1, tone: 'low', label: '偏低' });
+  assert.deepEqual(analysisGrade({ score: 20 }), { score: 20, filled: 1, tone: 'low', label: '偏低' });
+  assert.deepEqual(analysisGrade({ score: 21 }), { score: 21, filled: 2, tone: 'low', label: '偏低' });
+  assert.deepEqual(analysisGrade({ score: 40 }), { score: 40, filled: 2, tone: 'low', label: '偏低' });
+  assert.deepEqual(analysisGrade({ score: 60 }), { score: 60, filled: 3, tone: 'mid', label: '一般' });
+  assert.deepEqual(analysisGrade({ score: 62 }), { score: 62, filled: 4, tone: 'mid', label: '沟通确认' });
+  assert.deepEqual(analysisGrade({ score: 80 }), { score: 80, filled: 4, tone: 'mid', label: '沟通确认' });
+  assert.deepEqual(analysisGrade({ score: 80.6 }), { score: 81, filled: 5, tone: 'high', label: '匹配' });
+  assert.deepEqual(analysisGrade({ score: 86 }), { score: 86, filled: 5, tone: 'high', label: '匹配' });
+  assert.deepEqual(analysisGrade({ score: '62' }), { score: 62, filled: 4, tone: 'mid', label: '沟通确认' });
+});
+
+test('列表项方案 E 把打招呼放在分析块外面，未分析只有文案', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const analysisStart = views.indexOf('className={`analysis');
+  const actionsStart = views.indexOf('className="row-actions"', analysisStart);
+  const analysis = views.slice(analysisStart, actionsStart);
+  assert.ok(analysisStart > 0 && actionsStart > analysisStart);
+  assert.match(analysis, /尚未分析/);
+  assert.match(analysis, /score-num/);
+  assert.match(analysis, /segs/);
+  assert.doesNotMatch(analysis, /打招呼|flowEntryLabel|—/);
+  assert.ok(analysis.indexOf('尚未分析') > analysis.indexOf('grade ?'));
+  assert.match(views, /data-row-action="delete"/);
+  assert.match(views, /data-row-action="dislike"/);
+  assert.match(views, /data-row-action="greet"/);
+  assert.match(views, /flowEntryLabel\(progressStatus\)/);
+  assert.ok(views.indexOf('flowEntryLabel(progressStatus)') > actionsStart);
+  assert.match(browse, /skewX\(-18deg\)/);
+  assert.match(browse, /grid-template-rows:\s*0fr/);
+  assert.match(browse, /180ms/);
+  assert.match(browse, /200ms/);
+  assert.match(browse, /#2dd4bf/);
+  assert.match(browse, /Space Grotesk/);
+  assert.match(browse, /tabular-nums/);
+  assert.match(browse, /\.act-greet\s*\{[^}]*flex:\s*1 1 auto/);
+  assert.match(sidepanel, /onDelete=\{\(\) => deleteJob\(/);
+  assert.match(sidepanel, /onDislike=\{\(\) => dislikeJob\(/);
+  assert.match(sidepanel, /JOB_DELETE/);
+  assert.match(sidepanel, /确定删除岗位/);
+  const footerStart = views.indexOf('export function ListFooter');
+  assert.match(views.slice(footerStart), /准备未处理岗位/);
+  assert.match(views.slice(footerStart), /处理下一个/);
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {

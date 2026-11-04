@@ -1,4 +1,12 @@
 /* 岗位侧栏。变量只挂在 .job-panel，不写到 :root，避免污染设置页和浮窗。 */
+/*! Space Grotesk © 2020 The Space Grotesk Project Authors, SIL OFL 1.1. License: fonts/OFL.txt */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/space-grotesk-700.woff2") format("woff2");
+}
 .job-panel {
   --jp-surface: #f1f2f0;
   --jp-surface-2: #e9ecea;
@@ -20,6 +28,20 @@
   --jp-float-bg: #202d2a;
   --jp-float-ink: #edf4f0;
   --jp-shadow: 0 12px 36px rgba(17, 35, 29, .09);
+  --jp-grade-low: #5c6b76;
+  --jp-grade-mid: #9a6b0a;
+  --jp-seg-empty: color-mix(in srgb, var(--jp-ink) 14%, var(--jp-field));
+  --jp-seg-low: #6e7681;
+  --jp-seg-mid: #f0b429;
+  --jp-seg-high: var(--jp-accent);
+  --jp-del-hover-fg: var(--jp-danger);
+  --jp-del-hover-bg: var(--jp-danger-soft);
+  --jp-del-hover-bd: color-mix(in srgb, var(--jp-danger) 42%, transparent);
+  --jp-dislike-hover-fg: #9a3d58;
+  --jp-dislike-hover-bg: rgba(196, 75, 106, .12);
+  --jp-dislike-hover-bd: rgba(196, 75, 106, .4);
+  --jp-confirm-del: #cc4444;
+  --jp-confirm-dislike: #c44b6a;
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -47,10 +69,20 @@
     --jp-ink: #e7edf0;
     --jp-secondary: #b4c1c9;
     --jp-muted: #9baab4;
-    --jp-accent: #66c6b2;
-    --jp-accent-soft: rgba(102, 198, 178, .08);
-    --jp-accent-line: rgba(102, 198, 178, .32);
-    --jp-on-accent: #102b25;
+    --jp-accent: #2dd4bf;
+    --jp-accent-soft: rgba(45, 212, 191, .12);
+    --jp-accent-line: rgba(45, 212, 191, .34);
+    --jp-on-accent: #0f1419;
+    --jp-grade-low: #8b949e;
+    --jp-grade-mid: #f0b429;
+    --jp-seg-empty: #1f2833;
+    --jp-seg-low: #6e7681;
+    --jp-del-hover-fg: #f0a8a8;
+    --jp-del-hover-bg: #2a1a1a;
+    --jp-del-hover-bd: #5a3030;
+    --jp-dislike-hover-fg: #f0b4c8;
+    --jp-dislike-hover-bg: #2a1a22;
+    --jp-dislike-hover-bd: #5a3044;
     --jp-warn: #dbb477;
     --jp-danger: #e0818b;
     --jp-danger-soft: rgba(224, 129, 139, .08);
@@ -73,10 +105,20 @@
   --jp-ink: #e7edf0;
   --jp-secondary: #b4c1c9;
   --jp-muted: #9baab4;
-  --jp-accent: #66c6b2;
-  --jp-accent-soft: rgba(102, 198, 178, .08);
-  --jp-accent-line: rgba(102, 198, 178, .32);
-  --jp-on-accent: #102b25;
+  --jp-accent: #2dd4bf;
+  --jp-accent-soft: rgba(45, 212, 191, .12);
+  --jp-accent-line: rgba(45, 212, 191, .34);
+  --jp-on-accent: #0f1419;
+  --jp-grade-low: #8b949e;
+  --jp-grade-mid: #f0b429;
+  --jp-seg-empty: #1f2833;
+  --jp-seg-low: #6e7681;
+  --jp-del-hover-fg: #f0a8a8;
+  --jp-del-hover-bg: #2a1a1a;
+  --jp-del-hover-bd: #5a3030;
+  --jp-dislike-hover-fg: #f0b4c8;
+  --jp-dislike-hover-bg: #2a1a22;
+  --jp-dislike-hover-bd: #5a3044;
   --jp-warn: #dbb477;
   --jp-danger: #e0818b;
   --jp-danger-soft: rgba(224, 129, 139, .08);
@@ -383,7 +425,12 @@
   background: var(--jp-surface-2);
   min-width: 0;
 }
-.job-row:hover { background: color-mix(in srgb, var(--jp-ink) 4%, var(--jp-surface-2)); }
+.job-row:hover,
+.job-row.is-confirming {
+  background: color-mix(in srgb, var(--jp-ink) 4%, var(--jp-surface-2));
+  border-color: var(--jp-accent-line);
+  box-shadow: 0 0 0 1px var(--jp-accent-soft);
+}
 .job-row.just-viewed { background: var(--jp-accent-soft); border-color: var(--jp-accent-line); }
 .row-top { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
 .row-top > input { margin-top: 4px; width: 15px; height: 15px; flex-shrink: 0; }
@@ -442,79 +489,226 @@
   border-radius: 4px;
   padding: 2px 7px;
 }
-.row-assessment {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+.analysis {
   margin-top: 10px;
-  padding: 8px 10px;
+  padding: 8px 10px 7px;
   border: 0;
   border-radius: 6px;
   background: var(--jp-inset);
   min-width: 0;
 }
-.assessment-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-.match-summary {
+.analysis.bare { padding: 8px 10px; }
+.analysis-top {
   display: flex;
   align-items: center;
-  gap: 5px;
-  text-align: left;
-  min-height: 25px;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
-  color: var(--jp-secondary);
 }
-.match-result { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-.row-assessment .match-result strong { font-size: 13px; font-weight: 650; line-height: 1.2; letter-spacing: 0; }
-.row-assessment .match-result > span { font-size: 12px; }
-.match-summary.strong .match-result { color: var(--jp-accent); }
-.match-summary.good .match-result { color: var(--jp-secondary); }
-.match-summary.fair .match-result,
-.match-summary.weak .match-result { color: var(--jp-warn); }
-.match-summary.none { font-size: 12px; color: var(--jp-muted); }
-.match-summary.is-risk {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--jp-warn);
+.analysis.bare .analysis-top { justify-content: flex-start; }
+.analysis-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   text-align: left;
 }
-.match-summary.is-risk svg { width: 13px; height: 13px; margin-top: 1px; }
-.match-summary:hover:not(:disabled) { color: var(--jp-accent); }
-.match-summary.is-risk:hover:not(:disabled) { color: var(--jp-warn); }
-.match-reason {
+.segs {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.segs .cell {
+  width: 9px;
+  height: 10px;
+  background: var(--jp-seg-empty);
+  transform: skewX(-18deg);
+  border-radius: 1px;
+}
+.segs .cell.on.low { background: var(--jp-seg-low); }
+.segs .cell.on.mid { background: var(--jp-seg-mid); }
+.segs .cell.on.high { background: var(--jp-seg-high); }
+.grade {
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+.grade.low { color: var(--jp-grade-low); }
+.grade.mid { color: var(--jp-grade-mid); }
+.grade.high { color: var(--jp-seg-high); }
+.grade.muted { color: var(--jp-muted); font-weight: 550; }
+.job-panel .score-num {
+  font-family: "Space Grotesk", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  flex-shrink: 0;
+}
+.score-num.low { color: var(--jp-grade-low); }
+.score-num.mid { color: var(--jp-grade-mid); }
+.score-num.high { color: var(--jp-seg-high); }
+.analysis-sub {
+  display: block;
   width: 100%;
   max-width: 100%;
-  min-width: 0;
+  margin-top: 5px;
   padding: 0;
   text-align: left;
   font-size: 11px;
-  line-height: 1.65;
+  line-height: 1.35;
   color: var(--jp-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.flow-link {
+.analysis-main:hover:not(:disabled),
+.score-num:hover:not(:disabled),
+.analysis-sub:hover:not(:disabled) { color: var(--jp-accent); }
+.analysis-main:hover:not(:disabled) .grade { color: var(--jp-accent); }
+
+.row-actions {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: 0;
+  overflow: hidden;
+  transition: grid-template-rows 180ms ease, opacity 180ms ease, margin-top 180ms ease;
+}
+.row-actions-inner { min-height: 0; overflow: hidden; }
+.job-row:hover .row-actions,
+.row-actions:focus-within,
+.job-row.is-confirming .row-actions {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 8px;
+}
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding-top: 2px;
+}
+.job-panel .act-icon {
+  height: 28px;
+  flex: 0 0 28px;
+  width: 28px;
+  max-width: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--jp-line-strong);
+  background: var(--jp-field);
+  color: var(--jp-muted);
+  font-size: 12px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  min-height: 26px;
-  font-size: 12px;
-  color: var(--jp-accent);
+  justify-content: center;
+  gap: 0;
   white-space: nowrap;
+  overflow: hidden;
+  transition: flex-basis 200ms ease, max-width 200ms ease, width 200ms ease,
+    padding 200ms ease, gap 200ms ease, background 160ms ease, border-color 160ms ease,
+    color 160ms ease, flex-grow 200ms ease, opacity 200ms ease;
 }
-.flow-link svg { width: 12px; height: 12px; }
-.flow-link:hover { color: var(--jp-accent); }
-.flow-link.progressed { font-weight: 600; }
-.row-assessment .risk { margin-top: 0; }
+.job-panel .act-icon svg { width: 14px; height: 14px; }
+.act-icon .lbl {
+  display: inline-block;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  font-weight: 550;
+  transition: max-width 200ms ease, opacity 160ms ease;
+}
+.job-panel .act-icon:hover,
+.job-panel .act-icon:focus-visible {
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 7.5em;
+  padding: 0 10px;
+  gap: 5px;
+}
+.act-icon:hover .lbl,
+.act-icon:focus-visible .lbl { max-width: 4.5em; opacity: 1; }
+.job-panel .act-icon.del:hover,
+.job-panel .act-icon.del:focus-visible {
+  color: var(--jp-del-hover-fg);
+  background: var(--jp-del-hover-bg);
+  border-color: var(--jp-del-hover-bd);
+}
+.job-panel .act-icon.dislike:hover,
+.job-panel .act-icon.dislike:focus-visible {
+  color: var(--jp-dislike-hover-fg);
+  background: var(--jp-dislike-hover-bg);
+  border-color: var(--jp-dislike-hover-bd);
+}
+.job-panel .act-greet {
+  height: 28px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 0;
+  font-size: 12px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--jp-on-accent);
+  background: var(--jp-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  transition: flex-grow 200ms ease, flex-basis 200ms ease, opacity 200ms ease,
+    max-width 200ms ease, padding 200ms ease, min-width 200ms ease;
+}
+.job-panel .act-greet svg { width: 12px; height: 12px; }
+.job-panel .act-greet:hover:not(:disabled) { background: color-mix(in srgb, var(--jp-accent) 88%, var(--jp-ink)); }
+.act-greet.progressed { font-weight: 700; }
+.job-panel .actions-row.is-confirm-delete .act-icon.del,
+.job-panel .actions-row.is-confirm-dislike .act-icon.dislike {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: none;
+  padding: 0 12px;
+  gap: 6px;
+  justify-content: center;
+  color: #fff;
+}
+.job-panel .actions-row.is-confirm-delete .act-icon.del {
+  background: var(--jp-confirm-del);
+  border-color: var(--jp-confirm-del);
+}
+.job-panel .actions-row.is-confirm-dislike .act-icon.dislike {
+  background: var(--jp-confirm-dislike);
+  border-color: var(--jp-confirm-dislike);
+}
+.actions-row.is-confirm-delete .act-icon.del .lbl,
+.actions-row.is-confirm-dislike .act-icon.dislike .lbl {
+  max-width: 4.5em;
+  opacity: 1;
+}
+.actions-row.is-confirm-delete .act-icon.dislike,
+.actions-row.is-confirm-delete .act-greet,
+.actions-row.is-confirm-dislike .act-icon.del,
+.actions-row.is-confirm-dislike .act-greet {
+  flex: 0 0 0px;
+  width: 0;
+  max-width: 0;
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+  opacity: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 .risk, .exclusion { min-width: 0; }
 .risk {
   display: flex;

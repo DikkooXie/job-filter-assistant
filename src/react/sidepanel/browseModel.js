@@ -84,3 +84,17 @@ export function exclusionReasons(job) {
 export function platformLabel(platform) {
   return platform === 'boss' ? 'BOSS' : '51job';
 }
+
+// 列表方案 E 的分级展示。只读已有 match.score，不另存档位。
+// ≤20 一格、≤40 两格为「偏低」；≤60 三格「一般」；≤80 四格「沟通确认」；高于 80 五格「匹配」。
+export function analysisGrade(match) {
+  if (!match || match.score == null || match.score === '') return null;
+  const raw = Number(match.score);
+  if (!Number.isFinite(raw)) return null;
+  const score = Math.min(100, Math.max(0, Math.round(raw)));
+  if (score <= 20) return { score, filled: 1, tone: 'low', label: '偏低' };
+  if (score <= 40) return { score, filled: 2, tone: 'low', label: '偏低' };
+  if (score <= 60) return { score, filled: 3, tone: 'mid', label: '一般' };
+  if (score <= 80) return { score, filled: 4, tone: 'mid', label: '沟通确认' };
+  return { score, filled: 5, tone: 'high', label: '匹配' };
+}
