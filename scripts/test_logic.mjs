@@ -19,6 +19,7 @@ import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.
 import {
   exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, librarySurface, returnFocusTarget, riskLines,
 } from '../src/react/sidepanel/browseModel.js';
+import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
@@ -1501,6 +1502,38 @@ test('搜索无结果不改变失败态；风险和排除原因分开', () => {
   assert.deepEqual(riskLines(risky), ['含「驻场」，沟通时确认相关安排', '要求独立交付，沟通时确认是否接受应届生']);
   assert.deepEqual(exclusionReasons({ _filter: { keep: false, reasons: ['命中排除词：外包'] } }), ['命中排除词：外包']);
   assert.deepEqual(exclusionReasons({ _filter: { keep: true, reasons: ['经验档位不在偏好内'] } }), []);
+});
+
+test('岗位库只采用已收录列表，空结果不补演示岗位', () => {
+  assert.equal(BOSS_BROWSE_URL, 'https://www.zhipin.com/web/geek/jobs');
+  assert.throws(() => jobsForLibrary(null), /岗位库数据无效/);
+  assert.throws(() => jobsForLibrary({ jobs: [] }), /岗位库数据无效/);
+  assert.deepEqual(jobsForLibrary([]), []);
+  assert.deepEqual(jobsForLibrary([null, { title: '没有标识' }]), []);
+  const captured = [{ uid: 'boss:encrypt-1', platform: 'boss', title: '前端开发', company: '真实公司', lastSeenAt: '2026-11-04T00:00:00.000Z' }];
+  assert.deepEqual(jobsForLibrary(captured), captured);
+  const visible = filterVisibleJobs(jobsForLibrary(captured), { search: '前端', platform: 'boss', verdict: 'all', sort: 'recent' });
+  assert.deepEqual(visible.map((job) => job.uid), ['boss:encrypt-1']);
+  assert.deepEqual(filterVisibleJobs(jobsForLibrary([]), { search: '', platform: 'all', verdict: 'all', sort: 'recent' }), []);
+  assert.equal(librarySurface({ loading: false, loadError: '', jobCount: jobsForLibrary([]).length }), 'empty');
+});
+
+test('正式侧栏读取岗位库，不引用预览演示数据', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const entry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel.jsx'), 'utf8');
+  const previewEntry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel-browse-preview.jsx'), 'utf8');
+  const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
+  assert.match(sidepanel, /JOB_LIST_REQUEST/);
+  assert.match(sidepanel, /jobsForLibrary/);
+  assert.match(sidepanel, /onBrowseBoss=\{openBossBrowse\}/);
+  assert.match(views, /去 BOSS 直聘浏览/);
+  assert.match(views, /看到的岗位会自动收录到这里/);
+  assert.doesNotMatch(sidepanel, /browse-preview-chrome|青禾科技|boss:s1|example\.invalid/);
+  assert.doesNotMatch(entry, /browse-preview-chrome/);
+  assert.match(previewEntry, /browse-preview-chrome/);
+  assert.doesNotMatch(vite, /sidepanel-browse-preview/);
 });
 
 // ---------- 汇总 ----------

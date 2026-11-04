@@ -206,7 +206,7 @@ export function ListFooter({
   );
 }
 
-export function SurfaceState({ kind, message, viewChanged, onRetry, onReset }) {
+export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onBrowseBoss }) {
   if (kind === 'loading') {
     return (
       <div className="surface-state" role="status">
@@ -229,7 +229,8 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset }) {
     return (
       <div className="surface-state">
         <h2>还没有收录岗位</h2>
-        <p>打开 BOSS直聘 或 前程无忧 浏览岗位即可自动收录。</p>
+        <p>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。在前程无忧浏览也会收录。</p>
+        <button type="button" className="jp-btn jp-btn-primary" onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
       </div>
     );
   }
