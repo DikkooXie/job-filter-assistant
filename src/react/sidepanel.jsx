@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
-import { scoreProfile } from '../common/profile.js';
+import { appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
 import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
@@ -508,7 +508,26 @@ export default function Sidepanel() {
             catch (error) { notify(`记录失败：${error.message}`, true); }
           }}
           onOpenOriginal={() => job?.url && chrome.tabs.create({ url: job.url })}
+          onStar={async () => {
+            if (!job) return;
+            try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: job.uid })); update(); }
+            catch (error) { notify(error.message, true); }
+          }}
+          onDislike={() => job && dislikeJob(job, s, update, notify)}
           onDelete={() => job && removeSelected(job, s, update, notify)}
+          onAcceptRisk={async (text) => {
+            try {
+              const current = s.profile?.preference ? s.profile : emptyProfile();
+              const notes = appendPreferenceNote(current.preference?.notes, text);
+              const next = { ...current, preference: { ...current.preference, notes } };
+              s.profile = await send(MSG.PROFILE_SAVE, { profile: next });
+              notify('已写入画像');
+              return true;
+            } catch (error) {
+              notify(error.message || '写入失败', true);
+              return false;
+            }
+          }}
           onProfileSettings={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}
           dev={devBuild}
         />

@@ -114,6 +114,18 @@ export function analysisGrade(match) {
   return { score, filled: 5, tone: 'high', label: '匹配' };
 }
 
+// 岗位 Tab 摘要卡。没有分数时不造分级、不造警示计数。
+export function analysisSummary(job) {
+  const grade = analysisGrade(job?.match);
+  if (!grade) return { grade: null, summary: '', warnLabel: '' };
+  const count = riskLines(job).length;
+  return {
+    grade,
+    summary: String(job.match?.summary || ''),
+    warnLabel: count ? `含 ${count} 项警示` : '',
+  };
+}
+
 // 新收录胶囊展开后自动收回的时间。点击胶囊或滚动列表会提前收回。
 export const FRESH_CAPSULE_MS = 8000;
 // 胶囊收回后，新岗位行在列表里连续可见这么久，就清掉这一条 NEW。

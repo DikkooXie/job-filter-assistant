@@ -12,13 +12,13 @@ import { loadSettings, mergeSettings, saveSettings } from '../src/common/setting
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { mergeJobs } from '../src/common/jobsStore.js';
-import { emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
+import { appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import {
   MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisGrade, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
+  analysisGrade, analysisSummary, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
@@ -621,6 +621,25 @@ test('规避关键词命中由代码先匹配并写进提示词', () => {
 test('未配置规避关键词时不输出命中区块', () => {
   const messages = buildMatchPrompt(emptyProfile(), { title: '前端', description: '外包项目' });
   assert.ok(!messages[1].content.includes('【雷点字面命中】'));
+});
+
+test('可以接受的说明追加进画像备注，不改字段、不重复', () => {
+  assert.equal(appendPreferenceNote('', '  可以接受异地  '), '可以接受异地');
+  assert.equal(appendPreferenceNote('已有说明', '可以接受异地'), '已有说明\n可以接受异地');
+  assert.equal(appendPreferenceNote('已有说明\n可以接受异地', '可以接受异地'), '已有说明\n可以接受异地');
+  assert.equal(appendPreferenceNote('已有说明', '   '), '已有说明');
+  const saved = sanitizeProfile({ preference: { notes: appendPreferenceNote('保留', '可以接受：城市不在目标范围'), dealbreakers: ['出差'] } });
+  assert.equal(saved.preference.notes, '保留\n可以接受：城市不在目标范围');
+  assert.deepEqual(saved.preference.dealbreakers, ['出差']);
+});
+
+test('匹配提示要求尊重画像里已经接受的事项', () => {
+  const profile = emptyProfile();
+  profile.preference.notes = '可以接受：城市不在目标范围';
+  const system = buildMatchPrompt(profile, { title: '前端' })[0].content;
+  assert.ok(system.includes('preference.notes'));
+  assert.ok(system.includes('可以接受'));
+  assert.ok(system.includes('不要写入 risks'));
 });
 
 test('历史雷点合并去重，编辑时删除两处并保留其他数据', () => {
@@ -1912,6 +1931,51 @@ test('列表分级按分数分五档，未分析没有格子', () => {
   assert.deepEqual(analysisGrade({ score: 80.6 }), { score: 81, filled: 5, tone: 'high', label: '匹配' });
   assert.deepEqual(analysisGrade({ score: 86 }), { score: 86, filled: 5, tone: 'high', label: '匹配' });
   assert.deepEqual(analysisGrade({ score: '62' }), { score: 62, filled: 4, tone: 'mid', label: '沟通确认' });
+});
+
+test('岗位摘要不造假分，有分析时才给警示计数', () => {
+  assert.deepEqual(analysisSummary(null), { grade: null, summary: '', warnLabel: '' });
+  assert.deepEqual(analysisSummary({ match: null, _filter: { risks: ['驻场'] } }), { grade: null, summary: '', warnLabel: '' });
+  const graded = analysisSummary({
+    match: { score: 42, summary: '有工具经验，城市不足。', risks: ['城市不在目标范围'] },
+    _filter: { risks: ['驻场'] },
+  });
+  assert.equal(graded.grade.label, '一般');
+  assert.equal(graded.grade.filled, 3);
+  assert.equal(graded.summary, '有工具经验，城市不足。');
+  assert.equal(graded.warnLabel, '含 2 项警示');
+  assert.equal(analysisSummary({ match: { score: 90, summary: '契合', risks: [] } }).warnLabel, '');
+});
+
+test('详情分析 Tab 回吃匹配块，岗位不再挂警示墙', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  assert.match(views, /\['match', '分析'\]/);
+  assert.doesNotMatch(views, /\['match', '匹配'\]/);
+  const infoStart = views.indexOf("sub === 'info'");
+  const matchStart = views.indexOf("sub === 'match'");
+  const info = views.slice(infoStart, matchStart);
+  assert.match(info, /JobSummaryCard/);
+  assert.match(views, /查看完整分析/);
+  assert.doesNotMatch(info, /可以接受/);
+  assert.doesNotMatch(info, /riskLines\(job\)\.map/);
+  const analysis = views.slice(matchStart, views.indexOf("sub === 'company'"));
+  assert.match(analysis, /AnalysisBody/);
+  assert.match(views, /契合点/);
+  assert.match(views, /差距 \/ 需补齐/);
+  assert.match(views, /风险提示/);
+  assert.match(views, /可以接受/);
+  assert.match(views, /重新分析/);
+  assert.match(views, /尚未分析/);
+  assert.match(views, /打开原岗位/);
+  const link = browse.match(/\.job-panel \.tune-link \{[^}]*\}/)?.[0] || '';
+  assert.match(link, /background:\s*transparent/);
+  assert.match(link, /color:\s*var\(--jp-accent\)/);
+  assert.match(link, /max-width:\s*0/);
+  assert.match(browse, /--jp-lift:\s*rgba\(255,\s*255,\s*255,\s*0\.04\)/);
+  assert.match(browse, /\.detail-warn-row:hover,\s*\.detail-warn-row:focus-within\s*\{\s*background:\s*var\(--jp-lift\)/);
+  assert.doesNotMatch(browse, /\.detail-warn-row:hover[^{]*\{[^}]*background:\s*(?:#(?:0[0-9a-f]{2,}|1c6b5e|2dd4bf)|var\(--jp-accent\))/);
 });
 
 test('列表项方案 E 把打招呼放在分析块外面，未分析只有文案', () => {
