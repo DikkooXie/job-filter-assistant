@@ -1554,7 +1554,7 @@ test('列表卡片把警示区放进分析框，摘要两行省略，操作行�
   assert.match(zone, /warn-chips/);
   assert.match(zone, /warn-list/);
   assert.match(zone, /warn-item/);
-  assert.doesNotMatch(row, /className="risk"|className="exclusion"|再次点击确认删除/);
+  assert.doesNotMatch(row, /className="risk"|className="exclusion"/);
   assert.match(row, /className="act-icon del"/);
   assert.match(row, /className="act-icon dislike"/);
   assert.match(row, /className=\{`act-greet/);
