@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ArrowLeft, ChevronRight, CircleAlert, ExternalLink, Filter, Search, Star, X } from 'lucide-react';
+import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, ExternalLink, Filter, Search, Settings, Star, X } from 'lucide-react';
 import { GREETING_LEVELS, VERDICT_LABELS, DIM_LABELS } from '../../common/ai/prompts.js';
 import { exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines } from './browseModel.js';
 
@@ -61,8 +61,12 @@ export function ListHeader({
       <div className="app-heading">
         <h1>岗位库{dev && <span className="dev-mark">dev</span>}<span aria-label={`显示 ${shown} 个，共 ${total} 个`}>{shown === total ? total : `${shown} / ${total}`}</span></h1>
         <div className="heading-actions">
-          <button type="button" className="current-job" onClick={onOpenCurrent}>当前岗位<ExternalLink aria-hidden="true" /></button>
-          <button type="button" className="text-action" onClick={onOptions}>设置</button>
+          <button type="button" className="header-icon" aria-label="当前岗位" title="当前岗位" onClick={onOpenCurrent}><Briefcase aria-hidden="true" /></button>
+          <button type="button" className={`header-icon filter-trigger${filterCount ? ' has-filters' : ''}`} aria-label={filterCount ? `筛选，${filterCount} 个条件` : '筛选'} title="筛选" onClick={onOpenFilters}>
+            <Filter aria-hidden="true" />
+            {filterCount > 0 && <span className="filter-count">{filterCount}</span>}
+          </button>
+          <button type="button" className="header-icon" aria-label="设置" title="设置" onClick={onOptions}><Settings aria-hidden="true" /></button>
         </div>
       </div>
       <div className="search-line">
@@ -71,9 +75,6 @@ export function ListHeader({
           <input className="search-input" aria-label="搜索岗位、公司或技能" placeholder="搜索岗位、公司或技能" value={view.search} onChange={(event) => onSearch(event.target.value)} />
           {view.search && <button type="button" className="clear-search" aria-label="清除搜索" onClick={onClearSearch}><X aria-hidden="true" /></button>}
         </label>
-        <button type="button" className={`filter-trigger${filterCount ? ' has-filters' : ''}`} aria-label={filterCount ? `筛选，${filterCount} 个条件` : '筛选'} onClick={onOpenFilters}>
-          <Filter aria-hidden="true" />{filterCount ? `筛选 ${filterCount}` : '筛选'}
-        </button>
       </div>
       <div className="view-toolbar">
         <label className="local-filter">
@@ -265,15 +266,14 @@ function FlowStatus({ status }) {
           );
         })}
       </ol>
-      <p className="fine-print">这里只展示已经记下的进度。打开沟通不会自动发送。</p>
     </div>
   );
 }
 
 export function JobDetail({
   mode, job, sub, followLive, progressStatus, greeting, greetLevel, advice, scoring, tailoring,
-  hasProviders, hasProfile, dev, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onGreetLevel, onCopy,
-  onSend, onMarkSent, onOpenOriginal, onDelete, onOptions,
+  hasProfile, dev, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onGreetLevel, onCopy,
+  onSend, onMarkSent, onOpenOriginal, onDelete, onProfileSettings,
 }) {
   const titleRef = useRef(null);
   useEffect(() => { if (mode === 'job') titleRef.current?.focus(); }, [job?.uid, mode]);
@@ -339,8 +339,8 @@ export function JobDetail({
                   )}
                   {riskLines(job).map((line) => <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>)}
                   <div className="detail-actions">
-                    {job.url && <button type="button" className="jp-btn" onClick={onOpenOriginal}><ExternalLink aria-hidden="true" />打开原岗位</button>}
-                    <button type="button" className="text-action danger" onClick={onDelete}>删除</button>
+                    {job.url && <button type="button" className="jp-btn jp-btn-primary" onClick={onOpenOriginal}><ExternalLink aria-hidden="true" />打开原岗位</button>}
+                    <button type="button" className="jp-btn jp-btn-danger" onClick={onDelete}>删除</button>
                   </div>
                 </>
               )}
@@ -356,7 +356,7 @@ export function JobDetail({
                 ) : (
                   <>
                     <h3>还没有匹配分析</h3>
-                    <p>已保存的岗位里还没有这份结果。分析会使用你配置的 AI 接口。</p>
+                    <p>已保存的岗位里还没有这份结果。分析会使用你配置的模型接口。</p>
                     <div className="detail-actions">
                       <button type="button" className="jp-btn jp-btn-primary" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '分析匹配'}</button>
                     </div>
@@ -378,9 +378,8 @@ export function JobDetail({
                 </>
               )}
               {sub === 'resume' && (
-                !hasProviders ? <p>尚未配置 AI 接口。<button type="button" className="text-action" onClick={onOptions}>前往设置</button></p>
-                  : !hasProfile ? <p>简历建议基于个人画像生成。<button type="button" className="text-action" onClick={onOptions}>前往设置完善画像</button></p>
-                    : (
+                !hasProfile ? <p>简历建议基于个人画像生成。<button type="button" className="text-action" onClick={onProfileSettings}>前往设置完善画像</button></p>
+                  : (
                       <>
                         <div className="section-head">
                           <h3>简历定制建议</h3>
@@ -412,8 +411,7 @@ export function JobDetail({
               {sub === 'flow' && (
                 <>
                   <FlowStatus status={progressStatus} />
-                  {!hasProviders ? <p>尚未配置 AI 接口。<button type="button" className="text-action" onClick={onOptions}>前往设置</button></p>
-                    : !job.match ? (
+                  {!job.match ? (
                       <div className="detail-actions">
                         <p>还没有可编辑的招呼语。可以先做一次匹配分析。</p>
                         <button type="button" className="jp-btn jp-btn-primary" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '生成招呼语'}</button>
@@ -500,6 +498,16 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }) {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+export function ModelNotice({ onOpenSettings, onDismiss }) {
+  return (
+    <div className="model-notice" role="status">
+      <span>尚未配置模型接口。</span>
+      <button type="button" className="text-action" onClick={onOpenSettings}>前往设置</button>
+      <button type="button" className="model-notice-close" aria-label="关闭提示" onClick={onDismiss}><X aria-hidden="true" /></button>
     </div>
   );
 }

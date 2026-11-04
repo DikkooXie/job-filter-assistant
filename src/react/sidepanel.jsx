@@ -7,7 +7,7 @@ import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
 import { filterVisibleJobs, librarySurface, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
-import { FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
+import { FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
 import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -71,6 +71,7 @@ export default function Sidepanel() {
     view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), greetings: new Map(), advice: new Map(),
     saveTimers: new Map(), batchBusy: false, reloadVersion: 0, noticeTimer: null, notice: '', error: false, loading: true,
+    modelNotice: false,
   };
   const s = state.current;
   const update = () => redraw();
@@ -160,9 +161,15 @@ export default function Sidepanel() {
     await chrome.storage.local.set({ [progressKey(uid)]: value });
     s.progress.set(uid, value);
   };
+  const showModelNotice = () => { s.modelNotice = true; update(); };
+  const requireProviders = () => {
+    if (s.providers.length) return true;
+    showModelNotice();
+    return false;
+  };
   const analyze = async (job, force = true) => {
     if (s.scoring.has(job.uid)) return false;
-    if (!s.providers.length) { notify('请先在设置中配置 AI 接口', true); send(MSG.OPEN_OPTIONS); return false; }
+    if (!requireProviders()) return false;
     s.scoring.add(job.uid); update();
     try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST)); notify('分析完成'); return true; }
     catch (error) { notify(error.message, true); return false; }
@@ -173,6 +180,7 @@ export default function Sidepanel() {
   };
   const tailor = async (job) => {
     if (s.tailoring.has(job.uid)) return;
+    if (!requireProviders()) return;
     s.tailoring.add(job.uid); update();
     try { s.advice.set(job.uid, await send(MSG.AI_TAILOR_RESUME, { uid: job.uid, job })); notify('简历建议已生成'); }
     catch (error) { notify(`生成失败：${error.message}`, true); }
@@ -194,7 +202,7 @@ export default function Sidepanel() {
   };
   const batchAnalyze = async (list, recordPrepared = false) => {
     if (s.batchBusy || !list.length) return;
-    if (!s.providers.length) { notify('请先在设置中配置 AI 接口', true); send(MSG.OPEN_OPTIONS); return; }
+    if (!requireProviders()) return;
     s.batchBusy = true;
     const uids = list.map((job) => job.uid);
     uids.forEach((uid) => s.scoring.add(uid));
@@ -343,6 +351,12 @@ export default function Sidepanel() {
           <button type="button" className="jp-btn" onClick={reload}>重新加载</button>
         </div>
       )}
+      {s.modelNotice && (
+        <ModelNotice
+          onOpenSettings={() => send(MSG.OPEN_OPTIONS, { page: 'ai' })}
+          onDismiss={() => { s.modelNotice = false; update(); }}
+        />
+      )}
       {s.screen === 'detail' ? (
         <JobDetail
           mode={detailMode}
@@ -355,7 +369,6 @@ export default function Sidepanel() {
           advice={job ? s.advice.get(job.uid) : null}
           scoring={!!job && s.scoring.has(job.uid)}
           tailoring={!!job && s.tailoring.has(job.uid)}
-          hasProviders={s.providers.length > 0}
           hasProfile={hasProfile}
           onBack={backToList}
           onSub={(sub) => setView({ sub })}
@@ -381,7 +394,7 @@ export default function Sidepanel() {
           }}
           onOpenOriginal={() => job?.url && chrome.tabs.create({ url: job.url })}
           onDelete={() => job && removeSelected(job, s, update, notify)}
-          onOptions={() => send(MSG.OPEN_OPTIONS)}
+          onProfileSettings={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}
           dev={devBuild}
         />
       ) : surface === 'loading' ? <SurfaceState kind="loading" />
@@ -389,8 +402,7 @@ export default function Sidepanel() {
           : surface === 'empty' ? <SurfaceState kind="empty" onBrowseBoss={openBossBrowse} />
             : (
               <div className="list-scroll" ref={listRef}>
-                {profileScore < 40 && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS)}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
-                {profileScore >= 40 && !s.providers.length && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS)}>尚未配置 AI 接口，点此前往设置</button></p>}
+                {profileScore < 40 && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
                 {list.length === 0
                   ? <SurfaceState kind="nomatch" viewChanged={viewChanged} onReset={resetView} />
                   : <div className="continuous-list">{list.map((item) => (

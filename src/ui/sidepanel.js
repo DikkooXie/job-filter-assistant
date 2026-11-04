@@ -31,6 +31,7 @@ const tailorCache = new Map(); // uid -> 简历定制建议（仅会话态，不
 const tailoring = new Set(); // 正在生成简历建议的 uid
 const checked = new Set(); // 岗位库中勾选的 uid（批量操作）
 let batchBusy = false; // 批量分析进行中（禁用按钮 + 防重入）
+let modelNotice = false;
 const progress = new Map();
 const progressKey = (uid) => `job-progress-v1:${encodeURIComponent(uid)}`;
 const progressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -155,6 +156,8 @@ function render() {
 
   if (view.tab === 'current') {
     app.appendChild(renderTopBar(0, 'current'));
+    const notice = modelNoticeBar();
+    if (notice) app.appendChild(notice);
     app.appendChild(renderCurrent());
     return;
   }
@@ -162,19 +165,15 @@ function render() {
   const list = visibleJobs();
   app.appendChild(renderTopBar(list.length, 'library'));
 
+  const notice = modelNoticeBar();
+  if (notice) app.appendChild(notice);
+
   const ps = scoreProfile(profile);
   if (ps.score < 40) {
     app.appendChild(
-      h('div', { class: 'profile-hint', onclick: () => send(MSG.OPEN_OPTIONS) }, [
+      h('div', { class: 'profile-hint', onclick: () => send(MSG.OPEN_OPTIONS, { page: 'profile' }) }, [
         h('span', { text: '💡' }),
         h('span', { text: `画像完整度 ${ps.score}%，完善后 AI 匹配更准 →` }),
-      ]),
-    );
-  } else if (!providers.length) {
-    app.appendChild(
-      h('div', { class: 'profile-hint', onclick: () => send(MSG.OPEN_OPTIONS) }, [
-        h('span', { text: '🔌' }),
-        h('span', { text: '尚未配置 AI 接口，点此前往设置 →' }),
       ]),
     );
   }
@@ -557,13 +556,21 @@ function renderCompany(panel, job) {
   );
 }
 
+function showModelNotice() {
+  modelNotice = true;
+  render();
+}
+
+function modelNoticeBar() {
+  if (!modelNotice) return null;
+  return h('div', { class: 'model-notice', role: 'status' }, [
+    h('span', { text: '尚未配置模型接口。' }),
+    h('button', { class: 'linklike', text: '前往设置', onclick: () => send(MSG.OPEN_OPTIONS, { page: 'ai' }) }),
+    h('button', { class: 'linklike', text: '关闭', 'aria-label': '关闭提示', onclick: () => { modelNotice = false; render(); } }),
+  ]);
+}
+
 function renderGreeting(panel, job) {
-  if (!providers.length) {
-    panel.appendChild(
-      h('div', { class: 'cur-hint' }, [h('span', { text: '尚未配置 AI 接口，' }), h('button', { class: 'linklike', text: '前往设置', onclick: () => send(MSG.OPEN_OPTIONS) })]),
-    );
-    return;
-  }
   if (!job.match) {
     panel.appendChild(
       h('div', { class: 'cur-hint' }, [
@@ -658,12 +665,6 @@ function renderGreeting(panel, job) {
 
 // —— 简历建议子页：基于画像 + 该岗位 JD，给出定制简历的建议（只建议、不落库） ——
 function renderResumeAdvice(panel, job) {
-  if (!providers.length) {
-    panel.appendChild(
-      h('div', { class: 'cur-hint' }, [h('span', { text: '尚未配置 AI 接口，' }), h('button', { class: 'linklike', text: '前往设置', onclick: () => send(MSG.OPEN_OPTIONS) })]),
-    );
-    return;
-  }
   const hasProfile = profile && scoreProfile(profile).score > 0;
   if (!hasProfile) {
     panel.appendChild(
@@ -722,7 +723,7 @@ function renderResumeAdvice(panel, job) {
 async function tailorAdvice(job) {
   if (tailoring.has(job.uid)) return;
   if (!providers.length) {
-    toast('尚未配置 AI 接口，请先到设置页添加', true);
+    showModelNotice();
     return;
   }
   tailoring.add(job.uid);
@@ -880,8 +881,7 @@ async function regenerateGreeting(job) {
 async function analyze(job, force) {
   if (scoring.has(job.uid)) return;
   if (!providers.length) {
-    toast('请先在设置中配置 AI 接口', true);
-    send(MSG.OPEN_OPTIONS);
+    showModelNotice();
     return;
   }
   scoring.add(job.uid);
@@ -935,8 +935,7 @@ async function prepareUnprocessed(list) {
 async function batchAnalyze(list, recordPrepared = false) {
   if (batchBusy) return;
   if (!providers.length) {
-    toast('请先在设置中配置 AI 接口', true);
-    send(MSG.OPEN_OPTIONS);
+    showModelNotice();
     return;
   }
   if (!list.length) return;

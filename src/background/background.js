@@ -14,6 +14,7 @@ import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js
 import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor } from '../common/ai/prompts.js';
 import { redactText } from '../common/ai/privacy.js';
 import { autoScoreUids } from '../common/filters.js';
+import { optionsUrlHash } from '../common/optionsLink.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
 const tabContext = new Map();
@@ -133,12 +134,33 @@ async function handle(msg, sender) {
 
     // ---------- 面板控制 ----------
     case MSG.OPEN_OPTIONS:
-      chrome.runtime.openOptionsPage();
-      return { ok: true };
+      return openOptions(msg.page);
 
     default:
       throw new Error(`未知消息类型：${msg.type}`);
   }
+}
+
+// 齿轮打开设置页本身；「前往设置」传入 page，落到对应分组。消息类型名仍是 OPEN_OPTIONS。
+async function openOptions(page) {
+  const base = chrome.runtime.getURL('options.html');
+  const requested = optionsUrlHash(page, '');
+  if (!requested) {
+    await chrome.runtime.openOptionsPage();
+    return { ok: true };
+  }
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find((tab) => typeof tab.url === 'string' && tab.url.startsWith(base));
+  if (!existing) {
+    await chrome.tabs.create({ url: `${base}${requested}` });
+    return { ok: true };
+  }
+  const next = optionsUrlHash(page, existing.url || '');
+  await chrome.tabs.update(existing.id, { active: true, url: `${base}${next}` });
+  if (existing.windowId != null) {
+    try { await chrome.windows.update(existing.windowId, { focused: true }); } catch { /* 无 windows 权限时标签仍会被激活 */ }
+  }
+  return { ok: true };
 }
 
 // —— 岗位收录 ——
