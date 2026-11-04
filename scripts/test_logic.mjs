@@ -1161,25 +1161,36 @@ test('稳定通道拒绝 prerelease 和 draft，预览通道接受 prerelease', 
     assets: [{ name: 'a.zip', browser_download_url: 'https://evil.example/a.zip' }],
   }), { channel: 'preview' }), /本项目/);
 });
-test('预览列表取第一个带 zip 的 prerelease，没有则暂无预览版', () => {
+test('预览列表按版本号取最高的带 zip prerelease，没有则暂无预览版', () => {
   const zip = (tag) => ({ name: 'a.zip', browser_download_url: `https://github.com/DikkooXie/job-filter-assistant/releases/download/${tag}/a.zip` });
-  const draft = release({ tag_name: 'v1.0.3.9', prerelease: true, draft: true, assets: [zip('v1.0.3.9')] });
+  const pre = (tag, over = {}) => release({ tag_name: tag, prerelease: true, assets: [zip(tag)], ...over });
+  // GitHub /releases 按 tag_name 字符串降序：.9 … .2 在 .10 前面
+  const githubOrder = [
+    pre('v1.0.3.9'),
+    pre('v1.0.3.8'),
+    pre('v1.0.3.2'),
+    pre('v1.0.3.10'),
+    pre('v1.0.3.1'),
+  ];
+  const draft = pre('v1.0.3.11', { draft: true });
   const stable = release({ tag_name: 'v1.0.3', prerelease: false, assets: [zip('v1.0.3')] });
-  const noZip = release({ tag_name: 'v1.0.3.1', prerelease: true, assets: [] });
-  const first = release({ tag_name: 'v1.0.3.2', prerelease: true, assets: [zip('v1.0.3.2')] });
-  const later = release({ tag_name: 'v1.0.3.3', prerelease: true, assets: [zip('v1.0.3.3')] });
-  assert.equal(selectPreviewRelease([draft, stable, noZip, first, later]).version, '1.0.3.2');
+  const noZip = release({ tag_name: 'v1.0.3.12', prerelease: true, assets: [] });
+  assert.equal(selectPreviewRelease([draft, stable, noZip, ...githubOrder]).version, '1.0.3.10');
+  assert.equal(selectPreviewRelease([githubOrder[3], githubOrder[0]]).version, '1.0.3.10');
+  assert.equal(selectPreviewRelease([]), null);
+  assert.equal(selectPreviewRelease([stable, draft, noZip]), null);
   const empty = resolvePreviewCheck([stable, draft, noZip], '1.0.3');
   assert.equal(empty.previewUnavailable, true);
   assert.equal(empty.hasUpdate, false);
   assert.equal(empty.aheadOfStable, false);
   assert.equal(empty.message, NO_PREVIEW_MESSAGE);
+  assert.equal(resolvePreviewCheck([], '1.0.3').previewUnavailable, true);
   assert.equal(resolvePreviewCheck([], '1.0.3').message, '暂无预览版');
   assert.throws(() => selectPreviewRelease({ message: 'nope' }), /格式不正确/);
-  const newer = resolvePreviewCheck([first], '1.0.3');
+  const newer = resolvePreviewCheck(githubOrder, '1.0.3.9');
   assert.equal(newer.hasUpdate, true);
   assert.equal(newer.previewUnavailable, false);
-  assert.equal(newer.version, '1.0.3.2');
+  assert.equal(newer.version, '1.0.3.10');
   assert.equal(newer.channel, 'preview');
 });
 test('稳定通道上正式版更旧时只提示手动覆盖，不标记可更新', () => {

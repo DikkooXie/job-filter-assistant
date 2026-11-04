@@ -79,12 +79,19 @@ export function parseRelease(json, options = {}) {
   };
 }
 
-/** 发布列表里第一个带 zip 的 prerelease（跳过 draft 和正式版）。没有则返回 null。 */
+/**
+ * 非草稿、带 zip 的 prerelease 里取版本号最高的一条。没有则返回 null。
+ * GitHub /releases 按 tag_name 字符串降序，v1.0.3.9 会排在 v1.0.3.10 前面，不能依赖列表顺序。
+ */
 export function selectPreviewRelease(list) {
   if (!Array.isArray(list)) throw new Error('发布列表格式不正确');
-  const hit = list.find((item) => item && item.prerelease === true && !item.draft && zipAsset(item));
-  if (!hit) return null;
-  return parseRelease(hit, { channel: 'preview' });
+  let best = null;
+  for (const item of list) {
+    if (!item || item.prerelease !== true || item.draft || !zipAsset(item)) continue;
+    const parsed = parseRelease(item, { channel: 'preview' });
+    if (!best || compareVersions(parsed.version, best.version) > 0) best = parsed;
+  }
+  return best;
 }
 
 export function previewUnavailable(current) {
