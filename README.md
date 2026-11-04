@@ -1,4 +1,4 @@
-# 岗位筛选助手 · BOSS直聘 / 前程无忧
+# Offercome
 
 一个 Chrome 扩展（Manifest V3）：在你浏览 **BOSS直聘** 或 **前程无忧(51job)** 时被动收录岗位，
 结合你的**个人画像**用 AI 做**逐岗位匹配分析**，并支持接入**任意兼容主流协议的模型接口**。
@@ -166,7 +166,7 @@ npm run release -- --prerelease --notes "预览说明"
 python scripts/make_icons.py
 ```
 
-本地 `npm run build` 产物会显示「岗位筛选助手 · dev」；发布脚本构建的安装包保留正式名称。开发版保留相同的扩展身份，名称标记不会创建独立的数据空间或保证与正式版并存。
+本地 `npm run build` 产物会显示「Offercome · dev」；发布脚本构建的安装包保留正式名称。开发版保留相同的扩展身份，名称标记不会创建独立的数据空间或保证与正式版并存。
 
 UI 可视化预览（无需装扩展）：`dev/` 下有 mock 版页面，用 `python -m http.server` 起服务后访问
 `/dev/sidepanel.html` 等即可在普通浏览器里走查界面。
