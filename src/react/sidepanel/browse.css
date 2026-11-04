@@ -976,15 +976,15 @@
   background: var(--jp-line-strong);
   margin: 2px auto 12px;
 }
-/* 内容、标题和底钮共用 16px 水平 inset；顶距约 10px（含拖条），底距含安全区。拖条在对称 padding 里仍居中。 */
+/* #72 终锁：顶 12 · 水平 16 · 底 16+safe。handle→标题 12，标题↔副文 8，副文→选项 16，选项间距 8，选项底→底钮 12。 */
 .analyze-sheet {
   border-radius: 16px 16px 0 0;
-  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   animation: sheet-up 220ms ease;
 }
-.analyze-sheet .sheet-handle { margin-top: 0; }
+.analyze-sheet .sheet-handle { margin: 0 auto 12px; }
 .analyze-sheet h2 { font-size: 15px; font-weight: 650; }
-.analyze-sub { margin-top: 4px; margin-bottom: 12px; color: var(--jp-muted); font-size: 12px; }
+.job-panel .analyze-sub { margin-top: 8px; margin-bottom: 16px; color: var(--jp-muted); font-size: 12px; }
 .analyze-options { display: flex; flex-direction: column; gap: 8px; }
 .job-panel .analyze-option {
   width: 100%;
@@ -1039,7 +1039,7 @@
   color: #0f1419;
   background: #f0b429;
 }
-.analyze-actions { display: flex; gap: 8px; margin-top: 14px; }
+.analyze-actions { display: flex; gap: 8px; margin-top: 12px; }
 .job-panel .analyze-actions .jp-btn { min-height: 38px; border-radius: 9px; }
 .job-panel .analyze-actions .jp-btn-primary { flex: 1; }
 @keyframes sheet-up {
@@ -1572,22 +1572,23 @@
   box-shadow: 0 -12px 32px rgba(0, 0, 0, .28);
   animation: sheet-up 220ms ease;
 }
-.queue-head { padding: 0 14px 8px; flex-shrink: 0; }
+/* #72 终锁：头行→进度条 12，进度条→统计 12，统计→pill 16，pill→列表 12。头区自身不再垫底，避免和 chips 外边距叠距。 */
+.queue-head { padding: 0 14px; flex-shrink: 0; }
 .queue-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .queue-head h2 { font-size: 15px; font-weight: 650; color: #2dd4bf; }
 .queue-drawer .queue-cancel:disabled { opacity: .4; }
-.queue-bar { height: 3px; margin-top: 8px; border-radius: 999px; background: #0f1419; overflow: hidden; }
+.queue-bar { height: 3px; margin-top: 12px; border-radius: 999px; background: #0f1419; overflow: hidden; }
 .queue-bar > span { display: block; height: 100%; background: #2dd4bf; }
-.queue-summary {
+.job-panel .queue-summary {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
   color: #9baab4;
   font-size: 12px;
 }
 .queue-estimate { color: #2dd4bf; white-space: nowrap; }
-.queue-chips { display: flex; gap: 6px; padding: 0 14px 8px; flex-shrink: 0; }
+.queue-chips { display: flex; gap: 6px; padding: 0 14px; margin-top: 16px; margin-bottom: 12px; flex-shrink: 0; }
 .job-panel .queue-chip {
   min-height: 26px;
   padding: 2px 10px;
