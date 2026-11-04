@@ -164,7 +164,10 @@ export default function Sidepanel() {
       } else if (msg?.type === MSG.CURRENT_JOB) refreshContext();
     };
     const onStorage = (changes, area) => {
-      if (area === 'local' && changes[STORAGE_KEYS.settings]) send(MSG.SETTINGS_GET).then((settings) => { s.settings = settings; update(); }).catch(() => {});
+      if (area !== 'local' || !changes) return;
+      // 打开原岗位后 JD 写入岗位库。消息广播若没送到，存储变化仍要刷新当前详情。
+      if (changes[STORAGE_KEYS.jobs]) reload();
+      if (changes[STORAGE_KEYS.settings]) send(MSG.SETTINGS_GET).then((settings) => { s.settings = settings; update(); }).catch(() => {});
     };
     chrome.runtime.onMessage.addListener(listener);
     chrome.storage.onChanged.addListener(onStorage);

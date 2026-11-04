@@ -67,6 +67,32 @@ function jobKeyFromUrl(urlStr) {
   }
 }
 
+// 用户打开的页面地址。列表页通常提取不到；job_detail/<id>.html 能对上岗位库 uid。
+// collector 里有一份相同规则（内容脚本不能 import）。
+export function jobKeyFromPageUrl(pageUrl) {
+  const text = String(pageUrl || '');
+  const matched = text.match(/job_detail\/([\w-]+)\.html/)
+    || text.match(/[?&]encryptJobId=([\w-]+)/)
+    || text.match(/[?&]jobId=([\w-]+)/)
+    || text.match(/\/job\/(\d+)/)
+    || text.match(/jobs\.51job\.com\/[^/]*\/(\d+)\.html/)
+    || text.match(/[?&]jobid=(\d+)/i);
+  return matched ? matched[1] : '';
+}
+
+// 查询参数优先（请求明确指向的岗位）。没有查询参数时，详情页路径上的 id 优先于响应体里的纯数字 id，
+// 避免 job/detail 只回了内部 jobId、却和列表里的 encryptJobId 合成两个 uid。
+// 响应体已有另一条非数字 id 时信响应体，免得详情页上的推荐请求被写进当前岗位。
+export function preferDetailJobKey(queryKey, pageKey, bodyKey) {
+  const query = str(queryKey);
+  const page = str(pageKey);
+  const body = str(bodyKey);
+  if (query) return query;
+  if (page && (!body || page === body)) return page;
+  if (page && body && /^\d+$/.test(body) && !/^\d+$/.test(page)) return page;
+  return body || page || '';
+}
+
 // ============ BOSS 直聘 ============
 // 信封 {code, message, zpData}；code===0 成功；列表在 zpData.jobList[]。
 // 列表抽屉的 job/card 把单条放在 zpData.jobCard（字段接近列表项，另带 postDescription），
@@ -75,7 +101,6 @@ function normalizeBoss(payload, opts = {}) {
   if (!isObj(payload)) return [];
   if (payload.code !== 0 && payload.code !== '0') return [];
   const zp = payload.zpData || {};
-  const urlKey = jobKeyFromUrl(opts.url);
   const jobs = [];
   const list = zp.jobList || zp.recommendJobList || (Array.isArray(zp) ? zp : []);
   if (Array.isArray(list) && list.length) {
@@ -85,12 +110,12 @@ function normalizeBoss(payload, opts = {}) {
     }
   }
   if (isObj(zp.jobInfo)) {
-    const one = bossDetailJob(zp, urlKey);
+    const one = bossDetailJob(zp, opts);
     if (one) jobs.push(one);
   }
   const card = bossCardPayload(zp);
   if (card) {
-    const one = bossCardJob(card, urlKey);
+    const one = bossCardJob(card, opts);
     if (one) jobs.push(one);
   }
   return mergeBossSameUid(jobs);
@@ -131,13 +156,13 @@ function mergeBossSameUid(jobs) {
 // 详情响应结构与列表不同：岗位在 zpData.jobInfo，公司在 zpData.brandComInfo，HR 在 zpData.bossInfo。
 // 字段名依 D:\boss分析\probe_boss_detail.mjs 探针记录（showSkills/degreeName/locationName…）。
 // 关键：只回填「非空」字段——mergeJobs 是 {...prev,...raw} 覆盖式合并，空串会抹掉列表已抓到的好数据。
-function bossDetailJob(zp, urlKey = '') {
+function bossDetailJob(zp, opts = {}) {
   const info = zp.jobInfo || {};
   const brand = zp.brandComInfo || {};
   const boss = zp.bossInfo || {};
-  // uid 必须与「当前岗位」信号(collector 从 URL query 取的 encryptJobId)一致，否则面板匹配不上。
-  // 所以 URL 里的 key 优先，其次才用响应体字段。
-  const jobId = str(urlKey) || str(info.encryptId) || str(info.encryptJobId) || str(info.jobId);
+  // uid 必须与「当前岗位」和列表里的 encryptJobId 一致，否则打开原岗位后描述写进另一条记录，侧栏仍是空的。
+  const bodyKey = str(info.encryptId) || str(info.encryptJobId) || str(info.jobId);
+  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey);
   if (!jobId) return null;
   const salaryText = str(info.salaryDesc);
   const [minK, maxK] = parseSalary(salaryText);
@@ -195,9 +220,10 @@ function pruneEmpty(obj, keep = []) {
 
 // 列表抽屉 job/card：字段名接近列表项（encryptJobId/cityName/brandName），JD 在 postDescription。
 // jobDetail 对象是同类详情包，字段名可能更接近 jobInfo。空字段剔除，避免盖掉列表已有值。
-function bossCardJob(card, urlKey = '') {
+function bossCardJob(card, opts = {}) {
   if (!isObj(card)) return null;
-  const jobId = str(urlKey) || str(card.encryptJobId) || str(card.encryptId) || str(card.jobId);
+  const bodyKey = str(card.encryptJobId) || str(card.encryptId) || str(card.jobId);
+  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey);
   if (!jobId) return null;
   const salaryText = str(card.salaryDesc);
   const [minK, maxK] = parseSalary(salaryText);
