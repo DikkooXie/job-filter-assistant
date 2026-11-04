@@ -1,18 +1,15 @@
-import React, { useEffect, useReducer, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
+import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
 import { scoreProfile } from '../common/profile.js';
-import { applyFilters } from '../common/filters.js';
-import { VERDICT_LABELS, GREETING_LEVELS, normalizeGreetings, DIM_LABELS } from '../common/ai/prompts.js';
+import { applyFilters, evaluateJob } from '../common/filters.js';
+import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
+import { filterVisibleJobs, librarySurface, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
+import './sidepanel/browse.css';
 
-const progressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
+const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
 const progressKey = (uid) => `job-progress-v1:${encodeURIComponent(uid)}`;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const joinList = (value) => Array.isArray(value) ? value.filter(Boolean).join('、') : value == null ? '' : String(value);
@@ -22,55 +19,55 @@ const fmtTime = (value) => {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { hour12: false });
 };
 const csvCell = (value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`;
+const cssAttr = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+const contextUid = (ctx) => (ctx?.platform && ctx?.jobKey ? `${ctx.platform}:${ctx.jobKey}` : null);
+const verdictNames = { strong: '强匹配', good: '较匹配', fair: '一般', weak: '偏低', unscored: '未分析' };
 
 function buildDetailedCsv(items, progress) {
   const cols = [
-    ['平台', (j) => j.platform === 'boss' ? 'BOSS直聘' : '前程无忧51job'],
-    ['匹配档次', (j) => j.match ? VERDICT_LABELS[j.match.verdict] || j.match.verdict : '未分析'],
-    ['匹配分', (j) => j.match?.score ?? ''], ['是否收藏', (j) => j.star ? '★' : ''],
-    ['处理状态', (j) => progressLabels[progress.get(j.uid)?.status] || '未处理'],
-    ['状态更新时间', (j) => fmtTime(progress.get(j.uid)?.at)],
-    ['岗位名称', (j) => j.title], ['薪资', (j) => j.salaryText],
-    ['薪资下限(K/月)', (j) => j.salaryMinK ?? ''], ['薪资上限(K/月)', (j) => j.salaryMaxK ?? ''],
-    ['城市', (j) => j.city], ['区域', (j) => j.district], ['工作经验', (j) => j.experience],
-    ['学历要求', (j) => j.degree], ['技能', (j) => joinList(j.skills)], ['岗位标签', (j) => joinList(j.tags)],
-    ['福利', (j) => joinList(j.welfare)], ['公司名称', (j) => j.company], ['所属行业', (j) => j.companyIndustry],
-    ['公司规模', (j) => j.companyScale], ['公司性质', (j) => j.companyType], ['融资阶段', (j) => j.companyStage],
-    ['HR', (j) => j.hrName], ['HR职位', (j) => j.hrTitle], ['一句话总评', (j) => j.match?.summary],
-    ['契合点', (j) => joinList(j.match?.reasons)], ['差距/需补齐', (j) => joinList(j.match?.gaps)],
-    ['风险提示', (j) => joinList(j.match?.risks)],
-    ['招呼语(标准版)', (j) => j.greetingDraft || (j.match ? normalizeGreetings(j.match).standard : '')],
-    ['岗位描述', (j) => j.description], ['收录时间', (j) => fmtTime(j.savedAt)],
-    ['最近出现', (j) => fmtTime(j.lastSeenAt)], ['岗位链接', (j) => j.url],
+    ['平台', (job) => job.platform === 'boss' ? 'BOSS直聘' : '前程无忧51job'],
+    ['匹配档次', (job) => job.match ? VERDICT_LABELS[job.match.verdict] || job.match.verdict : '未分析'],
+    ['匹配分', (job) => job.match?.score ?? ''], ['是否收藏', (job) => job.star ? '★' : ''],
+    ['处理状态', (job) => csvProgressLabels[progress.get(job.uid)?.status] || '未处理'],
+    ['状态更新时间', (job) => fmtTime(progress.get(job.uid)?.at)],
+    ['岗位名称', (job) => job.title], ['薪资', (job) => job.salaryText],
+    ['薪资下限(K/月)', (job) => job.salaryMinK ?? ''], ['薪资上限(K/月)', (job) => job.salaryMaxK ?? ''],
+    ['城市', (job) => job.city], ['区域', (job) => job.district], ['工作经验', (job) => job.experience],
+    ['学历要求', (job) => job.degree], ['技能', (job) => joinList(job.skills)], ['岗位标签', (job) => joinList(job.tags)],
+    ['福利', (job) => joinList(job.welfare)], ['公司名称', (job) => job.company], ['所属行业', (job) => job.companyIndustry],
+    ['公司规模', (job) => job.companyScale], ['公司性质', (job) => job.companyType], ['融资阶段', (job) => job.companyStage],
+    ['HR', (job) => job.hrName], ['HR职位', (job) => job.hrTitle], ['一句话总评', (job) => job.match?.summary],
+    ['契合点', (job) => joinList(job.match?.reasons)], ['差距/需补齐', (job) => joinList(job.match?.gaps)],
+    ['风险提示', (job) => joinList(job.match?.risks)],
+    ['招呼语(标准版)', (job) => job.greetingDraft || (job.match ? normalizeGreetings(job.match).standard : '')],
+    ['岗位描述', (job) => job.description], ['收录时间', (job) => fmtTime(job.savedAt)],
+    ['最近出现', (job) => fmtTime(job.lastSeenAt)], ['岗位链接', (job) => job.url],
   ];
-  return [cols.map(([label]) => csvCell(label)).join(','), ...items.map((j) => cols.map(([, get]) => csvCell(get(j))).join(','))].join('\r\n');
+  return [cols.map(([label]) => csvCell(label)).join(','), ...items.map((job) => cols.map(([, get]) => csvCell(get(job))).join(','))].join('\r\n');
 }
 
-function Tags({ values }) {
-  return <div className="flex flex-wrap gap-1">{(values || []).map((value, i) => <Badge variant="secondary" key={`${value}-${i}`}>{value}</Badge>)}</div>;
-}
-function Facts({ rows }) {
-  return <dl className="grid grid-cols-2 gap-2 text-sm">{rows.filter(([, value]) => value).map(([label, value]) => <div key={label} className="flex flex-col gap-1"><dt className="text-muted-foreground">{label}</dt><dd>{value}</dd></div>)}</dl>;
-}
-function Section({ title, children }) {
-  return <section className="flex flex-col gap-2"><h3 className="font-semibold">{title}</h3>{children}</section>;
-}
-function Analysis({ match }) {
-  return <div className="flex flex-col gap-3 text-sm">
-    {match.summary && <p>{match.summary}</p>}
-    {match.eligible === false && match.blockers?.length > 0 && <Section title="存在硬性门槛"><ul className="list-disc pl-5">{match.blockers.map((x, i) => <li key={i}>{x}</li>)}</ul></Section>}
-    {match.dims && <div className="flex flex-col gap-2">{['skill', 'experience', 'requirement', 'location'].filter((key) => match.dims[key] != null).map((key) => <div className="flex items-center gap-2" key={key}><span className="w-20">{DIM_LABELS[key]}</span><progress className="min-w-0 flex-1 accent-primary" max="100" value={match.dims[key]} aria-label={DIM_LABELS[key]} /><span>{match.dims[key]}</span></div>)}</div>}
-    {[["契合点", match.reasons], ["差距/需补齐", match.gaps], ["风险提示", match.risks]].map(([title, values]) => values?.length > 0 && <Section title={title} key={title}><ul className="list-disc pl-5">{values.map((x, i) => <li key={i}>{x}</li>)}</ul></Section>)}
-  </div>;
+function appliedLabel(view) {
+  const parts = [];
+  if (view.search.trim()) parts.push(`“${view.search.trim()}”`);
+  if (view.platform === 'boss') parts.push('BOSS直聘');
+  if (view.platform === 'qcwy') parts.push('前程无忧');
+  if (view.verdict !== 'all') parts.push(verdictNames[view.verdict] || view.verdict);
+  if (view.sort === 'score') parts.push('匹配优先');
+  if (view.sort === 'salary') parts.push('月薪优先');
+  return parts.join(' · ');
 }
 
-/** Standalone sidepanel component. The extension host must mount this component. */
+/** 正式岗位侧栏。列表只展示已有匹配和流程状态；分析与招呼语仍沿用原有消息。 */
 export default function Sidepanel() {
-  const [, redraw] = useReducer((x) => x + 1, 0);
+  const [, redraw] = useReducer((value) => value + 1, 0);
   const state = useRef(null);
+  const listRef = useRef(null);
+  const panelRef = useRef(null);
   if (!state.current) state.current = {
     jobs: [], settings: null, profile: null, providers: [], activeCtx: null, selectedUid: null,
-    view: { tab: 'library', sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
+    screen: 'list', followLive: false, loadError: null, readError: '', lastViewedUid: null,
+    listScroll: 0, restoreList: false, filterOpen: false,
+    view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), greetings: new Map(), advice: new Map(),
     saveTimers: new Map(), batchBusy: false, reloadVersion: 0, noticeTimer: null, notice: '', error: false, loading: true,
   };
@@ -78,41 +75,63 @@ export default function Sidepanel() {
   const update = () => redraw();
   const notify = (message, error = false) => {
     clearTimeout(s.noticeTimer);
-    s.notice = message; s.error = error; update();
+    s.notice = message;
+    s.error = error;
+    update();
     s.noticeTimer = setTimeout(() => { s.notice = ''; update(); }, 2600);
   };
   const setView = (patch) => { Object.assign(s.view, patch); update(); };
   const reload = async () => {
     const version = ++s.reloadVersion;
+    const first = !s.settings;
+    if (first) { s.loading = true; s.loadError = null; update(); }
     try {
       const [jobs, settings, profile, providers, activeCtx] = await Promise.all([
         send(MSG.JOB_LIST_REQUEST), send(MSG.SETTINGS_GET), send(MSG.PROFILE_GET), send(MSG.AI_PROVIDERS_GET), send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null),
       ]);
-      const keys = jobs.map((j) => progressKey(j.uid));
+      const keys = jobs.map((job) => progressKey(job.uid));
       const stored = keys.length ? await chrome.storage.local.get(keys) : {};
       if (version !== s.reloadVersion) return;
       const firstLoad = !s.settings;
-      Object.assign(s, { jobs, settings, profile, providers, activeCtx, loading: false });
-      const jobIds = new Set(jobs.map((j) => j.uid));
+      Object.assign(s, { jobs, settings, profile, providers, activeCtx, loading: false, loadError: null, readError: '' });
+      const jobIds = new Set(jobs.map((job) => job.uid));
       for (const uid of s.progress.keys()) if (!jobIds.has(uid)) s.progress.delete(uid);
       for (const uid of s.checked) if (!jobIds.has(uid)) s.checked.delete(uid);
-      jobs.forEach((j) => {
-        const value = stored[progressKey(j.uid)];
-        const current = s.progress.get(j.uid);
-        if (value && progressLabels[value.status] && (!current || value.at >= current.at)) s.progress.set(j.uid, value);
+      if (s.lastViewedUid && !jobIds.has(s.lastViewedUid)) s.lastViewedUid = null;
+      jobs.forEach((job) => {
+        const value = stored[progressKey(job.uid)];
+        const current = s.progress.get(job.uid);
+        if (value && csvProgressLabels[value.status] && (!current || value.at >= current.at)) s.progress.set(job.uid, value);
       });
       if (firstLoad && settings.mode !== MODE.auto) s.view.platform = settings.mode;
+      if (s.followLive) {
+        const uid = contextUid(activeCtx);
+        s.selectedUid = uid && jobs.some((job) => job.uid === uid) ? uid : null;
+      }
       update();
-    } catch (e) { if (version === s.reloadVersion) { s.loading = false; notify(e.message, true); } }
+    } catch (error) {
+      if (version !== s.reloadVersion) return;
+      s.loading = false;
+      const message = error?.message || '岗位读取失败';
+      if (s.settings) s.readError = message;
+      else s.loadError = message;
+      update();
+    }
   };
-  const refreshContext = async () => { s.activeCtx = await send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null); update(); };
+  const refreshContext = async () => {
+    s.activeCtx = await send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null);
+    if (s.followLive) {
+      const uid = contextUid(s.activeCtx);
+      s.selectedUid = uid && s.jobs.some((job) => job.uid === uid) ? uid : null;
+    }
+    update();
+  };
   useEffect(() => {
     reload();
     const listener = (msg) => {
       if (msg?.type === MSG.JOBS_UPDATED) reload();
-      else if (msg?.type === MSG.CURRENT_JOB) { s.selectedUid = null; refreshContext(); }
+      else if (msg?.type === MSG.CURRENT_JOB) refreshContext();
     };
-    // 设置页改了筛选开关或规则时，列表跟着刷新
     const onStorage = (changes, area) => {
       if (area === 'local' && changes[STORAGE_KEYS.settings]) send(MSG.SETTINGS_GET).then((settings) => { s.settings = settings; update(); }).catch(() => {});
     };
@@ -144,14 +163,17 @@ export default function Sidepanel() {
     if (!s.providers.length) { notify('请先在设置中配置 AI 接口', true); send(MSG.OPEN_OPTIONS); return false; }
     s.scoring.add(job.uid); update();
     try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = await send(MSG.JOB_LIST_REQUEST); notify('分析完成'); return true; }
-    catch (e) { notify(e.message, true); return false; }
+    catch (error) { notify(error.message, true); return false; }
     finally { s.scoring.delete(job.uid); update(); }
+  };
+  const regenerate = async (job) => {
+    if (await analyze(job)) { s.greetings.delete(job.uid); saveGreeting(job.uid, ''); update(); }
   };
   const tailor = async (job) => {
     if (s.tailoring.has(job.uid)) return;
     s.tailoring.add(job.uid); update();
     try { s.advice.set(job.uid, await send(MSG.AI_TAILOR_RESUME, { uid: job.uid, job })); notify('简历建议已生成'); }
-    catch (e) { notify(`生成失败：${e.message}`, true); }
+    catch (error) { notify(`生成失败：${error.message}`, true); }
     finally { s.tailoring.delete(job.uid); update(); }
   };
   const copyText = async (text) => { try { await navigator.clipboard.writeText(text); notify('已复制'); } catch { notify('复制失败', true); } };
@@ -166,18 +188,21 @@ export default function Sidepanel() {
       const result = await send(MSG.OPEN_JOB_CHAT, { url: job.url, platform: job.platform, text });
       if (result?.mode === 'navigating') { if (s.progress.get(job.uid)?.status !== 'sent') await setProgress(job.uid, 'opened'); notify('已尝试打开沟通；请核对招聘方后粘贴并发送'); }
       else notify(`已打开岗位，未确认进入沟通；请核对后粘贴发送${result?.note ? `（${result.note}）` : ''}`, true);
-    } catch (e) { notify(`招呼语已复制，请手动打开岗位页粘贴发送（${e.message}）`, true); }
+    } catch (error) { notify(`招呼语已复制，请手动打开岗位页粘贴发送（${error.message}）`, true); }
   };
   const batchAnalyze = async (list, recordPrepared = false) => {
     if (s.batchBusy || !list.length) return;
     if (!s.providers.length) { notify('请先在设置中配置 AI 接口', true); send(MSG.OPEN_OPTIONS); return; }
     s.batchBusy = true;
-    const uids = list.map((j) => j.uid); uids.forEach((uid) => s.scoring.add(uid)); update();
+    const uids = list.map((job) => job.uid);
+    uids.forEach((uid) => s.scoring.add(uid));
+    update();
     let ok = 0, fail = 0, firstErr = '';
     try {
-      for (let i = 0; i < uids.length; i++) {
-        const uid = uids[i], job = s.jobs.find((j) => j.uid === uid);
-        notify(`批量分析 ${i + 1}/${uids.length}…`);
+      for (let index = 0; index < uids.length; index += 1) {
+        const uid = uids[index];
+        const job = s.jobs.find((item) => item.uid === uid);
+        notify(`批量分析 ${index + 1}/${uids.length}…`);
         try {
           const match = await send(MSG.AI_MATCH_SCORE, { uid, job });
           if (recordPrepared) {
@@ -185,22 +210,26 @@ export default function Sidepanel() {
             if (!greeting) throw new Error('未生成招呼语，请重新分析');
             if (!s.progress.has(uid)) await setProgress(uid, 'prepared');
           }
-          ok++;
-        } catch (e) {
-          fail++; const message = e instanceof Error ? e.message : String(e); firstErr ||= message;
-          notify(`第 ${i + 1} 个失败：${message}`, true);
-          if (i === 0) throw new Error(`分析失败：${message}`);
+          ok += 1;
+        } catch (error) {
+          fail += 1;
+          const message = error instanceof Error ? error.message : String(error);
+          firstErr ||= message;
+          notify(`第 ${index + 1} 个失败：${message}`, true);
+          if (index === 0) throw new Error(`分析失败：${message}`);
         }
-        s.scoring.delete(uid); s.jobs = await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs); update();
-        if (i < uids.length - 1) await sleep(500);
+        s.scoring.delete(uid);
+        s.jobs = await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs);
+        update();
+        if (index < uids.length - 1) await sleep(500);
       }
       notify(fail ? `批量分析完成：成功 ${ok}，失败 ${fail}（${firstErr}）` : `批量分析完成：成功 ${ok}`, !!fail);
-    } catch (e) { notify(e.message, true); }
+    } catch (error) { notify(error.message, true); }
     finally { uids.forEach((uid) => s.scoring.delete(uid)); s.batchBusy = false; update(); }
   };
   const batchExport = (items) => {
     if (!items.length) { notify('未选择岗位', true); return; }
-    const url = URL.createObjectURL(new Blob(['﻿' + buildDetailedCsv(items, s.progress)], { type: 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob([`\uFEFF${buildDetailedCsv(items, s.progress)}`], { type: 'text/csv;charset=utf-8' }));
     const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     chrome.downloads.download({ url, filename: `岗位导出-${items.length}条-${ts}.csv`, saveAs: true })
       .then(() => notify(`已导出 ${items.length} 个岗位`))
@@ -208,46 +237,219 @@ export default function Sidepanel() {
   };
   const setFilterEnabled = async (enabled) => {
     const prev = s.settings;
-    s.settings = { ...prev, filters: { ...prev.filters, enabled } }; update();
+    s.settings = { ...prev, filters: { ...prev.filters, enabled } };
+    update();
     try { s.settings = await send(MSG.SETTINGS_SAVE, { patch: { filters: { enabled } } }); update(); }
-    catch (e) { s.settings = prev; notify(`保存失败：${e.message}`, true); }
+    catch (error) { s.settings = prev; notify(`保存失败：${error.message}`, true); }
   };
-  const openCurrent = (job, sub = 'info') => { s.selectedUid = job.uid; setView({ tab: 'current', sub }); };
-  const selectedJob = s.jobs.find((j) => j.uid === s.selectedUid) || (s.activeCtx?.platform && s.activeCtx?.jobKey ? s.jobs.find((j) => j.uid === `${s.activeCtx.platform}:${s.activeCtx.jobKey}`) : null);
-  let list = s.settings ? applyFilters(s.jobs.filter((j) => s.view.platform === 'all' || j.platform === s.view.platform), s.settings.filters) : [];
-  const query = s.view.search.trim().toLowerCase();
-  if (query) list = list.filter((j) => [j.title, j.company, j.city, (j.skills || []).join(' '), (j.tags || []).join(' ')].join(' ').toLowerCase().includes(query));
-  if (s.view.verdict !== 'all') list = list.filter((j) => s.view.verdict === 'unscored' ? !j.match : j.match?.verdict === s.view.verdict);
-  list.sort(s.view.sort === 'score' ? (a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1) : s.view.sort === 'salary' ? (a, b) => (b.salaryMaxK ?? b.salaryMinK ?? 0) - (a.salaryMaxK ?? a.salaryMinK ?? 0) : (a, b) => (b.lastSeenAt || b.savedAt || '').localeCompare(a.lastSeenAt || a.savedAt || ''));
-  // 批量操作只覆盖当前可见岗位；被过滤隐藏的岗位即使之前勾选过也不参与
-  const checked = list.filter((j) => s.checked.has(j.uid));
-  const checkedJobs = () => checked;
-  const scoreButton = (job) => <Button variant="outline" size="sm" onClick={() => analyze(job)} aria-label={`分析 ${job.title}`} disabled={s.scoring.has(job.uid)}>{s.scoring.has(job.uid) ? '分析中…' : job.match ? `${job.match.score} · ${VERDICT_LABELS[job.match.verdict] || ''}` : '? 点击分析'}</Button>;
-  const options = () => send(MSG.OPEN_OPTIONS);
-  const contextLabel = selectedJob ? `${selectedJob.platform === 'boss' ? 'BOSS' : '51job'} · ${selectedJob.company || '当前岗位'}` : s.activeCtx?.platformName ? `${s.activeCtx.platformName} · 未匹配到收录岗位` : '未识别到岗位页面';
-  const switchTab = (tab) => { setView({ tab }); if (tab === 'current') refreshContext(); };
-  const job = selectedJob;
-  const advice = job && s.advice.get(job.uid);
-  const hasProfile = s.profile && scoreProfile(s.profile).score > 0;
+  const openDetail = (uid, sub = 'info', follow = false) => {
+    if (s.screen !== 'detail') {
+      s.listScroll = listRef.current ? listRef.current.scrollTop : 0;
+      s.lastViewedUid = null;
+    }
+    s.screen = 'detail';
+    s.followLive = follow;
+    s.selectedUid = uid || null;
+    s.view.sub = sub;
+    s.filterOpen = false;
+    update();
+  };
+  const backToList = () => {
+    const uid = s.selectedUid;
+    s.lastViewedUid = uid && s.jobs.some((job) => job.uid === uid) ? uid : null;
+    s.screen = 'list';
+    s.followLive = false;
+    s.restoreList = true;
+    s.filterOpen = false;
+    update();
+  };
+  const openCurrentJob = async () => {
+    await refreshContext();
+    const uid = contextUid(s.activeCtx);
+    const found = uid && s.jobs.some((job) => job.uid === uid) ? uid : null;
+    openDetail(found, 'info', true);
+  };
+  const resetView = () => setView({ search: '', platform: 'all', verdict: 'all', sort: 'recent' });
 
-  return <div className="flex h-screen flex-col bg-background text-foreground">
-    <header className="flex flex-col gap-3 border-b p-4">
-      <div className="flex items-center gap-2"><div className="min-w-0 flex-1"><h1 className="flex items-center gap-2 font-semibold">岗位面板{runningDevBuild() && <span className="rounded border border-border px-1 text-[10px] font-medium leading-4 text-muted-foreground">dev</span>}</h1><p className="text-sm text-muted-foreground">{s.view.tab === 'library' ? `共 ${s.jobs.length} 个岗位 · 显示 ${list.length}` : contextLabel}</p></div>{s.view.tab === 'current' && <Button variant="ghost" size="sm" onClick={refreshContext} aria-label="刷新当前页面">↻</Button>}<Button variant="ghost" size="sm" onClick={options} aria-label="设置">设置</Button></div>
-      <nav className="flex gap-2" aria-label="面板导航">{[['library', '岗位库'], ['current', '当前岗位']].map(([key, label]) => <Button key={key} size="sm" variant={s.view.tab === key ? 'default' : 'outline'} onClick={() => switchTab(key)}>{label}</Button>)}</nav>
-      {s.view.tab === 'library' && <><Input value={s.view.search} onChange={(e) => setView({ search: e.target.value })} placeholder="搜索岗位/公司/技能" aria-label="搜索岗位" /><div className="flex flex-wrap items-center gap-1">{[['all', '全部平台'], ['boss', 'BOSS'], ['qcwy', '51job']].map(([key, label]) => <Button size="sm" key={key} variant={s.view.platform === key ? 'secondary' : 'ghost'} onClick={() => setView({ platform: key })}>{label}</Button>)}<label className="ml-auto flex items-center gap-2 text-sm"><Switch size="sm" checked={!!s.settings?.filters?.enabled} disabled={!s.settings} onCheckedChange={setFilterEnabled} />开启过滤</label></div><div className="flex flex-wrap items-center gap-1">{[['all', '全部'], ['strong', '强匹配'], ['good', '较匹配'], ['fair', '一般'], ['unscored', '未分析']].map(([key, label]) => <Button size="sm" key={key} variant={s.view.verdict === key ? 'secondary' : 'ghost'} onClick={() => setView({ verdict: key })}>{label}</Button>)}<select className="rounded-md border bg-background p-1 text-sm" aria-label="排序" value={s.view.sort} onChange={(e) => setView({ sort: e.target.value })}><option value="recent">最近收录</option><option value="score">匹配分</option><option value="salary">薪资</option></select></div></>}
-    </header>
-    {s.notice && <div role={s.error ? 'alert' : 'status'} className="border-b px-4 py-2 text-sm">{s.notice}</div>}
-    {s.loading ? <p className="p-4">加载中…</p> : !s.settings ? <p className="p-4">加载失败，请重新打开面板。</p> : s.view.tab === 'library' ? <>
-      {scoreProfile(s.profile).score < 40 ? <Button variant="ghost" onClick={options}>画像完整度 {scoreProfile(s.profile).score}%，完善后 AI 匹配更准 →</Button> : !s.providers.length && <Button variant="ghost" onClick={options}>尚未配置 AI 接口，点此前往设置 →</Button>}
-      <main className="flex flex-1 flex-col gap-3 overflow-auto p-4">{!list.length ? <div className="text-center text-muted-foreground"><p>{s.jobs.length ? '没有符合条件的岗位' : '还没有收录岗位'}</p><p className="text-sm">{s.jobs.length ? '试试调整筛选条件' : '打开 BOSS直聘 或 前程无忧 浏览岗位即可自动收录'}</p></div> : list.map((item) => <Card key={item.uid}><CardHeader><div className="flex items-start gap-2"><input type="checkbox" aria-label={`选择岗位 ${item.title}，用于批量操作`} checked={s.checked.has(item.uid)} onChange={(e) => { if (e.target.checked) s.checked.add(item.uid); else s.checked.delete(item.uid); update(); }} /><button type="button" className="min-w-0 flex-1 text-left" onClick={() => openCurrent(item)}><CardTitle>{item.title} {item.salaryText}</CardTitle><p className="text-sm text-muted-foreground">{[item.company, item.companyIndustry].filter(Boolean).join(' · ')}</p><p className="text-sm text-muted-foreground">{[item.platform === 'boss' ? 'BOSS' : '51job', [item.city, item.district].filter(Boolean).join(' · '), item.experience, item.degree, item.companyScale].filter(Boolean).join(' · ')}</p></button>{scoreButton(item)}</div></CardHeader><CardContent className="flex flex-col gap-3"><Tags values={[...(item.skills?.length ? item.skills : item.tags || []).slice(0, 5), ...(item._filter?.risks || []).slice(0, 2).map((r) => `⚠ ${r}`)]} />{item._filter && !item._filter.keep && <p className="text-sm text-destructive">{item._filter.reasons.join('；')}</p>}<div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => analyze(item)} disabled={s.scoring.has(item.uid)}>{item.match ? '重新分析' : 'AI 分析'}</Button><Button size="sm" variant="outline" onClick={() => openCurrent(item, 'greeting')}>打招呼</Button><Button size="sm" variant="ghost" title="收藏" onClick={async () => { try { s.jobs = await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid }); update(); } catch (e) { notify(e.message, true); } }}>{item.star ? '★' : '☆'}</Button>{item.url && <Button size="sm" variant="ghost" onClick={() => chrome.tabs.create({ url: item.url })}>打开原岗位</Button>}<Button size="sm" variant="ghost" onClick={async () => { if (!confirm(`确定删除岗位「${item.title}」？此操作无法撤销。`)) return; try { s.jobs = await send(MSG.JOB_DELETE, { uid: item.uid }); s.checked.delete(item.uid); update(); } catch (e) { notify(e.message, true); } }}>删除</Button></div></CardContent></Card>)}</main>
-      <footer className="flex flex-wrap items-center gap-2 border-t p-3">{checked.length ? <><span className="text-sm">已选 {checked.length}</span><Button size="sm" variant="ghost" onClick={() => { if (list.length && list.every((j) => s.checked.has(j.uid))) s.checked.clear(); else list.forEach((j) => s.checked.add(j.uid)); update(); }}>{list.length && list.every((j) => s.checked.has(j.uid)) ? '取消全选' : '全选'}</Button><Button size="sm" variant="ghost" onClick={() => { s.checked.clear(); update(); }}>清空选择</Button><Button size="sm" disabled={s.batchBusy} onClick={() => batchAnalyze(checkedJobs())}>批量分析（{checked.length}）</Button><Button size="sm" variant="outline" disabled={s.batchBusy} onClick={() => { const remaining = checkedJobs().filter((j) => !s.progress.has(j.uid)); if (!remaining.length) notify('所选岗位均已有处理记录'); else batchAnalyze(remaining, true); }}>准备未处理岗位</Button><Button size="sm" variant="outline" disabled={s.batchBusy} onClick={() => { const next = checkedJobs().find((j) => s.progress.get(j.uid)?.status === 'prepared'); if (!next) notify('没有待处理的已准备岗位，请先准备未处理岗位'); else { openCurrent(next, 'greeting'); sendGreeting(next); } }}>处理下一个</Button><Button size="sm" variant="outline" onClick={() => batchExport(checkedJobs())}>批量导出（{checked.length}）</Button></> : <><Button size="sm" disabled={!list.length} onClick={() => { list.forEach((j) => s.checked.add(j.uid)); update(); }}>全选 ({list.length})</Button><Button size="sm" variant="outline" disabled={!list.length} onClick={() => batchExport(list)}>导出 ({list.length})</Button><Button size="sm" variant="destructive" onClick={async () => { if (!confirm('确定清空所有已收录岗位？此操作不可撤销。')) return; try { s.jobs = await send(MSG.JOB_CLEAR_REQUEST); s.checked.clear(); notify('已清空岗位库'); } catch (e) { notify(e.message, true); } }}>清空</Button></>}</footer>
-    </> : <main className="flex flex-1 flex-col gap-4 overflow-auto p-4">{!job ? <div className="flex flex-col items-center gap-3 text-center"><p>{s.activeCtx?.platform ? '未匹配到当前页面的岗位' : '未识别到岗位页面'}</p><p className="text-sm text-muted-foreground">在 BOSS/51job 打开某个岗位详情后点右上角 ↻ 刷新，或从岗位库里选择一个岗位</p><Button size="sm" onClick={() => setView({ tab: 'library' })}>去岗位库选择</Button></div> : <>
-      <div className="flex items-start gap-2"><div className="flex-1"><h2 className="font-semibold">{job.title} {job.salaryText}</h2><p className="text-sm text-muted-foreground">{[job.company, job.companyIndustry].filter(Boolean).join(' · ')}</p></div>{scoreButton(job)}</div>
-      <nav className="flex flex-wrap gap-1" aria-label="当前岗位子页">{[['info', '岗位信息'], ['company', '公司画像'], ['resume', '简历建议'], ['greeting', '打招呼']].map(([key, label]) => <Button key={key} size="sm" variant={s.view.sub === key ? 'secondary' : 'ghost'} onClick={() => setView({ sub: key })}>{label}</Button>)}</nav>
-      {s.view.sub === 'info' && <div className="flex flex-col gap-4"><Facts rows={[["薪资", job.salaryText], ["城市", [job.city, job.district].filter(Boolean).join(' · ')], ["经验", job.experience], ["学历", job.degree], ["平台", job.platform === 'boss' ? 'BOSS 直聘' : '前程无忧 51job']]} />{(job.skills?.length || job.tags?.length) > 0 && <Section title="技能 / 标签"><Tags values={(job.skills?.length ? job.skills : job.tags).slice(0, 20)} /></Section>}{job.welfare?.length > 0 && <Section title="福利"><Tags values={job.welfare.slice(0, 20)} /></Section>}{job.description && <Section title="岗位描述"><p className="whitespace-pre-wrap text-sm">{job.description}</p></Section>}<Section title="匹配分析">{job.match ? <Analysis match={job.match} /> : <p className="text-sm">尚未分析，<Button variant="link" onClick={() => analyze(job)}>立即 AI 分析</Button></p>}</Section>{job.url && <Button variant="outline" onClick={() => chrome.tabs.create({ url: job.url })}>打开原岗位页面</Button>}</div>}
-      {s.view.sub === 'company' && <div className="flex flex-col gap-3"><Facts rows={[["公司", job.company], ["行业", job.companyIndustry], ["规模", job.companyScale], ["性质", job.companyType], ["阶段", job.companyStage], ["HR", [job.hrName, job.hrTitle].filter(Boolean).join(' · ')]]} />{![job.company, job.companyIndustry, job.companyScale, job.companyType, job.companyStage, job.hrName, job.hrTitle].some(Boolean) && <p>暂无公司信息（该平台列表接口未返回，或浏览详情后可补全）</p>}<p className="text-sm text-muted-foreground">公司画像基于岗位接口返回的公开信息整理，仅供参考。</p></div>}
-      {s.view.sub === 'resume' && (!s.providers.length ? <p>尚未配置 AI 接口，<Button variant="link" onClick={options}>前往设置</Button></p> : !hasProfile ? <p>简历建议基于你的个人画像生成，请先在设置里完善画像（上传简历或手动填写），<Button variant="link" onClick={options}>前往设置</Button></p> : <div className="flex flex-col gap-4"><div className="flex items-center justify-between gap-2"><h3 className="font-semibold">简历定制建议</h3><Button size="sm" disabled={s.tailoring.has(job.uid)} onClick={() => tailor(job)}>{s.tailoring.has(job.uid) ? '生成中…' : advice ? '重新生成' : '生成建议'}</Button></div><p className="text-sm text-muted-foreground">针对该岗位 JD，建议怎么调整简历去投递。仅给建议、不改你的原简历，只在本会话使用、不保存。</p>{s.tailoring.has(job.uid) && !advice && <p>AI 正在分析…</p>}{advice && <>{[['可突出的匹配点', advice.matchedSkills], ['建议对齐的岗位关键词', advice.keywordsToAlign], ['暂未体现（如实指出，勿编造）', advice.missingSkills]].map(([title, values]) => values?.length > 0 && <Section key={title} title={title}><Tags values={values} /></Section>)}{advice.summaryDraft && <Section title="自我评价草稿（可直接粘贴）"><p className="whitespace-pre-wrap text-sm">{advice.summaryDraft}</p><Button size="sm" variant="outline" onClick={() => copyText(advice.summaryDraft)}>复制草稿</Button></Section>}{[['经历改写建议', advice.bulletSuggestions], ['投递提醒', advice.tips]].map(([title, values]) => values?.length > 0 && <Section key={title} title={title}><ul className="list-disc pl-5 text-sm">{values.map((x, i) => <li key={i}>{x}</li>)}</ul></Section>)}{advice.note && <p className="text-sm">{advice.note}</p>}</>}</div>)}
-      {s.view.sub === 'greeting' && (!s.providers.length ? <p>尚未配置 AI 接口，<Button variant="link" onClick={options}>前往设置</Button></p> : !job.match ? <div className="flex flex-col gap-3"><p>先做一次匹配分析，AI 会生成三档招呼语。</p><Button disabled={s.scoring.has(job.uid)} onClick={() => analyze(job)}>{s.scoring.has(job.uid) ? '分析中…' : '生成招呼语'}</Button></div> : <div className="flex flex-col gap-3"><h3 className="font-semibold">招呼语（可编辑）</h3><div className="flex flex-wrap gap-1">{GREETING_LEVELS.map((level) => <Button key={level.key} size="sm" variant={s.view.greetLevel === level.key ? 'secondary' : 'ghost'} onClick={() => { s.view.greetLevel = level.key; const text = normalizeGreetings(job.match)[level.key] || ''; s.greetings.set(job.uid, text); saveGreeting(job.uid, text); update(); }}>{level.label}</Button>)}</div><Textarea rows={6} aria-label="招呼语" placeholder="编辑要发送给 HR 的招呼语…" value={greetingValue(job)} onChange={(e) => { const text = e.target.value; s.greetings.set(job.uid, text); saveGreeting(job.uid, text, true); update(); }} /><p className="text-sm text-muted-foreground">{greetingValue(job).length} 字 · 处理状态：{progressLabels[s.progress.get(job.uid)?.status] || '未处理'}</p><Button size="sm" variant="outline" onClick={async () => { if (!confirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`)) return; try { await setProgress(job.uid, 'sent'); notify('已记录为手动确认发送'); } catch (e) { notify(`记录失败：${e.message}`, true); } }}>标记已发送</Button><p className="text-sm text-muted-foreground">{s.activeCtx?.isChat ? '请先核对招聘方，再复制并粘贴招呼语发送' : '将新建标签页打开岗位并尝试进入沟通，招呼语会复制；请核对招聘方后粘贴发送'}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={s.scoring.has(job.uid)} onClick={async () => { if (await analyze(job)) { s.greetings.delete(job.uid); saveGreeting(job.uid, ''); update(); } }}>{s.scoring.has(job.uid) ? '生成中…' : '重新生成'}</Button><Button size="sm" variant="outline" onClick={() => copyText(greetingValue(job))}>复制</Button><Button size="sm" onClick={() => sendGreeting(job)}>打开沟通并复制</Button></div></div>)}
-    </>}</main>}
-  </div>;
+  const filtered = s.settings ? applyFilters(s.jobs, s.settings.filters) : s.jobs;
+  const list = s.settings ? filterVisibleJobs(filtered, s.view) : [];
+  const surface = librarySurface({ loading: s.loading && !s.settings, loadError: s.loadError, jobCount: s.settings ? s.jobs.length : 0 });
+  const checked = list.filter((job) => s.checked.has(job.uid));
+  const allSelected = list.length > 0 && checked.length === list.length;
+  const jobRecord = s.selectedUid ? s.jobs.find((item) => item.uid === s.selectedUid) || null : null;
+  const job = jobRecord ? { ...jobRecord, _filter: evaluateJob(jobRecord, s.settings?.filters) } : null;
+  const detailMode = s.screen !== 'detail' ? null : job ? 'job' : s.selectedUid ? 'removed' : 'unmatched';
+  const profileScore = s.profile ? scoreProfile(s.profile).score : 0;
+  const hasProfile = profileScore > 0;
+  const filterCount = (s.view.platform !== 'all' ? 1 : 0) + (s.view.verdict !== 'all' ? 1 : 0);
+  const viewChanged = viewConditionsChanged(s.view);
+  const devBuild = runningDevBuild();
+
+  useLayoutEffect(() => {
+    if (!s.restoreList || s.screen !== 'list') return;
+    s.restoreList = false;
+    const visibleUids = list.map((item) => item.uid);
+    const returned = s.lastViewedUid;
+    const target = returnFocusTarget(visibleUids, returned);
+    const sameJob = target.kind === 'job' && target.uid === returned;
+    if (listRef.current) listRef.current.scrollTop = s.listScroll || 0;
+    const node = target.kind === 'job'
+      ? panelRef.current?.querySelector(`[data-job-uid="${cssAttr(target.uid)}"] .job-title`)
+      : panelRef.current?.querySelector('.search-input');
+    if (!node) return;
+    if (sameJob || target.kind === 'search') node.focus({ preventScroll: true });
+    else node.focus();
+  });
+
+  const showListChrome = s.screen !== 'detail';
+  return (
+    <div className="job-panel" ref={panelRef} data-screen={s.screen} data-surface={s.screen === 'detail' ? 'detail' : surface}>
+      {showListChrome && (
+        <ListHeader
+          total={s.jobs.length}
+          shown={s.settings ? list.length : 0}
+          view={s.view}
+          filterEnabled={!!s.settings?.filters?.enabled}
+          settingsReady={!!s.settings}
+          filterCount={filterCount}
+          applied={appliedLabel(s.view)}
+          viewChanged={viewChanged}
+          onSearch={(search) => setView({ search })}
+          onClearSearch={() => setView({ search: '' })}
+          onSort={(sort) => setView({ sort })}
+          onToggleFilters={setFilterEnabled}
+          onOpenFilters={() => { s.filterOpen = true; update(); }}
+          onOpenCurrent={openCurrentJob}
+          onOptions={() => send(MSG.OPEN_OPTIONS)}
+          onReset={resetView}
+          dev={devBuild}
+        />
+      )}
+      {showListChrome && s.readError && (
+        <div className="read-error" role="alert">
+          <span>岗位读取失败：{s.readError}</span>
+          <button type="button" className="jp-btn" onClick={reload}>重新加载</button>
+        </div>
+      )}
+      {s.screen === 'detail' ? (
+        <JobDetail
+          mode={detailMode}
+          job={job}
+          sub={DETAIL_SUBS.includes(s.view.sub) ? s.view.sub : 'info'}
+          followLive={s.followLive}
+          progressStatus={job ? s.progress.get(job.uid)?.status : undefined}
+          greeting={job ? greetingValue(job) : ''}
+          greetLevel={s.view.greetLevel}
+          advice={job ? s.advice.get(job.uid) : null}
+          scoring={!!job && s.scoring.has(job.uid)}
+          tailoring={!!job && s.tailoring.has(job.uid)}
+          hasProviders={s.providers.length > 0}
+          hasProfile={hasProfile}
+          onBack={backToList}
+          onSub={(sub) => setView({ sub })}
+          onAnalyze={() => job && analyze(job)}
+          onRegenerate={() => job && regenerate(job)}
+          onTailor={() => job && tailor(job)}
+          onGreeting={(text) => { if (!job) return; s.greetings.set(job.uid, text); saveGreeting(job.uid, text, true); update(); }}
+          onGreetLevel={(level) => {
+            if (!job) return;
+            s.view.greetLevel = level;
+            const text = normalizeGreetings(job.match)[level] || '';
+            s.greetings.set(job.uid, text);
+            saveGreeting(job.uid, text);
+            update();
+          }}
+          onCopy={copyText}
+          onSend={() => job && sendGreeting(job)}
+          onMarkSent={async () => {
+            if (!job) return;
+            if (!confirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`)) return;
+            try { await setProgress(job.uid, 'sent'); notify('已记录为手动确认发送'); }
+            catch (error) { notify(`记录失败：${error.message}`, true); }
+          }}
+          onOpenOriginal={() => job?.url && chrome.tabs.create({ url: job.url })}
+          onDelete={() => job && removeSelected(job, s, update, notify)}
+          onOptions={() => send(MSG.OPEN_OPTIONS)}
+          dev={devBuild}
+        />
+      ) : surface === 'loading' ? <SurfaceState kind="loading" />
+        : surface === 'error' ? <SurfaceState kind="error" message={s.loadError} onRetry={reload} />
+          : surface === 'empty' ? <SurfaceState kind="empty" />
+            : (
+              <div className="list-scroll" ref={listRef}>
+                {profileScore < 40 && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS)}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
+                {profileScore >= 40 && !s.providers.length && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS)}>尚未配置 AI 接口，点此前往设置</button></p>}
+                {list.length === 0
+                  ? <SurfaceState kind="nomatch" viewChanged={viewChanged} onReset={resetView} />
+                  : <div className="continuous-list">{list.map((item) => (
+                    <JobRow
+                      key={item.uid}
+                      job={item}
+                      checked={s.checked.has(item.uid)}
+                      returned={s.lastViewedUid === item.uid}
+                      progressStatus={s.progress.get(item.uid)?.status}
+                      onToggle={() => { if (s.checked.has(item.uid)) s.checked.delete(item.uid); else s.checked.add(item.uid); update(); }}
+                      onOpen={openDetail}
+                      onStar={async () => { try { s.jobs = await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid }); update(); } catch (error) { notify(error.message, true); } }}
+                    />
+                  ))}</div>}
+              </div>
+            )}
+      {showListChrome && surface !== 'loading' && surface !== 'error' && (
+        <ListFooter
+          total={list.length}
+          selectedCount={checked.length}
+          allSelected={allSelected}
+          indeterminate={checked.length > 0 && !allSelected}
+          busy={s.batchBusy}
+          onToggleAll={() => {
+            if (allSelected) list.forEach((item) => s.checked.delete(item.uid));
+            else list.forEach((item) => s.checked.add(item.uid));
+            update();
+          }}
+          onClear={() => { list.forEach((item) => s.checked.delete(item.uid)); update(); }}
+          onAnalyze={() => batchAnalyze(checked)}
+          onPrepare={() => {
+            const remaining = checked.filter((item) => !s.progress.has(item.uid));
+            if (!remaining.length) notify('所选岗位均已有处理记录');
+            else batchAnalyze(remaining, true);
+          }}
+          onNext={() => {
+            const next = checked.find((item) => s.progress.get(item.uid)?.status === 'prepared');
+            if (!next) notify('没有待处理的已准备岗位，请先准备未处理岗位');
+            else { openDetail(next.uid, 'flow'); sendGreeting(next); }
+          }}
+          onExportVisible={() => batchExport(list)}
+          onExportSelected={() => batchExport(checked)}
+          onClearLibrary={async () => {
+            if (!confirm('确定清空所有已收录岗位？此操作不可撤销。')) return;
+            try { s.jobs = await send(MSG.JOB_CLEAR_REQUEST); s.checked.clear(); s.lastViewedUid = null; notify('已清空岗位库'); }
+            catch (error) { notify(error.message, true); }
+          }}
+        />
+      )}
+      {s.filterOpen && (
+        <FilterSheet
+          view={s.view}
+          shown={list.length}
+          onView={setView}
+          onReset={resetView}
+          onClose={() => { s.filterOpen = false; update(); }}
+        />
+      )}
+      {s.notice && !s.filterOpen && <NoticeToast message={s.notice} error={s.error} />}
+    </div>
+  );
+}
+
+const DETAIL_SUBS = ['info', 'match', 'company', 'resume', 'flow'];
+
+async function removeSelected(target, s, update, notify) {
+  if (!confirm(`确定删除岗位「${target.title}」？此操作无法撤销。`)) return;
+  try {
+    s.jobs = await send(MSG.JOB_DELETE, { uid: target.uid });
+    s.checked.delete(target.uid);
+    if (s.lastViewedUid === target.uid) s.lastViewedUid = null;
+    update();
+  } catch (error) { notify(error.message, true); }
 }

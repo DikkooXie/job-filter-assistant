@@ -16,6 +16,9 @@ import {
   MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
+import {
+  exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, librarySurface, returnFocusTarget, riskLines,
+} from '../src/react/sidepanel/browseModel.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
@@ -1461,6 +1464,43 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(css, /width:\s*36px/);
   assert.match(css, /height:\s*21px/);
   assert.doesNotMatch(css, /import\(/);
+});
+
+test('岗位列表把读取失败、空库和加载分开', () => {
+  assert.equal(librarySurface({ loading: true, loadError: '失败', jobCount: 0 }), 'loading');
+  assert.equal(librarySurface({ loading: false, loadError: '本地数据暂时无法读取', jobCount: 0 }), 'error');
+  assert.equal(librarySurface({ loading: false, loadError: '', jobCount: 0 }), 'empty');
+  assert.equal(librarySurface({ loading: false, loadError: null, jobCount: 4 }), 'ready');
+});
+
+test('返回列表时焦点落在刚看过的岗位，岗位没了就回到仍在的第一条', () => {
+  assert.deepEqual(returnFocusTarget(['a', 'b', 'c'], 'b'), { kind: 'job', uid: 'b' });
+  assert.deepEqual(returnFocusTarget(['a', 'b'], 'missing'), { kind: 'job', uid: 'a' });
+  assert.deepEqual(returnFocusTarget([], 'missing'), { kind: 'search' });
+});
+
+test('流程文案只读取已有进度，不发明新状态', () => {
+  assert.equal(flowStatusLabel(undefined), '待打招呼');
+  assert.equal(flowStatusLabel('prepared'), '招呼语已准备');
+  assert.equal(flowStatusLabel('opened'), '待确认发送');
+  assert.equal(flowStatusLabel('sent'), '已发送（手动确认）');
+  assert.equal(flowEntryLabel(undefined), '打招呼');
+  assert.equal(flowEntryLabel('prepared'), '继续流程');
+  assert.equal(flowEntryLabel('opened'), '确认发送');
+  assert.equal(flowEntryLabel('sent'), '查看流程');
+});
+
+test('搜索无结果不改变失败态；风险和排除原因分开', () => {
+  const jobs = [
+    { uid: '1', title: '前端开发工程师', company: '青禾科技', city: '深圳', skills: ['Vue'], match: { score: 92, verdict: 'strong', summary: '吻合' }, lastSeenAt: '2026-11-01' },
+    { uid: '2', title: '后端开发', company: '松果云', city: '杭州', skills: ['Node'], match: null, lastSeenAt: '2026-11-02' },
+  ];
+  assert.equal(filterVisibleJobs(jobs, { search: '不存在的词', platform: 'all', verdict: 'all', sort: 'recent' }).length, 0);
+  assert.equal(librarySurface({ loading: false, loadError: '读取失败', jobCount: jobs.length }), 'error');
+  const risky = { _filter: { keep: true, risks: ['驻场'], reasons: [] }, match: { risks: ['要求独立交付，沟通时确认是否接受应届生'] } };
+  assert.deepEqual(riskLines(risky), ['含「驻场」，沟通时确认相关安排', '要求独立交付，沟通时确认是否接受应届生']);
+  assert.deepEqual(exclusionReasons({ _filter: { keep: false, reasons: ['命中排除词：外包'] } }), ['命中排除词：外包']);
+  assert.deepEqual(exclusionReasons({ _filter: { keep: true, reasons: ['经验档位不在偏好内'] } }), []);
 });
 
 // ---------- 汇总 ----------
