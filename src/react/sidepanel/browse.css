@@ -990,7 +990,13 @@
   background: var(--jp-line-strong);
   margin: 2px auto 12px;
 }
-.analyze-sheet { border-radius: 16px 16px 0 0; padding-top: 8px; animation: sheet-up 220ms ease; }
+/* 内容、标题和底钮共用 16px 水平 inset；顶距约 10px（含拖条），底距含安全区。拖条在对称 padding 里仍居中。 */
+.analyze-sheet {
+  border-radius: 16px 16px 0 0;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  animation: sheet-up 220ms ease;
+}
+.analyze-sheet .sheet-handle { margin-top: 0; }
 .analyze-sheet h2 { font-size: 15px; font-weight: 650; }
 .analyze-sub { margin-top: 4px; margin-bottom: 12px; color: var(--jp-muted); font-size: 12px; }
 .analyze-options { display: flex; flex-direction: column; gap: 8px; }

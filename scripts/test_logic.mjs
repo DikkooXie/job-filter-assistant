@@ -2036,6 +2036,16 @@ test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
   assert.doesNotMatch(hover, /flex-basis/);
 });
 
+test('智能分析抽屉内容与底钮有 16px 左右 inset 和安全区底边距', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const sheet = browse.match(/\.analyze-sheet \{[^}]*\}/)?.[0] || '';
+  assert.match(sheet, /padding:\s*10px 16px calc\(16px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(browse, /\.analyze-sheet \.sheet-handle \{[^}]*margin-top:\s*0/);
+  assert.match(browse, /\.analyze-actions \{[^}]*gap:\s*8px/);
+  assert.match(browse, /\.sheet-content \{[^}]*padding:\s*8px 16px 22px/);
+});
+
 test('删除确认态文案是再次点击确认删除', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
