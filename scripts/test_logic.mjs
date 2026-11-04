@@ -14,6 +14,7 @@ import { normalizeResponse, matchPlatformApi, parseSalary, jobKeyFromPageUrl, pr
 import {
   ENSURE_DESC_GAP_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, ensureGapWait, filterCapturedJobs,
   hasJobDescription, jobNeedsDescription, runEnsureDescription, shouldReuseMatchCache,
+  decideOpenOriginal, acceptDetailScrape, patchExistingDescription, jobKeyFromUid, cleanDetailText, DETAIL_TEXT_MIN,
 } from '../src/common/ensureDescription.js';
 import { mergeJobs } from '../src/common/jobsStore.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
@@ -2677,6 +2678,170 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   assert.match(sidepanel, /changes\[STORAGE_KEYS\.jobs\]/);
   assert.match(sidepanel, /await sleep\(500\)/);
   assert.match(legacy, /changes\[STORAGE_KEYS\.jobs\]/);
+});
+
+section('打开原岗位：空描述等待并超时刮详情');
+test('已有描述只打开，空描述才等待；刮到的正文只补已有 uid', () => {
+  const url = 'https://www.zhipin.com/job_detail/abc.html';
+  assert.equal(decideOpenOriginal({ uid: 'boss:abc', url, description: '已经收录的岗位描述正文' }), 'open');
+  assert.equal(decideOpenOriginal({ uid: 'boss:abc', url, description: '   ' }), 'wait');
+  assert.equal(decideOpenOriginal({ uid: 'boss:abc', url: '', description: '' }), 'skip');
+  assert.equal(decideOpenOriginal({ uid: 'boss:abc', url: 'javascript:alert(1)', description: '' }), 'open');
+  assert.equal(jobKeyFromUid('boss:abc'), 'abc');
+  assert.equal(jobKeyFromUid('qcwy:998877'), '998877');
+  assert.equal(DETAIL_TEXT_MIN, 20);
+  assert.equal(cleanDetailText('立即沟通'), '');
+  const scraped = acceptDetailScrape({
+    expectedKey: 'abc',
+    pageKey: 'abc',
+    description: '职位描述\n岗位职责：负责数据采集与清洗，并输出可检索的岗位说明。',
+  });
+  assert.match(scraped, /^岗位职责：负责数据采集/);
+  assert.equal(acceptDetailScrape({ expectedKey: 'abc', pageKey: 'other', description: scraped }), '');
+  assert.equal(acceptDetailScrape({ expectedKey: 'abc', pageKey: '', description: scraped }), '');
+  const stored = [
+    { uid: 'boss:abc', title: '前端', description: '', star: true, match: { score: 80 } },
+    { uid: 'boss:other', description: '' },
+  ];
+  const patched = patchExistingDescription(stored, 'boss:abc', scraped);
+  assert.equal(patched.patched, true);
+  assert.equal(patched.jobs.length, stored.length);
+  assert.match(patched.jobs[0].description, /^岗位职责：负责数据采集/);
+  assert.equal(patched.jobs[0].star, true);
+  assert.equal(patched.jobs[0].match.score, 80);
+  assert.equal(patched.jobs[0].title, '前端');
+  assert.equal(patched.jobs[1].description, '');
+  assert.equal(stored[0].description, '');
+  const missing = patchExistingDescription(stored, 'boss:new', scraped);
+  assert.equal(missing.patched, false);
+  assert.equal(missing.jobs.length, 2);
+  assert.equal(missing.jobs.some((job) => job.uid === 'boss:new'), false);
+  const kept = patchExistingDescription(
+    [{ uid: 'boss:abc', description: '接口返回的完整 JD 正文足够长' }],
+    'boss:abc',
+    scraped,
+  );
+  assert.equal(kept.patched, false);
+  assert.match(kept.jobs[0].description, /接口返回/);
+  assert.equal(patchExistingDescription([{ uid: 'qcwy:1', description: '' }], 'qcwy:1', '  ').patched, false);
+});
+test('打开原岗位的接线：空描述走等待，超时才刮；已有描述仍只开标签', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const collector = fs.readFileSync(path.join(root, 'src/content/collector.js'), 'utf8');
+  const openStart = background.indexOf('async function openOriginalJob');
+  const openEnd = background.indexOf('async function activateOriginalJobTab');
+  const openBody = background.slice(openStart, openEnd);
+  const activateStart = openEnd;
+  const activateEnd = background.indexOf('async function requestDetailScrape');
+  const activateBody = background.slice(activateStart, activateEnd);
+  const domStart = collector.indexOf('function domFallback');
+  const domEnd = collector.indexOf('function txt', domStart);
+  assert.match(sidepanel, /decideOpenOriginal\(job\)/);
+  assert.match(sidepanel, /MSG\.OPEN_ORIGINAL_JOB/);
+  assert.match(sidepanel, /chrome\.tabs\.create\(\{ url: job\.url \}\)/);
+  assert.match(background, /case MSG\.OPEN_ORIGINAL_JOB:/);
+  assert.match(openBody, /waitForJobDescription\(uid\)/);
+  assert.match(openBody, /requestDetailScrape\(/);
+  assert.match(openBody, /writeDetailDescription\(/);
+  assert.doesNotMatch(openBody, /tabs\.remove|closeTab/);
+  assert.match(activateBody, /active: true/);
+  assert.match(background, /active: false/);
+  assert.match(background, /patchExistingDescription\(/);
+  assert.match(background, /MSG\.SCRAPE_JOB_DETAIL/);
+  assert.doesNotMatch(background, /wapi\/zpgeek/);
+  assert.match(collector, /SCRAPE_JOB_DETAIL/);
+  assert.match(collector, /function scrapeVisibleJobDetail/);
+  assert.doesNotMatch(collector.slice(domStart, domEnd), /scrapeVisibleJobDetail/);
+  assert.doesNotMatch(collector, /fetch\(|XMLHttpRequest/);
+});
+function detailNode(text, size = { width: 480, height: 160 }) {
+  return {
+    textContent: text,
+    innerText: text,
+    getBoundingClientRect: () => ({ top: 40, left: 0, ...size }),
+  };
+}
+function runDetailPage(href, blocks) {
+  const listeners = [];
+  const ctx = {
+    window: { addEventListener() {}, postMessage() {} },
+    location: { href, hostname: new URL(href).hostname, origin: new URL(href).origin },
+    URL,
+    document: {
+      body: { appendChild() {} },
+      documentElement: { appendChild() {} },
+      head: { appendChild() {} },
+      contains: () => false,
+      getElementById: () => null,
+      createElement: () => ({ id: '', textContent: '', className: '', classList: { add() {}, remove() {}, toggle() {} } }),
+      querySelector: (sel) => (blocks[sel] || [])[0] || null,
+      querySelectorAll: (sel) => blocks[sel] || [],
+    },
+    MutationObserver: class { observe() {} },
+    Date,
+    setTimeout: () => 0,
+    clearTimeout: () => {},
+    getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    chrome: {
+      runtime: {
+        sendMessage: () => Promise.resolve(),
+        onMessage: { addListener: (fn) => listeners.push(fn) },
+      },
+      storage: {
+        local: { get: async () => ({}) },
+        onChanged: { addListener() {} },
+      },
+    },
+  };
+  vm.runInNewContext(
+    fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/collector.js'), 'utf8'),
+    ctx,
+  );
+  const ask = (msg) => {
+    let response = null;
+    for (const fn of listeners) fn(msg, {}, (data) => { response = data; });
+    return response;
+  };
+  return ask;
+}
+test('详情页按可见正文刮 JD，标识不一致或过短则不采用', () => {
+  const jd = '岗位职责：负责数据采集与清洗，并输出可检索的岗位说明。';
+  const boss = runDetailPage('https://www.zhipin.com/job_detail/abc.html', {
+    '.job-sec-text': [detailNode(jd)],
+  });
+  const hit = boss({ type: 'SCRAPE_JOB_DETAIL', jobKey: 'abc' });
+  assert.equal(hit.ok, true);
+  assert.equal(hit.jobKey, 'abc');
+  assert.equal(hit.description, jd);
+  const mismatch = boss({ type: 'SCRAPE_JOB_DETAIL', jobKey: 'other' });
+  assert.equal(mismatch.mismatch, true);
+  assert.equal(mismatch.description, '');
+  const hidden = runDetailPage('https://www.zhipin.com/job_detail/abc.html', {
+    '.job-sec-text': [detailNode('岗位职责：这段在视口外，不应被当成详情正文。', { width: 10, height: 4 })],
+    'h1, h2, h3, h4, .job-sec-title, .t1, .title': [{
+      ...detailNode('职位描述', { width: 80, height: 24 }),
+      nextElementSibling: detailNode(jd),
+    }],
+  });
+  const fallback = hidden({ type: 'SCRAPE_JOB_DETAIL', jobKey: 'abc' });
+  assert.equal(fallback.description, jd);
+  const qcwy = runDetailPage('https://jobs.51job.com/shanghai/998877.html', {
+    '.job_msg': [detailNode(jd)],
+  });
+  const from51 = qcwy({ type: 'SCRAPE_JOB_DETAIL', jobKey: '998877' });
+  assert.equal(from51.ok, true);
+  assert.equal(from51.jobKey, '998877');
+  assert.equal(from51.description, jd);
+  const merged = patchExistingDescription(
+    [{ uid: 'qcwy:998877', description: '', title: '数据岗' }],
+    'qcwy:998877',
+    from51.description,
+  );
+  assert.equal(merged.patched, true);
+  assert.equal(merged.jobs[0].description, jd);
+  assert.equal(merged.jobs[0].title, '数据岗');
 });
 
 // ---------- 汇总 ----------

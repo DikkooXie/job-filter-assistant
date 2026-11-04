@@ -3,7 +3,7 @@ import { MSG, PLATFORM_META } from '../common/constants.js';
 import { normalizeResponse, platformOfHost } from '../common/platforms.js';
 import {
   loadJobs, mergeJobs, deleteJob, clearJobs, toggleStar, setJobMatch, setJobGreeting,
-  getMatchCache, setMatchCache, clearMatchCache,
+  getMatchCache, setMatchCache, clearMatchCache, saveJobs,
 } from '../common/jobsStore.js';
 import {
   loadSettings, saveSettings, loadProviders, saveProviders, getActiveProvider,
@@ -19,6 +19,7 @@ import { optionsUrlHash } from '../common/optionsLink.js';
 import {
   ENSURE_DESC_POLL_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, filterCapturedJobs,
   hasJobDescription, jobCardId, jobUrl, runEnsureDescription, shouldReuseMatchCache,
+  decideOpenOriginal, acceptDetailScrape, patchExistingDescription, jobKeyFromUid,
 } from '../common/ensureDescription.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
@@ -101,6 +102,8 @@ async function handle(msg, sender) {
       return sendGreetingToChat(msg.text, msg.platform, msg.url);
     case MSG.OPEN_JOB_CHAT:
       return openJobChat(msg.text, msg.platform, msg.url);
+    case MSG.OPEN_ORIGINAL_JOB:
+      return openOriginalJob(msg);
 
     // ---------- 设置 ----------
     case MSG.SETTINGS_GET:
@@ -561,6 +564,76 @@ async function waitForJobDescription(uid) {
     if (Date.now() >= deadline) return found || null;
     await sleep(ENSURE_DESC_POLL_MS);
   }
+}
+
+// 空描述点「打开原岗位」：前台打开后等嗅探写入。超时再让详情页刮可见 JD，只补已有 uid，不关标签。
+const DETAIL_SCRAPE_ATTEMPTS = 6;
+
+async function openOriginalJob(msg) {
+  const uid = String(msg && msg.uid || '');
+  const jobs = await loadJobs();
+  const stored = jobs.find((item) => item && item.uid === uid) || null;
+  const url = jobUrl(stored || {}) || jobUrl({ url: msg && msg.url });
+  if (!url) throw new Error('没有原岗位链接');
+  const tab = await activateOriginalJobTab(url);
+  const tabId = tab && tab.id != null ? tab.id : null;
+  if (!stored || decideOpenOriginal(stored) !== 'wait') {
+    return { opened: true, waited: false, tabId };
+  }
+  try {
+    const filled = await waitForJobDescription(uid);
+    if (filled && hasJobDescription(filled)) {
+      return { opened: true, waited: true, source: 'sniffer', tabId };
+    }
+    const raw = await requestDetailScrape(tabId, jobKeyFromUid(uid));
+    const patched = raw ? await writeDetailDescription(uid, raw) : false;
+    return { opened: true, waited: true, source: patched ? 'dom' : 'timeout', tabId };
+  } catch {
+    return { opened: true, waited: true, source: 'timeout', tabId };
+  }
+}
+
+async function activateOriginalJobTab(url) {
+  let tabs = [];
+  try { tabs = await chrome.tabs.query({}); } catch { tabs = []; }
+  const existing = tabs.find((tab) => tab && tab.id != null && sameJobPage(tab.url, url));
+  if (existing) {
+    try { await chrome.tabs.update(existing.id, { active: true }); } catch { /* 标签可能已关闭 */ }
+    if (existing.windowId != null) {
+      try { await chrome.windows.update(existing.windowId, { focused: true }); } catch { /* 无 windows 权限时标签仍会被激活 */ }
+    }
+    return existing;
+  }
+  return chrome.tabs.create({ url, active: true });
+}
+
+async function requestDetailScrape(tabId, jobKey) {
+  if (tabId == null || !jobKey) return '';
+  for (let attempt = 0; attempt < DETAIL_SCRAPE_ATTEMPTS; attempt++) {
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { type: MSG.SCRAPE_JOB_DETAIL, jobKey });
+      if (res && res.mismatch) return '';
+      const text = acceptDetailScrape({
+        expectedKey: jobKey,
+        pageKey: res && res.jobKey,
+        description: res && res.description,
+      });
+      if (text) return text;
+    } catch {
+      // 详情页内容脚本可能还没挂上
+    }
+    if (attempt + 1 < DETAIL_SCRAPE_ATTEMPTS) await sleep(ENSURE_DESC_POLL_MS);
+  }
+  return '';
+}
+
+async function writeDetailDescription(uid, description) {
+  const jobs = await loadJobs();
+  const result = patchExistingDescription(jobs, uid, description);
+  if (!result.patched) return false;
+  await saveJobs(result.jobs);
+  broadcast(MSG.JOBS_UPDATED, { count: result.jobs.length, updated: 1 });
+  return true;
 }
 
 // 清理关闭的 tab 上下文
