@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { GREETING_LEVELS, DIM_LABELS } from '../../common/ai/prompts.js';
 import { analysisGrade, analysisSummary, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
+import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
@@ -320,7 +321,7 @@ function AnalysisWarnings({ job }) {
   );
 }
 
-export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle, onOpen, onStar, onDelete, onDislike }) {
+export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }) {
   const grade = analysisGrade(job.match);
   const summary = grade ? (job.match?.summary || '') : '';
   const [confirming, setConfirming] = useState(null);
@@ -390,15 +391,20 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
         {(job.skills?.length ? job.skills : job.tags || []).length > 0 && (
           <ul className="skills" aria-label="岗位技能">{(job.skills?.length ? job.skills : job.tags).slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
         )}
-        <div className={`analysis${grade ? '' : ' bare'}`}>
+        <div className={`analysis${grade ? '' : ' bare'}${queueCard ? ` queue-${queueCard.kind}` : ''}`}>
           <div className="analysis-top">
             <button
               type="button"
               className="analysis-main"
-              aria-label={grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，尚未分析`}
+              aria-label={queueCard ? `${job.company || '该岗位'}，${queueCard.label}` : grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，尚未分析`}
               onClick={() => onOpen(job.uid, 'match')}
             >
-              {grade ? (
+              {queueCard ? (
+                <span className="queue-card-line">
+                  {queueCard.kind === 'running' && <i className="batch-spin" aria-hidden="true" />}
+                  <span className="grade">{queueCard.label}</span>
+                </span>
+              ) : grade ? (
                 <>
                   <span className="segs" aria-hidden="true">
                     {Array.from({ length: 5 }, (_, index) => (
@@ -409,14 +415,15 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
                 </>
               ) : <span className="grade muted">尚未分析</span>}
             </button>
-            {grade && (
+            {!queueCard && grade && (
               <button type="button" className={`score-num ${grade.tone}`} aria-label={`${grade.score} 分`} onClick={() => onOpen(job.uid, 'match')}>
                 {grade.score}
               </button>
             )}
           </div>
-          {summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
-          <AnalysisWarnings job={job} />
+          {queueCard?.hint && <p className="queue-card-hint">{queueCard.hint}</p>}
+          {!queueCard && summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
+          {!queueCard && <AnalysisWarnings job={job} />}
         </div>
         <div className="row-actions">
           <div className="row-actions-inner">
@@ -467,7 +474,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
 }
 
 export function ListFooter({
-  total, selectedCount, allSelected, indeterminate, busy, menuOpen,
+  total, selectedCount, allSelected, indeterminate, menuOpen,
   onToggleAll, onToggleMenu, onDeleteSelected, onExportSelected, onAnalyze, onWorkbench,
 }) {
   const selecting = selectedCount > 0;
@@ -520,10 +527,10 @@ export function ListFooter({
               <MoreHorizontal aria-hidden="true" />
             </button>
           </div>
-          <button type="button" className="ghost-icon" aria-label="导出已选岗位" title="导出" disabled={busy} onClick={onExportSelected}>
+          <button type="button" className="ghost-icon" aria-label="导出已选岗位" title="导出" onClick={onExportSelected}>
             <Download aria-hidden="true" />
           </button>
-          <button type="button" className="jp-btn jp-btn-primary workbench-btn" disabled={busy} onClick={onAnalyze}>
+          <button type="button" className="jp-btn jp-btn-primary workbench-btn" onClick={onAnalyze}>
             智能分析<ChevronRight aria-hidden="true" />
           </button>
         </div>
@@ -542,7 +549,7 @@ const ANALYZE_CHOICES = [
   { id: 'fingerprint', title: '只分析当前画像下未分析的', desc: '需画像指纹；检测到旧画像结果时再开放 · 本轮不可选', tag: '后续', disabled: true },
 ];
 
-export function AnalyzeSheet({ selectedCount, busy, onClose, onStart }) {
+export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
   const ref = useRef(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -599,7 +606,7 @@ export function AnalyzeSheet({ selectedCount, busy, onClose, onStart }) {
         </div>
         <div className="analyze-actions">
           <button type="button" className="jp-btn" onClick={onClose}>取消</button>
-          <button type="button" className="jp-btn jp-btn-primary" disabled={busy} onClick={() => onStart(mode)}>开始分析</button>
+          <button type="button" className="jp-btn jp-btn-primary" onClick={() => onStart(mode)}>开始分析</button>
         </div>
       </section>
     </div>
@@ -934,7 +941,133 @@ export function ModelNotice({ onOpenSettings, onDismiss }) {
   );
 }
 
-export function NoticeToast({ message, error }) {
+export function NoticeToast({ message, error, batch = false }) {
   if (!message) return null;
-  return <div className={`jp-toast${error ? ' is-error' : ''}`} role={error ? 'alert' : 'status'}>{message}</div>;
+  const mixed = batch && message.includes('失败');
+  return (
+    <div className={`jp-toast${error ? ' is-error' : ''}${batch ? ' is-batch' : ''}${mixed ? ' is-mixed' : ''}`} role={error ? 'alert' : 'status'}>
+      {batch && <CircleCheck className="toast-mark" aria-hidden="true" />}
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function BatchStrip({ model, onOpenQueue, onRetryFailed }) {
+  if (!model?.visible) return null;
+  return (
+    <div className={`batch-strip is-${model.tone}`} role="status" data-batch-strip={model.tone} aria-live="polite">
+      <button type="button" className="batch-strip-main" onClick={onOpenQueue}>
+        {model.tone === 'running' && <i className="batch-spin" aria-hidden="true" />}
+        {model.auto && <span className="batch-auto">自动</span>}
+        <span className="batch-strip-label">{model.label}</span>
+      </button>
+      <span className="batch-strip-actions">
+        {model.tone !== 'success' && (
+          <button type="button" className="batch-queue-btn" aria-haspopup="dialog" onClick={onOpenQueue}>
+            队列<ChevronUp aria-hidden="true" />
+          </button>
+        )}
+        {model.tone === 'failed' && (
+          <button type="button" className="batch-retry-btn" onClick={onRetryFailed}>重试失败</button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function QueueSection({ id, title, count, open, onToggle, children }) {
+  return (
+    <section className={`queue-section is-${id}${open ? ' is-open' : ''}`} data-queue-section={id}>
+      <button type="button" className="queue-section-toggle" aria-expanded={open} onClick={onToggle}>
+        <span>{title}</span>
+        <span className="queue-section-meta">{count}<ChevronUp aria-hidden="true" /></span>
+      </button>
+      {open && <div className="queue-section-body">{children}</div>}
+    </section>
+  );
+}
+
+function QueueJob({ item, batch, failed = false, onRetry }) {
+  return (
+    <div className={`queue-job${failed ? ' is-failed' : ''}${item.status === 'running' ? ' is-running' : ''}`}>
+      <div className="queue-job-copy">
+        <strong>{item.title || '未命名岗位'}</strong>
+        <span>{queueRowCopy(batch, item)}</span>
+      </div>
+      {failed && (
+        <button type="button" className="batch-retry-btn" onClick={() => onRetry(item.uid)}>重试</button>
+      )}
+    </div>
+  );
+}
+
+export function QueueDrawer({ batch, onCancel, onRetry, onClose }) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [chip, setChip] = useState('all');
+  const [open, setOpen] = useState({ running: true, failed: true, queued: true, done: false });
+  const model = drawerModel(batch);
+  const view = visibleSections(batch, chip);
+  useEffect(() => {
+    const root = ref.current;
+    const onKey = (event) => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); } };
+    root?.addEventListener('keydown', onKey);
+    root?.querySelector('button')?.focus();
+    return () => root?.removeEventListener('keydown', onKey);
+  }, []);
+  const toggle = (id) => setOpen((current) => ({ ...current, [id]: !current[id] }));
+  return (
+    <div className="queue-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="queue-drawer" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
+        <div className="sheet-handle" aria-hidden="true" />
+        <header className="queue-head">
+          <div className="queue-head-row">
+            <h2 id="queue-title">{model.head}</h2>
+            <button type="button" className="queue-cancel" disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
+          </div>
+          <div className="queue-bar" aria-hidden="true"><span style={{ width: `${Math.round(model.progress * 100)}%` }} /></div>
+          <p className="queue-summary">
+            <span>{model.summary}</span>
+            {model.estimate && <span className="queue-estimate">{model.estimate}</span>}
+          </p>
+        </header>
+        <div className="queue-chips" role="toolbar" aria-label="筛选队列">
+          <button type="button" className={`queue-chip${chip === 'all' ? ' is-on' : ''}`} aria-pressed={chip === 'all'} onClick={() => setChip('all')}>全部</button>
+          <button type="button" className={`queue-chip${chip === 'running' ? ' is-on' : ''}`} aria-pressed={chip === 'running'} onClick={() => setChip('running')}>进行中</button>
+          <button type="button" className={`queue-chip${model.failed.length ? ' is-failed' : ''}${chip === 'failed' ? ' is-on' : ''}`} aria-pressed={chip === 'failed'} onClick={() => setChip('failed')}>失败 {model.failed.length}</button>
+        </div>
+        <div className="queue-scroll">
+          {chip !== 'failed' && (
+            <QueueSection id="running" title="进行中" count={view.running.length} open={open.running} onToggle={() => toggle('running')}>
+              {view.running.length === 0 && <p className="queue-empty">没有进行中的岗位</p>}
+              {view.running.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
+            </QueueSection>
+          )}
+          {chip !== 'running' && (chip === 'failed' || view.failed.length > 0) && (
+            <QueueSection id="failed" title="失败" count={view.failed.length} open={open.failed} onToggle={() => toggle('failed')}>
+              {view.failed.length === 0 && <p className="queue-empty">没有失败的岗位</p>}
+              {view.failed.map((item) => <QueueJob key={item.uid} item={item} batch={batch} failed onRetry={onRetry} />)}
+            </QueueSection>
+          )}
+          {chip === 'all' && (
+            <QueueSection id="queued" title="排队" count={model.queued} open={open.queued} onToggle={() => toggle('queued')}>
+              {view.queuedPreview.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
+              {view.queuedHidden > 0 && <p className="queue-more" data-queue-hidden={view.queuedHidden}>还有 {view.queuedHidden} 条</p>}
+              {model.queued === 0 && <p className="queue-empty">没有排队的岗位</p>}
+            </QueueSection>
+          )}
+          {chip === 'all' && (
+            <QueueSection id="done" title="已完成" count={model.done.length} open={open.done} onToggle={() => toggle('done')}>
+              {view.done.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
+              {model.done.length === 0 && <p className="queue-empty">还没有完成的岗位</p>}
+            </QueueSection>
+          )}
+        </div>
+        <footer className="queue-foot">
+          <button type="button" className="batch-queue-btn" onClick={onClose}>收起</button>
+        </footer>
+      </section>
+    </div>
+  );
 }

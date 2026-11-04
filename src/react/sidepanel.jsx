@@ -6,8 +6,9 @@ import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
 import { analysisTargets, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
-import { AnalyzeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
+import { AnalyzeSheet, BatchStrip, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
 import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -70,19 +71,20 @@ export default function Sidepanel() {
     listScroll: 0, restoreList: false, filterOpen: false,
     view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), greetings: new Map(), advice: new Map(),
-    saveTimers: new Map(), batchBusy: false, reloadVersion: 0, noticeTimer: null, notice: '', error: false, loading: true,
+    saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, noticeTimer: null, notice: '', noticeBatch: false, error: false, loading: true,
     modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
     capsuleUntil: 0, capsuleTimer: null, scrollLockTimer: null, ignoreScrollDismiss: false,
     moreOpen: false, analyzeOpen: false,
   };
   const s = state.current;
   const update = () => redraw();
-  const notify = (message, error = false) => {
+  const notify = (message, error = false, batch = false) => {
     clearTimeout(s.noticeTimer);
     s.notice = message;
     s.error = error;
+    s.noticeBatch = !!batch && !error;
     update();
-    s.noticeTimer = setTimeout(() => { s.notice = ''; update(); }, 2600);
+    s.noticeTimer = setTimeout(() => { s.notice = ''; s.noticeBatch = false; update(); }, batch ? 3200 : 2600);
   };
   const setView = (patch) => { Object.assign(s.view, patch); update(); };
   const armCapsule = () => {
@@ -127,6 +129,7 @@ export default function Sidepanel() {
       s.seenReady = captured.ready;
       s.seenIds = captured.seen;
       s.freshIds = captured.fresh;
+      s.batch = hydrateTitles(s.batch, jobs);
       if (captured.arrived.length) armCapsule();
       else if (captured.fresh.size === 0) { clearTimeout(s.capsuleTimer); s.capsuleUntil = 0; }
       if (s.followLive) {
@@ -154,8 +157,10 @@ export default function Sidepanel() {
   useEffect(() => {
     reload();
     const listener = (msg) => {
-      if (msg?.type === MSG.JOBS_UPDATED) reload();
-      else if (msg?.type === MSG.CURRENT_JOB) refreshContext();
+      if (msg?.type === MSG.JOBS_UPDATED) {
+        const autoQueue = Array.isArray(msg.autoQueue) ? msg.autoQueue.slice() : null;
+        reload().then(() => { if (autoQueue?.length) acceptAuto(autoQueue); });
+      } else if (msg?.type === MSG.CURRENT_JOB) refreshContext();
     };
     const onStorage = (changes, area) => {
       if (area === 'local' && changes[STORAGE_KEYS.settings]) send(MSG.SETTINGS_GET).then((settings) => { s.settings = settings; update(); }).catch(() => {});
@@ -169,6 +174,7 @@ export default function Sidepanel() {
       clearTimeout(s.noticeTimer);
       clearTimeout(s.capsuleTimer);
       clearTimeout(s.scrollLockTimer);
+      clearTimeout(s.successTimer);
       for (const [uid, timer] of s.saveTimers) { clearTimeout(timer); send(MSG.GREETING_SAVE, { uid, text: s.greetings.get(uid) || '' }).catch(() => {}); }
       s.saveTimers.clear();
     };
@@ -193,6 +199,7 @@ export default function Sidepanel() {
   };
   const analyze = async (job, force = true) => {
     if (s.scoring.has(job.uid)) return false;
+    if ((s.batch.items || []).some((item) => item.uid === job.uid && (item.status === 'queued' || item.status === 'running'))) return false;
     if (!requireProviders()) return false;
     s.scoring.add(job.uid); update();
     try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST)); notify('分析完成'); return true; }
@@ -224,37 +231,83 @@ export default function Sidepanel() {
       else notify(`已打开岗位，未确认进入沟通；请核对后粘贴发送${result?.note ? `（${result.note}）` : ''}`, true);
     } catch (error) { notify(`招呼语已复制，请手动打开岗位页粘贴发送（${error.message}）`, true); }
   };
-  const batchAnalyze = async (list, { force = false } = {}) => {
-    if (s.batchBusy || !list.length) return;
-    if (!requireProviders()) return;
-    s.batchBusy = true;
-    const uids = list.map((job) => job.uid);
-    uids.forEach((uid) => s.scoring.add(uid));
-    update();
-    let ok = 0, fail = 0, firstErr = '';
-    try {
-      for (let index = 0; index < uids.length; index += 1) {
-        const uid = uids[index];
-        const job = s.jobs.find((item) => item.uid === uid);
-        notify(`正在分析 ${index + 1}/${uids.length}…`);
-        try {
-          await send(MSG.AI_MATCH_SCORE, { uid, job, force });
-          ok += 1;
-        } catch (error) {
-          fail += 1;
-          const message = error instanceof Error ? error.message : String(error);
-          firstErr ||= message;
-          notify(`第 ${index + 1} 个失败：${message}`, true);
-          if (index === 0) throw new Error(`分析失败：${message}`);
-        }
-        s.scoring.delete(uid);
-        s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs));
+  const settleIdle = () => {
+    if (isPending(s.batch)) return;
+    const before = s.batch.phase;
+    s.batch = finishPhase(s.batch);
+    if (s.batch.phase === 'success' && before !== 'success') {
+      const done = s.batch.items.filter((item) => item.status === 'done').length;
+      notify(`批量结束 · ${done} 完成`, false, true);
+      clearTimeout(s.successTimer);
+      s.successTimer = setTimeout(() => {
+        if (s.batch.phase !== 'success') return;
+        s.batch = emptyBatch();
+        s.queueOpen = false;
         update();
-        if (index < uids.length - 1) await sleep(500);
+      }, SUCCESS_HOLD_MS);
+    } else if (s.batch.phase === 'failed' && before !== 'failed') {
+      const done = s.batch.items.filter((item) => item.status === 'done').length;
+      const failed = s.batch.items.filter((item) => item.status === 'failed').length;
+      notify(`批量结束 · ${done} 完成 · ${failed} 失败`, false, true);
+    }
+  };
+  const pump = async () => {
+    if (s.pumping) return;
+    s.pumping = true;
+    try {
+      for (;;) {
+        const next = takeNext(s.batch);
+        if (!next) break;
+        if (!s.providers.length) { showModelNotice(); break; }
+        clearTimeout(s.successTimer);
+        s.batch = markRunning(s.batch, next.uid);
+        s.scoring.add(next.uid);
+        update();
+        const job = s.jobs.find((item) => item.uid === next.uid) || { uid: next.uid, title: next.title };
+        try {
+          await send(MSG.AI_MATCH_SCORE, { uid: next.uid, job, force: next.force });
+          s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs));
+          s.batch = hydrateTitles(settle(s.batch, next.uid, { ok: true }), s.jobs);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          s.batch = settle(s.batch, next.uid, { ok: false, error: message });
+        } finally {
+          s.scoring.delete(next.uid);
+        }
+        update();
+        if (takeNext(s.batch)) await sleep(500);
       }
-      notify(fail ? `分析完成：成功 ${ok}，失败 ${fail}（${firstErr}）` : `分析完成：成功 ${ok}`, !!fail);
-    } catch (error) { notify(error.message, true); }
-    finally { uids.forEach((uid) => s.scoring.delete(uid)); s.batchBusy = false; update(); }
+    } finally {
+      s.pumping = false;
+    }
+    if (isPending(s.batch) && s.providers.length) { pump(); return; }
+    settleIdle();
+    update();
+  };
+  const acceptAuto = (uids) => {
+    if (s.batch.phase === 'success') {
+      clearTimeout(s.successTimer);
+      s.batch = emptyBatch();
+    }
+    const jobs = uids.map((uid) => s.jobs.find((job) => job.uid === uid) || { uid, title: '未命名岗位' });
+    const next = enqueueBatch(s.batch, jobs, { source: 'auto', force: false });
+    if (next === s.batch) return;
+    s.batch = hydrateTitles(next, s.jobs);
+    update();
+    pump();
+  };
+  const retryQueue = (uid = null) => {
+    clearTimeout(s.successTimer);
+    const next = retryFailed(s.batch, uid);
+    if (next === s.batch) return;
+    s.batch = next;
+    update();
+    pump();
+  };
+  const cancelQueue = () => {
+    s.batch = cancelRemaining(s.batch);
+    settleIdle();
+    update();
   };
   const batchExport = (items) => {
     if (!items.length) { notify('未选择岗位', true); return; }
@@ -383,8 +436,20 @@ export default function Sidepanel() {
       update();
       return;
     }
+    if (!requireProviders()) { update(); return; }
+    if (s.batch.phase === 'success') {
+      clearTimeout(s.successTimer);
+      s.batch = emptyBatch();
+    }
+    const next = enqueueBatch(s.batch, targets, { source: 'manual', force: mode === 'force' });
+    if (next === s.batch) {
+      notify('所选岗位已在队列中');
+      update();
+      return;
+    }
+    s.batch = next;
     update();
-    batchAnalyze(targets, { force: mode === 'force' });
+    pump();
   };
 
   useLayoutEffect(() => {
@@ -547,6 +612,7 @@ export default function Sidepanel() {
                       returned={s.lastViewedUid === item.uid}
                       isNew={s.freshIds.has(item.uid)}
                       progressStatus={s.progress.get(item.uid)?.status}
+                      queueCard={cardCopy(s.batch, item.uid)}
                       onToggle={() => { if (s.checked.has(item.uid)) s.checked.delete(item.uid); else s.checked.add(item.uid); update(); }}
                       onOpen={openDetail}
                       onStar={async () => { try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid })); update(); } catch (error) { notify(error.message, true); } }}
@@ -557,12 +623,18 @@ export default function Sidepanel() {
               </div>
             )}
       {showListChrome && surface !== 'loading' && surface !== 'error' && (
+        <BatchStrip
+          model={stripModel(s.batch)}
+          onOpenQueue={() => { s.queueOpen = true; s.analyzeOpen = false; s.filterOpen = false; update(); }}
+          onRetryFailed={() => retryQueue(null)}
+        />
+      )}
+      {showListChrome && surface !== 'loading' && surface !== 'error' && (
         <ListFooter
           total={list.length}
           selectedCount={checked.length}
           allSelected={allSelected}
           indeterminate={checked.length > 0 && !allSelected}
-          busy={s.batchBusy}
           menuOpen={s.moreOpen}
           onToggleAll={() => {
             if (allSelected) list.forEach((item) => s.checked.delete(item.uid));
@@ -573,16 +645,23 @@ export default function Sidepanel() {
           onToggleMenu={(open) => { s.moreOpen = open; update(); }}
           onDeleteSelected={deleteChecked}
           onExportSelected={() => { s.moreOpen = false; batchExport(checked); }}
-          onAnalyze={() => { s.moreOpen = false; s.filterOpen = false; s.analyzeOpen = true; update(); }}
+          onAnalyze={() => { s.moreOpen = false; s.filterOpen = false; s.queueOpen = false; s.analyzeOpen = true; update(); }}
           onWorkbench={() => send(MSG.OPEN_OPTIONS)}
         />
       )}
       {s.analyzeOpen && (
         <AnalyzeSheet
           selectedCount={checked.length}
-          busy={s.batchBusy}
           onClose={() => { s.analyzeOpen = false; update(); }}
           onStart={startAnalysis}
+        />
+      )}
+      {s.queueOpen && stripModel(s.batch).visible && (
+        <QueueDrawer
+          batch={s.batch}
+          onCancel={cancelQueue}
+          onRetry={retryQueue}
+          onClose={() => { s.queueOpen = false; update(); }}
         />
       )}
       {s.filterOpen && (
@@ -594,7 +673,7 @@ export default function Sidepanel() {
           onClose={() => { s.filterOpen = false; update(); }}
         />
       )}
-      {s.notice && !s.filterOpen && <NoticeToast message={s.notice} error={s.error} />}
+      {s.notice && !s.filterOpen && <NoticeToast message={s.notice} error={s.error} batch={s.noticeBatch} />}
     </div>
   );
 }

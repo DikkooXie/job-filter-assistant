@@ -175,13 +175,27 @@ async function onJobsCaptured(msg, sender) {
   });
   broadcast(MSG.JOBS_UPDATED, { count: all.length, added, updated });
 
-  // 自动打分（可选）：只给新加入的岗位打分；过滤开启时跳过会被隐藏的岗位
+  // 自动打分（可选）：只给新加入的岗位打分；过滤开启时跳过会被隐藏的岗位。
+  // 侧栏开着时把 uid 交给同一条 JOBS_UPDATED（字段 autoQueue），由侧栏队列跑，避免和面板各打一次。
   if (settings.autoScore && addedUids.length) {
     const fresh = new Set(addedUids);
     const uids = autoScoreUids(all.filter((j) => fresh.has(j.uid)), settings.filters);
-    if (uids.length) scoreBatch(uids, {}).catch(() => {});
+    if (uids.length) {
+      if (await sidePanelIsOpen()) broadcast(MSG.JOBS_UPDATED, { autoQueue: uids });
+      else scoreBatch(uids, {}).catch(() => {});
+    }
   }
   return { added, updated, total: all.length };
+}
+
+async function sidePanelIsOpen() {
+  try {
+    if (typeof chrome.runtime.getContexts !== 'function') return false;
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ['SIDE_PANEL'] });
+    return Array.isArray(contexts) && contexts.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function afterJobsChange(list) {
