@@ -251,7 +251,7 @@ export function DislikeSheet({ job, saving, onClose, onSave }) {
       <section className="sheet dislike-sheet" role="dialog" aria-modal="true" aria-labelledby="dislike-title" ref={ref}>
         <div className="sheet-handle" aria-hidden="true" />
         <h2 id="dislike-title">不喜欢的地方</h2>
-        <p className="sheet-sub">画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。</p>
+        <p className="sheet-sub">画像不全易误判。用一句话告诉我要避开什么，写入画像。</p>
         <p className="dislike-context">针对 · <strong>{title}</strong>{salary ? ` · ${salary}` : ''}{city ? ` · ${city}` : ''}</p>
         <textarea
           id="dislike-note"
