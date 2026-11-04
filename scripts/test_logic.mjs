@@ -1546,6 +1546,39 @@ test('正式侧栏读取岗位库，不引用预览演示数据', () => {
   assert.doesNotMatch(vite, /sidepanel-browse-preview/);
 });
 
+test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  assert.match(browse, /\.continuous-list\s*\{[^}]*gap:\s*10px/);
+  assert.match(browse, /\.row-assessment\s*\{[^}]*background:\s*var\(--jp-inset\)/);
+  assert.match(browse, /\.row-assessment\s*\{[^}]*border:\s*0/);
+  assert.doesNotMatch(browse, /\.row-assessment\s*\{[^}]*border-top/);
+  assert.doesNotMatch(browse, /\.job-row\s*\{[^}]*border-bottom/);
+  assert.match(views, /assessment-copy/);
+  assert.match(views, /className=\{`flow-link/);
+});
+
+test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const profile = fs.readFileSync(path.join(root, 'src/react/settings/profile.css'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/react/settings/ProfileTab.jsx'), 'utf8');
+  assert.match(profile, /\.paste-box\s*\{[^}]*border-radius:\s*14px/);
+  assert.match(profile, /\.paste-box \.area-input\s*\{[^}]*padding:\s*14px 14px 16px/);
+  assert.match(profile, /\.paste-bar\s*\{/);
+  assert.match(profile, /\.paste-submit\s*\{[^}]*background:\s*var\(--s-accent\)/);
+  const pasteStart = tab.indexOf('className="paste-box"');
+  const pasteEnd = tab.indexOf('dropzone', pasteStart);
+  const paste = tab.slice(pasteStart, pasteEnd);
+  assert.ok(pasteStart > 0 && pasteEnd > pasteStart);
+  assert.ok(paste.includes('paste-bar'));
+  assert.ok(paste.includes('{paste.length} 字'));
+  assert.ok(paste.includes('清空'));
+  assert.ok(paste.includes('抽取画像'));
+  assert.ok(paste.indexOf('textarea') < paste.indexOf('paste-bar'));
+  assert.ok(paste.indexOf('paste-bar') < paste.indexOf('抽取画像'));
+});
+
 // ---------- 汇总 ----------
 console.log(`\n${'='.repeat(40)}\n结果：${pass} 通过 / ${fail} 失败\n`);
 process.exit(fail ? 1 : 0);

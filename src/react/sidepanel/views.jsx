@@ -106,6 +106,8 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
   const risks = riskLines(job);
   const reasons = exclusionReasons(job);
   const summary = job.match?.summary || '';
+  const riskAsStatus = !job.match && risks.length > 0;
+  const inlineRisks = riskAsStatus ? risks.slice(1) : risks;
   return (
     <article className={`job-row${returned ? ' just-viewed' : ''}`} data-job-uid={job.uid}>
       <div className="row-top">
@@ -135,16 +137,33 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
           <ul className="skills" aria-label="岗位技能">{(job.skills?.length ? job.skills : job.tags).slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
         )}
         <div className="row-assessment">
-          <button
-            type="button"
-            className={`match-summary ${verdict || 'none'}`}
-            aria-label={job.match ? `查看 ${job.company || '该岗位'} 的匹配分析：${job.match.score} 分，${verdictText}` : `查看 ${job.company || '该岗位'} 的匹配，尚未分析`}
-            onClick={() => onOpen(job.uid, 'match')}
-          >
-            {job.match
-              ? <span className="match-result"><strong>{job.match.score}</strong><span>{verdictText}</span></span>
-              : verdictText}
-          </button>
+          <div className="assessment-copy">
+            {riskAsStatus ? (
+              <button
+                type="button"
+                className="match-summary is-risk"
+                aria-label={`查看 ${job.company || '该岗位'} 的风险提示，尚未分析`}
+                onClick={() => onOpen(job.uid, 'match')}
+              >
+                <CircleAlert aria-hidden="true" /><span>{risks[0]}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`match-summary ${verdict || 'none'}`}
+                aria-label={job.match ? `查看 ${job.company || '该岗位'} 的匹配分析：${job.match.score} 分，${verdictText}` : `查看 ${job.company || '该岗位'} 的匹配，尚未分析`}
+                onClick={() => onOpen(job.uid, 'match')}
+              >
+                {job.match
+                  ? <span className="match-result"><strong>{job.match.score}</strong><span>{verdictText}</span></span>
+                  : verdictText}
+              </button>
+            )}
+            {summary && <button type="button" className="match-reason" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
+            {inlineRisks.map((line) => (
+              <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>
+            ))}
+          </div>
           <button
             type="button"
             className={`flow-link${progressStatus ? ' progressed' : ''}`}
@@ -153,7 +172,6 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
           >
             {flowEntryLabel(progressStatus)}<ChevronRight aria-hidden="true" />
           </button>
-          {summary && <button type="button" className="match-reason" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
         </div>
         {reasons.length > 0 && (
           <div className="exclusion">
@@ -161,9 +179,6 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
             <div><strong>开启过滤后将隐藏</strong><span>{reasons.join('；')}</span></div>
           </div>
         )}
-        {risks.map((line) => (
-          <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>
-        ))}
       </div>
     </article>
   );
