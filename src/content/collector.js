@@ -18,7 +18,7 @@
     } catch {
       return 'list';
     }
-    if (/\/wapi\/zpgeek\/(job\/detail(?:\/[a-z]+)?|job\/card|geek\/job\/detail)\.json/.test(path)) return 'detail';
+    if (/\/wapi\/zpgeek\/(job\/detail(?:\/[a-z]+)?|pc\/recommend\/job\/detail|job\/card|geek\/job\/detail)\.json/.test(path)) return 'detail';
     if (/\/api\/job\/detail/.test(path)) return 'detail';
     return 'list';
   }
@@ -34,7 +34,8 @@
     // 2) 回退：从响应体里挖（字段名依平台而异，尽量宽松）
     try {
       const zp = payload && (payload.zpData || payload.resultbody || payload.resultBody);
-      const info = zp && (zp.jobInfo || (zp.job && zp.job.item) || zp);
+      const detailObj = zp && zp.jobDetail && typeof zp.jobDetail === 'object' ? zp.jobDetail : null;
+      const info = zp && (zp.jobInfo || zp.jobCard || detailObj || (zp.job && zp.job.item) || zp);
       if (info) {
         const k = info.encryptId || info.encryptJobId || info.jobId || info.jobid;
         if (k) return String(k);

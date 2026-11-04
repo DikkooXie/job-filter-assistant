@@ -8,7 +8,8 @@
 
   const CHANNEL = 'job-helper:sniffer';
 
-  // 与 common/platforms.js 的 matchPlatformApi 保持一致（此处为独立副本）
+  // 独立副本：内容脚本不能 import。列表与 platforms.matchPlatformApi 一致；
+  // 详情覆盖 job/detail、pc/recommend/job/detail、job/card、geek/job/detail（collector 也按详情处理）。
   function matchApi(urlStr) {
     let u;
     try {
@@ -20,7 +21,7 @@
     const path = u.pathname;
     if (/(^|\.)zhipin\.com$/i.test(host)) {
       // 列表 + 详情/卡片（点开某个岗位时触发，用于识别「当前岗位」）
-      if (/\/wapi\/zpgeek\/(search\/joblist|pc\/recommend\/job\/list|mobile\/search\/joblist|job\/detail(?:\/[a-z]+)?|job\/card|geek\/job\/detail)\.json/.test(path)) {
+      if (/\/wapi\/zpgeek\/(search\/joblist|pc\/recommend\/job\/list|mobile\/search\/joblist|job\/detail(?:\/[a-z]+)?|pc\/recommend\/job\/detail|job\/card|geek\/job\/detail)\.json/.test(path)) {
         return 'boss';
       }
     }

@@ -18,12 +18,13 @@ export function matchPlatformApi(urlStr) {
   }
   const host = u.hostname;
   const path = u.pathname;
-  // BOSS：/wapi/zpgeek/(search/joblist | pc/recommend/job/list | job/detail).json
+  // BOSS 列表：search/joblist、pc/recommend/job/list、mobile/search/joblist
+  // BOSS 详情：job/detail、pc/recommend/job/detail、job/card、geek/job/detail
   if (/(^|\.)zhipin\.com$/i.test(host)) {
     if (/\/wapi\/zpgeek\/(search\/joblist|pc\/recommend\/job\/list|mobile\/search\/joblist)\.json/.test(path)) {
       return { platform: PLATFORM.boss, kind: 'list' };
     }
-    if (/\/wapi\/zpgeek\/(job\/detail|pc\/recommend\/job\/detail)\.json/.test(path)) {
+    if (/\/wapi\/zpgeek\/(job\/detail(?:\/[a-z]+)?|pc\/recommend\/job\/detail|job\/card|geek\/job\/detail)\.json/.test(path)) {
       return { platform: PLATFORM.boss, kind: 'detail' };
     }
   }
@@ -67,19 +68,64 @@ function jobKeyFromUrl(urlStr) {
 }
 
 // ============ BOSS 直聘 ============
-// 信封 {code, message, zpData}；code===0 成功；列表在 zpData.jobList[]
+// 信封 {code, message, zpData}；code===0 成功；列表在 zpData.jobList[]。
+// 列表抽屉的 job/card 把单条放在 zpData.jobCard（字段接近列表项，另带 postDescription），
+// 整页详情放在 zpData.jobInfo。两类同时出现时按 uid 合并，JD 以非空为准。
 function normalizeBoss(payload, opts = {}) {
   if (!isObj(payload)) return [];
   if (payload.code !== 0 && payload.code !== '0') return [];
   const zp = payload.zpData || {};
+  const urlKey = jobKeyFromUrl(opts.url);
+  const jobs = [];
   const list = zp.jobList || zp.recommendJobList || (Array.isArray(zp) ? zp : []);
-  if (Array.isArray(list) && list.length) return list.map(bossJob).filter(Boolean);
-  // 详情接口：无 jobList，改为 zpData.jobInfo（+ brandComInfo/bossInfo）单条
-  if (zp.jobInfo) {
-    const one = bossDetailJob(zp, jobKeyFromUrl(opts.url));
-    return one ? [one] : [];
+  if (Array.isArray(list) && list.length) {
+    for (const item of list) {
+      const job = bossJob(item);
+      if (job) jobs.push(job);
+    }
   }
-  return [];
+  if (isObj(zp.jobInfo)) {
+    const one = bossDetailJob(zp, urlKey);
+    if (one) jobs.push(one);
+  }
+  const card = bossCardPayload(zp);
+  if (card) {
+    const one = bossCardJob(card, urlKey);
+    if (one) jobs.push(one);
+  }
+  return mergeBossSameUid(jobs);
+}
+
+// 卡片 / 同类详情包。jobInfo 已由 bossDetailJob 处理，这里不再把 jobDetail 再解析成第二条。
+function bossCardPayload(zp) {
+  if (isObj(zp.jobCard)) return zp.jobCard;
+  if (!isObj(zp.jobInfo) && isObj(zp.jobDetail)) return zp.jobDetail;
+  const hasList = (Array.isArray(zp.jobList) && zp.jobList.length > 0)
+    || (Array.isArray(zp.recommendJobList) && zp.recommendJobList.length > 0);
+  if (!isObj(zp.jobInfo) && !hasList && bossDescription(zp)) return zp;
+  return null;
+}
+
+// 同一响应里列表项和卡片/详情可能是同一岗位：后者补上 JD，空字段不回盖。
+function mergeBossSameUid(jobs) {
+  const byUid = new Map();
+  for (const job of jobs) {
+    const prev = byUid.get(job.uid);
+    if (!prev) {
+      byUid.set(job.uid, job);
+      continue;
+    }
+    const raw = { ...(prev.raw || {}), ...(job.raw || {}) };
+    const merged = {
+      ...prev,
+      ...job,
+      description: job.description || prev.description,
+    };
+    const prunedRaw = pruneEmpty(raw, []);
+    if (Object.keys(prunedRaw).length) merged.raw = prunedRaw;
+    byUid.set(job.uid, merged);
+  }
+  return [...byUid.values()];
 }
 
 // 详情响应结构与列表不同：岗位在 zpData.jobInfo，公司在 zpData.brandComInfo，HR 在 zpData.bossInfo。
@@ -116,7 +162,7 @@ function bossDetailJob(zp, urlKey = '') {
     companyStage: str(brand.stageName) || str(brand.brandStageName),
     hrName: str(boss.name) || str(boss.bossName),
     hrTitle: str(boss.title) || str(boss.bossTitle),
-    description: str(info.postDescription) || str(info.jobDesc) || str(info.postDesc),
+    description: bossDescription(info, zp.jobDetail),
     url: jobId ? `https://www.zhipin.com/job_detail/${jobId}.html` : '',
     raw: {
       encryptJobId: jobId,
@@ -145,6 +191,74 @@ function pruneEmpty(obj, keep = []) {
     out[k] = v;
   }
   return out;
+}
+
+// 列表抽屉 job/card：字段名接近列表项（encryptJobId/cityName/brandName），JD 在 postDescription。
+// jobDetail 对象是同类详情包，字段名可能更接近 jobInfo。空字段剔除，避免盖掉列表已有值。
+function bossCardJob(card, urlKey = '') {
+  if (!isObj(card)) return null;
+  const jobId = str(urlKey) || str(card.encryptJobId) || str(card.encryptId) || str(card.jobId);
+  if (!jobId) return null;
+  const salaryText = str(card.salaryDesc);
+  const [minK, maxK] = parseSalary(salaryText);
+  const showSkills = arrStr(card.showSkills);
+  const full = {
+    uid: `${PLATFORM.boss}:${jobId}`,
+    platform: PLATFORM.boss,
+    jobId,
+    title: str(card.jobName),
+    salaryText,
+    salaryMinK: minK,
+    salaryMaxK: maxK,
+    city: str(card.cityName) || str(card.locationName),
+    district: joinNonEmpty([card.areaDistrict, card.businessDistrict], '·'),
+    experience: str(card.jobExperience) || str(card.experienceName),
+    degree: str(card.jobDegree) || str(card.degreeName),
+    skills: showSkills.length ? showSkills : arrStr(card.skills),
+    tags: arrStr(card.jobLabels),
+    welfare: arrStr(card.welfareList),
+    company: str(card.brandName),
+    companyIndustry: str(card.brandIndustry) || str(card.industryName),
+    companyScale: str(card.brandScaleName) || str(card.scaleName),
+    companyStage: str(card.brandStageName) || str(card.stageName),
+    hrName: str(card.bossName),
+    hrTitle: str(card.bossTitle),
+    description: bossDescription(card),
+    url: `https://www.zhipin.com/job_detail/${jobId}.html`,
+    raw: {
+      securityId: str(card.securityId),
+      encryptJobId: jobId,
+      encryptBrandId: str(card.encryptBrandId),
+      lid: str(card.lid),
+    },
+  };
+  return pruneEmpty(full, ['uid', 'platform', 'jobId']);
+}
+
+// JD 正文。卡片用 postDescription；详情还有 jobDesc/postDesc，少数包把正文放在 jobDetail。
+function bossDescription(...sources) {
+  for (const info of sources) {
+    const text = readBossDescription(info);
+    if (text) return text;
+  }
+  return '';
+}
+
+function readBossDescription(info) {
+  if (typeof info === 'string') return str(info);
+  if (!isObj(info)) return '';
+  const direct = str(info.postDescription) || str(info.jobDesc) || str(info.postDesc) || str(info.jobDescription);
+  if (direct) return direct;
+  const detail = info.jobDetail;
+  if (typeof detail === 'string') {
+    const text = str(detail);
+    if (text) return text;
+  } else if (isObj(detail)) {
+    const nested = str(detail.postDescription) || str(detail.jobDesc) || str(detail.postDesc)
+      || str(detail.jobDescription) || (typeof detail.content === 'string' ? str(detail.content) : '');
+    if (nested) return nested;
+  }
+  return typeof info.content === 'string' ? str(info.content) : '';
 }
 
 function bossJob(o) {
