@@ -1554,7 +1554,7 @@ test('列表卡片把警示区放进分析框，摘要两行省略，操作行�
   assert.match(zone, /warn-chips/);
   assert.match(zone, /warn-list/);
   assert.match(zone, /warn-item/);
-  assert.doesNotMatch(row, /className="risk"|className="exclusion"|再次点击确认删除/);
+  assert.doesNotMatch(row, /className="risk"|className="exclusion"/);
   assert.match(row, /className="act-icon del"/);
   assert.match(row, /className="act-icon dislike"/);
   assert.match(row, /className=\{`act-greet/);
@@ -1724,6 +1724,37 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(footer, /进入工作台/);
   assert.match(footer, /智能分析/);
   assert.doesNotMatch(footer, /准备未处理岗位|处理下一个/);
+});
+
+test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const icon = browse.match(/\.job-panel \.act-icon \{[^}]*\}/)?.[0] || '';
+  const hover = browse.match(/\.job-panel \.act-icon:hover,\s*\n\.job-panel \.act-icon:focus-visible \{[^}]*\}/)?.[0] || '';
+  assert.match(icon, /min-width:\s*28px/);
+  assert.match(icon, /max-width:\s*28px/);
+  assert.match(icon, /flex:\s*0 0 auto/);
+  const transition = icon.match(/transition:[^;]*;/)?.[0] || '';
+  assert.doesNotMatch(transition, /(^|[,\s])width\s/);
+  assert.doesNotMatch(transition, /flex-basis/);
+  assert.match(hover, /max-width:\s*9em/);
+  assert.match(hover, /padding:\s*0 10px/);
+  assert.doesNotMatch(hover, /width:\s*auto/);
+  assert.doesNotMatch(hover, /flex:\s*0 0 auto/);
+  assert.doesNotMatch(hover, /flex-basis/);
+});
+
+test('删除确认态文案是再次点击确认删除', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  assert.match(views, /confirming === 'delete' \? '再次点击确认删除' : '删除'/);
+  assert.match(views, /aria-label=\{confirming === 'delete' \? `再次点击确认删除 \$\{name\}`/);
+  assert.doesNotMatch(views, /\? `确认删除 \$\{name\}`/);
+  const confirmLbl = browse.match(/\.actions-row\.is-confirm-delete \.act-icon\.del \.lbl \{[^}]*\}/)?.[0] || '';
+  assert.match(confirmLbl, /max-width:\s*200px/);
+  assert.match(confirmLbl, /font-weight:\s*650/);
+  assert.match(browse, /\.actions-row\.is-confirm-dislike \.act-icon\.dislike \.lbl \{[^}]*max-width:\s*4\.5em/);
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
