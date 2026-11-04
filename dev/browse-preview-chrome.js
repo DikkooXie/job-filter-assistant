@@ -103,6 +103,39 @@ window.chrome = {
   downloads: { download: async () => 1 },
 };
 
+window.__previewCapture = (partial = {}) => {
+  const uid = partial.uid || `boss:new-${Date.now()}`;
+  const job = {
+    uid,
+    platform: 'boss',
+    jobId: uid,
+    title: '海外投放专员',
+    salaryText: '12–18K',
+    salaryMinK: 12,
+    salaryMaxK: 18,
+    city: '深圳',
+    district: '南山',
+    experience: '1–3年',
+    degree: '本科',
+    skills: ['投放'],
+    tags: [],
+    welfare: [],
+    company: '海风传媒',
+    hrName: '陈先生',
+    hrTitle: '招聘',
+    description: '预览用新收录岗位。',
+    url: 'https://example.invalid/jobs/new',
+    savedAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    star: false,
+    match: null,
+    ...partial,
+    uid,
+  };
+  state.jobs = [job, ...state.jobs.filter((item) => item.uid !== uid)];
+  broadcast({ type: 'JOBS_UPDATED', added: 1 });
+  return job;
+};
 window.__previewRemoveJob = (uid) => {
   state.jobs = state.jobs.filter((job) => job.uid !== uid);
   broadcast({ type: 'JOBS_UPDATED' });

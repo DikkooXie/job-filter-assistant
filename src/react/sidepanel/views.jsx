@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, ExternalLink, Filter, HeartCrack, Search, Settings, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { GREETING_LEVELS, VERDICT_LABELS, DIM_LABELS } from '../../common/ai/prompts.js';
 import { analysisGrade, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines } from './browseModel.js';
 
@@ -52,14 +52,51 @@ function Analysis({ match }) {
   );
 }
 
+function LibraryCount({ shown, total, freshCount, onShowFresh }) {
+  const fresh = freshCount > 0;
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!fresh) {
+      setExpanded(false);
+      return undefined;
+    }
+    const id = requestAnimationFrame(() => setExpanded(true));
+    return () => cancelAnimationFrame(id);
+  }, [fresh]);
+  if (!fresh) {
+    return (
+      <span className="library-count" aria-label={`显示 ${shown} 个，共 ${total} 个`}>
+        {shown === total ? total : `${shown} / ${total}`}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={`library-count is-fresh${expanded ? ' is-open' : ''}`}
+      aria-label={`找到 ${freshCount} 个新岗位`}
+      onClick={onShowFresh}
+    >
+      <span className="fresh-dot" aria-hidden="true" />
+      <span>找到 {freshCount} 个新岗位</span>
+    </button>
+  );
+}
+
 export function ListHeader({
-  total, shown, view, filterEnabled, settingsReady, filterCount, applied, viewChanged, dev,
-  onSearch, onClearSearch, onSort, onToggleFilters, onOpenFilters, onOpenCurrent, onOptions, onReset,
+  total, shown, freshCount, view, filterEnabled, settingsReady, filterCount, applied, viewChanged, dev,
+  onSearch, onClearSearch, onSort, onToggleFilters, onOpenFilters, onOpenCurrent, onOptions, onReset, onShowFresh,
 }) {
   return (
     <header className="app-header">
       <div className="app-heading">
-        <h1>岗位库{dev && <span className="dev-mark">dev</span>}<span aria-label={`显示 ${shown} 个，共 ${total} 个`}>{shown === total ? total : `${shown} / ${total}`}</span></h1>
+        <div className="heading-title">
+          <h1>岗位库</h1>
+          {dev && <span className="dev-mark">dev</span>}
+          <span className="library-count-slot" aria-live="polite">
+            <LibraryCount shown={shown} total={total} freshCount={freshCount} onShowFresh={onShowFresh} />
+          </span>
+        </div>
         <div className="heading-actions">
           <button type="button" className="header-icon" aria-label="当前岗位" title="当前岗位" onClick={onOpenCurrent}><Briefcase aria-hidden="true" /></button>
           <button type="button" className={`header-icon filter-trigger${filterCount ? ' has-filters' : ''}`} aria-label={filterCount ? `筛选，${filterCount} 个条件` : '筛选'} title="筛选" onClick={onOpenFilters}>
@@ -100,7 +137,7 @@ export function ListHeader({
   );
 }
 
-export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpen, onStar, onDelete, onDislike }) {
+export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle, onOpen, onStar, onDelete, onDislike }) {
   const grade = analysisGrade(job.match);
   const risks = riskLines(job);
   const reasons = exclusionReasons(job);
@@ -142,10 +179,13 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
   };
 
   return (
-    <article ref={rowRef} className={`job-row${returned ? ' just-viewed' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
+    <article ref={rowRef} className={`job-row${returned ? ' just-viewed' : ''}${isNew ? ' is-new' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
       <div className="row-top">
         <input type="checkbox" aria-label={`选择 ${job.company || ''} ${job.title || '岗位'}`} checked={checked} onChange={onToggle} />
-        <button type="button" className="job-title" onClick={() => onOpen(job.uid, 'info')}>{job.title || '未命名岗位'}</button>
+        <button type="button" className="job-title" onClick={() => onOpen(job.uid, 'info')}>
+          {job.title || '未命名岗位'}
+          {isNew && <span className="job-new">NEW</span>}
+        </button>
         {job.salaryText && <span className="salary">{job.salaryText}</span>}
       </div>
       <div className="row-body">
@@ -254,40 +294,142 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
 }
 
 export function ListFooter({
-  total, selectedCount, allSelected, indeterminate, busy, onToggleAll, onClear, onAnalyze, onPrepare, onNext, onExportVisible, onExportSelected, onClearLibrary,
+  total, selectedCount, allSelected, indeterminate, busy, menuOpen,
+  onToggleAll, onToggleMenu, onDeleteSelected, onExportSelected, onAnalyze, onWorkbench,
 }) {
   const selecting = selectedCount > 0;
+  const menuRef = useRef(null);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape') onToggleMenu(false); };
+    const onPointer = (event) => {
+      if (!menuRef.current?.contains(event.target)) onToggleMenu(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [menuOpen, onToggleMenu]);
   return (
     <footer className={`selection-bar${selecting ? ' is-selecting' : ''}`}>
       <label className="select-all">
         <input
           type="checkbox"
-          aria-label="全选当前可见岗位"
+          aria-label="全选"
           checked={allSelected}
           disabled={!total}
           ref={(element) => { if (element) element.indeterminate = indeterminate; }}
           onChange={onToggleAll}
         />
-        <span>{selecting ? `已选 ${selectedCount}` : '全选'}</span>
+        <span>全选</span>
+        {selecting && <span className="selected-count">已选 {selectedCount}</span>}
       </label>
       {selecting ? (
-        <>
-          <button type="button" className="text-action" onClick={onClear}>取消</button>
-          <button type="button" className="jp-btn jp-btn-primary" disabled={busy} onClick={onAnalyze}>批量分析 {selectedCount}</button>
-          <div className="selection-extra">
-            <button type="button" className="jp-btn" disabled={busy} onClick={onPrepare}>准备未处理岗位</button>
-            <button type="button" className="jp-btn" disabled={busy} onClick={onNext}>处理下一个</button>
-            <button type="button" className="jp-btn" onClick={onExportSelected}>导出已选</button>
+        <div className="selection-actions">
+          <div className="more-wrap" ref={menuRef}>
+            {menuOpen && (
+              <div className="more-menu" role="menu" aria-label="更多操作">
+                <button type="button" role="menuitem" className="more-item" onClick={onDeleteSelected}>
+                  <Trash2 aria-hidden="true" />删除
+                </button>
+              </div>
+            )}
+            <button
+              type="button"
+              className={`ghost-icon${menuOpen ? ' is-active' : ''}`}
+              aria-label="更多"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              onClick={() => onToggleMenu(!menuOpen)}
+            >
+              <MoreHorizontal aria-hidden="true" />
+            </button>
           </div>
-        </>
+          <button type="button" className="ghost-icon" aria-label="导出已选岗位" title="导出" disabled={busy} onClick={onExportSelected}>
+            <Download aria-hidden="true" />
+          </button>
+          <button type="button" className="jp-btn jp-btn-primary workbench-btn" disabled={busy} onClick={onAnalyze}>
+            智能分析<ChevronRight aria-hidden="true" />
+          </button>
+        </div>
       ) : (
-        <>
-          <span className="selection-scope">当前可见</span>
-          <button type="button" className="text-action" onClick={onClearLibrary}>清空</button>
-          <button type="button" className="jp-btn jp-btn-primary" disabled={!total} onClick={onExportVisible}>导出 {total} 项</button>
-        </>
+        <button type="button" className="jp-btn jp-btn-primary workbench-btn" onClick={onWorkbench}>
+          进入工作台<ChevronRight aria-hidden="true" />
+        </button>
       )}
     </footer>
+  );
+}
+
+const ANALYZE_CHOICES = [
+  { id: 'unscored', title: '只分析尚未分析的', desc: '跳过已有分数的岗位，只补未分析项', tag: '推荐' },
+  { id: 'force', title: '全部重新分析', desc: '覆盖已有结果，按当前画像重跑全部已选' },
+  { id: 'fingerprint', title: '只分析当前画像下未分析的', desc: '需画像指纹；检测到旧画像结果时再开放 · 本轮不可选', tag: '后续', disabled: true },
+];
+
+export function AnalyzeSheet({ selectedCount, busy, onClose, onStart }) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [mode, setMode] = useState('unscored');
+  useEffect(() => {
+    const root = ref.current;
+    const previous = document.activeElement;
+    const nodes = () => [...root.querySelectorAll('button,input,select,textarea')].filter((element) => !element.disabled);
+    nodes()[0]?.focus();
+    const onKey = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const items = nodes();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    root.addEventListener('keydown', onKey);
+    return () => {
+      root.removeEventListener('keydown', onKey);
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  return (
+    <div className="scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="sheet analyze-sheet" role="dialog" aria-modal="true" aria-labelledby="analyze-title" ref={ref}>
+        <div className="sheet-handle" aria-hidden="true" />
+        <h2 id="analyze-title">智能分析</h2>
+        <p className="analyze-sub">已选 {selectedCount} 个岗位 · 选择分析范围</p>
+        <div className="analyze-options" role="radiogroup" aria-label="分析范围">
+          {ANALYZE_CHOICES.map((choice) => (
+            <button
+              type="button"
+              key={choice.id}
+              role="radio"
+              aria-checked={!choice.disabled && mode === choice.id}
+              aria-disabled={choice.disabled || undefined}
+              disabled={choice.disabled}
+              className={`analyze-option${mode === choice.id ? ' is-selected' : ''}${choice.disabled ? ' is-disabled' : ''}`}
+              onClick={() => { if (!choice.disabled) setMode(choice.id); }}
+            >
+              <span className="analyze-radio" aria-hidden="true" />
+              <span className="analyze-copy">
+                <span className="analyze-label">
+                  {choice.title}
+                  {choice.tag === '推荐' && <span className="tag-recommend">推荐</span>}
+                  {choice.tag === '后续' && <span className="tag-later">后续</span>}
+                </span>
+                <span className="analyze-desc">{choice.desc}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="analyze-actions">
+          <button type="button" className="jp-btn" onClick={onClose}>取消</button>
+          <button type="button" className="jp-btn jp-btn-primary" disabled={busy} onClick={() => onStart(mode)}>开始分析</button>
+        </div>
+      </section>
+    </div>
   );
 }
 

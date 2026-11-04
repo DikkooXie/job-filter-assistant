@@ -17,7 +17,7 @@ import {
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisGrade, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, librarySurface, returnFocusTarget, riskLines,
+  analysisGrade, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
@@ -1546,6 +1546,62 @@ test('正式侧栏读取岗位库，不引用预览演示数据', () => {
   assert.doesNotMatch(vite, /sidepanel-browse-preview/);
 });
 
+test('新收录只记会话基线之后出现的岗位 id', () => {
+  const first = noteCapturedJobs({ ready: false, seen: [], fresh: [] }, [{ uid: 'a' }, { uid: 'b' }, { uid: 'b' }]);
+  assert.equal(first.ready, true);
+  assert.deepEqual(first.arrived, []);
+  assert.deepEqual([...first.fresh], []);
+  assert.deepEqual([...first.seen], ['a', 'b']);
+  const next = noteCapturedJobs(first, [{ uid: 'b' }, { uid: 'a' }, { uid: 'c' }]);
+  assert.deepEqual(next.arrived, ['c']);
+  assert.deepEqual([...next.fresh], ['c']);
+  const again = noteCapturedJobs(next, [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }]);
+  assert.deepEqual(again.arrived, []);
+  assert.deepEqual([...again.fresh], ['c']);
+  const removed = noteCapturedJobs(again, [{ uid: 'a' }]);
+  assert.deepEqual([...removed.fresh], []);
+  const fromEmpty = noteCapturedJobs({ ready: true, seen: new Set(), fresh: new Set() }, [{ uid: 'n' }, { title: '无标识' }]);
+  assert.deepEqual(fromEmpty.arrived, ['n']);
+  assert.equal(FRESH_CAPSULE_MS, 8000);
+  assert.equal(FRESH_MARK_VISIBLE_MS, 2000);
+});
+
+test('智能分析只把未分析岗位交给默认项，强制项覆盖已选', () => {
+  const jobs = [
+    { uid: 'a', match: { score: 90 } },
+    { uid: 'b', match: null },
+    { uid: 'c' },
+    { title: '没有标识' },
+  ];
+  assert.deepEqual(analysisTargets(jobs, 'unscored').map((job) => job.uid), ['b', 'c']);
+  assert.deepEqual(analysisTargets(jobs, 'force').map((job) => job.uid), ['a', 'b', 'c']);
+  assert.deepEqual(analysisTargets(jobs, 'fingerprint'), []);
+  assert.deepEqual(analysisTargets(null, 'force'), []);
+});
+
+test('侧栏底栏改为工作台入口和智能分析', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  assert.match(views, /进入工作台/);
+  assert.match(views, /智能分析/);
+  assert.match(views, /只分析尚未分析的/);
+  assert.match(views, /全部重新分析/);
+  assert.match(views, /只分析当前画像下未分析的/);
+  assert.match(views, /tag-recommend/);
+  assert.match(views, /后续/);
+  assert.match(views, /找到 \$\{freshCount\} 个新岗位/);
+  assert.match(views, /job-new/);
+  assert.match(sidepanel, /OPEN_OPTIONS/);
+  assert.match(sidepanel, /force: mode === 'force'/);
+  assert.match(sidepanel, /analysisTargets\(checked, mode\)/);
+  assert.match(sidepanel, /JOB_DELETE/);
+  assert.doesNotMatch(views, /准备未处理岗位|处理下一个|当前可见|批量分析/);
+  assert.doesNotMatch(views, />导出已选</);
+  assert.doesNotMatch(views, /导出 \{total\} 项/);
+  assert.doesNotMatch(sidepanel, /准备未处理岗位|处理下一个|onExportVisible|onClearLibrary|recordPrepared/);
+});
+
 test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
@@ -1608,8 +1664,12 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(sidepanel, /JOB_DELETE/);
   assert.match(sidepanel, /确定删除岗位/);
   const footerStart = views.indexOf('export function ListFooter');
-  assert.match(views.slice(footerStart), /准备未处理岗位/);
-  assert.match(views.slice(footerStart), /处理下一个/);
+  const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
+  const footer = views.slice(footerStart, sheetStart);
+  assert.ok(sheetStart > footerStart);
+  assert.match(footer, /进入工作台/);
+  assert.match(footer, /智能分析/);
+  assert.doesNotMatch(footer, /准备未处理岗位|处理下一个/);
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
