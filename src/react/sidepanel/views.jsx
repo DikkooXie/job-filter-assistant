@@ -607,7 +607,7 @@ export function ListFooter({
 const ANALYZE_CHOICES = [
   { id: 'unscored', title: '只分析尚未分析的', desc: '跳过已有分数的岗位，只补未分析项', tag: '推荐' },
   { id: 'force', title: '全部重新分析', desc: '覆盖已有结果，按当前画像重跑全部已选' },
-  { id: 'fingerprint', title: '只分析当前画像下未分析的', desc: '需画像指纹；检测到旧画像结果时再开放 · 本轮不可选', tag: '后续', disabled: true },
+  { id: 'fingerprint', title: '只分析当前画像下未分析的', desc: '跳过已在当前画像下分析过的岗位；画像变化后的旧结果会重新分析' },
 ];
 
 export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
@@ -658,7 +658,6 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
                 <span className="analyze-label">
                   {choice.title}
                   {choice.tag === '推荐' && <span className="tag-recommend">推荐</span>}
-                  {choice.tag === '后续' && <span className="tag-later">后续</span>}
                 </span>
                 <span className="analyze-desc">{choice.desc}</span>
               </span>

@@ -13,12 +13,13 @@ import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, rem
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { mergeJobs } from '../src/common/jobsStore.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
+import { pickActiveProvider, profileFingerprint, withProfileFp } from '../src/common/profileFingerprint.js';
 import {
   MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisGrade, analysisSummary, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
+  analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import {
@@ -1958,9 +1959,85 @@ test('智能分析只把未分析岗位交给默认项，强制项覆盖已选',
   ];
   assert.deepEqual(analysisTargets(jobs, 'unscored').map((job) => job.uid), ['b', 'c']);
   assert.deepEqual(analysisTargets(jobs, 'force').map((job) => job.uid), ['a', 'b', 'c']);
-  assert.deepEqual(analysisTargets(jobs, 'fingerprint'), []);
+  assert.deepEqual(analysisTargets(jobs, 'fingerprint', 'fp-now').map((job) => job.uid), ['a', 'b', 'c']);
   assert.deepEqual(analysisTargets(null, 'force'), []);
+  assert.equal(analysisUsesForce('unscored'), false);
+  assert.equal(analysisUsesForce('force'), true);
+  assert.equal(analysisUsesForce('fingerprint'), true);
+  assert.equal(analysisEmptyMessage('unscored', 2), '所选岗位都已有分析结果');
+  assert.equal(analysisEmptyMessage('fingerprint', 2), '所选岗位都已在当前画像下分析过');
+  assert.equal(analysisEmptyMessage('fingerprint', 0), '未选择岗位');
+  assert.equal(analysisEmptyMessage('force', 0), '未选择岗位');
 });
+
+test('画像指纹变化后，旧匹配结果进入当前画像下未分析', () => {
+  const profile = emptyProfile();
+  const provider = { id: 'p1', model: 'demo-model' };
+  const fp = profileFingerprint(profile, provider);
+  assert.equal(fp, legacyProfileFingerprint(profile, provider));
+  assert.equal(profileFingerprint(profile, provider), fp);
+  assert.equal(profileFingerprint({ ...profile, updatedAt: '1999-01-01T00:00:00.000Z', schemaVersion: 9 }, provider), fp);
+  const renamed = profileFingerprint(profile, { ...provider, model: 'other-model' });
+  const moved = profileFingerprint({
+    ...profile,
+    target: { ...profile.target, cities: ['上海'] },
+  }, provider);
+  const noted = profileFingerprint({
+    ...profile,
+    preference: { ...profile.preference, notes: '可以接受混合办公' },
+  }, provider);
+  assert.notEqual(renamed, fp);
+  assert.notEqual(moved, fp);
+  assert.notEqual(noted, fp);
+  const renamedBasics = profileFingerprint({
+    ...profile,
+    basics: { ...profile.basics, name: '不应外发的名字' },
+  }, provider);
+  assert.notEqual(renamedBasics, fp);
+  assert.equal(renamedBasics, legacyProfileFingerprint({
+    ...profile,
+    basics: { ...profile.basics, name: '不应外发的名字' },
+  }, provider));
+
+  const current = withProfileFp({ score: 80, summary: '当前画像' }, fp);
+  assert.equal(current.profileFp, fp);
+  assert.equal(withProfileFp({ score: 1 }, fp).score, 1);
+  const untouched = { score: 3 };
+  withProfileFp(untouched, fp);
+  assert.equal(untouched.profileFp, undefined);
+
+  const jobs = [
+    { uid: 'fresh', match: null },
+    { uid: 'legacy', match: { score: 70 } },
+    { uid: 'blank', match: { score: 50, profileFp: '' } },
+    { uid: 'current', match: current },
+    { uid: 'stale', match: withProfileFp({ score: 40 }, moved) },
+    { title: '没有标识', match: { profileFp: 'nope' } },
+  ];
+  assert.deepEqual(analysisTargets(jobs, 'fingerprint', fp).map((job) => job.uid), ['fresh', 'legacy', 'blank', 'stale']);
+  assert.deepEqual(analysisTargets([{ uid: 'current', match: current }], 'fingerprint', fp), []);
+  assert.deepEqual(analysisTargets(jobs, 'fingerprint', moved).map((job) => job.uid), ['fresh', 'legacy', 'blank', 'current']);
+  assert.equal(pickActiveProvider([{ id: 'a', model: 'm1' }, { id: 'b', model: 'm2' }], 'b').model, 'm2');
+  assert.equal(pickActiveProvider([{ id: 'a', model: 'm1' }], 'missing').id, 'a');
+  assert.equal(pickActiveProvider([], 'a'), null);
+  assert.equal(profileFingerprint(profile, pickActiveProvider([{ id: 'a', model: 'demo-model' }], '')), fp);
+});
+
+function legacyProfileFingerprint(profile, provider) {
+  const serialized = JSON.stringify({
+    t: profile.target,
+    c: profile.capabilities,
+    b: profile.basics,
+    w: profile.workSummary,
+    pj: profile.projectSummary,
+    h: profile.highlights,
+    pr: profile.preference,
+    m: provider.model,
+  });
+  let hash = 0;
+  for (let i = 0; i < serialized.length; i++) hash = (hash * 31 + serialized.charCodeAt(i)) | 0;
+  return String(hash >>> 0);
+}
 
 test('侧栏底栏改为工作台入口和智能分析', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -1971,13 +2048,21 @@ test('侧栏底栏改为工作台入口和智能分析', () => {
   assert.match(views, /只分析尚未分析的/);
   assert.match(views, /全部重新分析/);
   assert.match(views, /只分析当前画像下未分析的/);
+  assert.match(views, /跳过已在当前画像下分析过的岗位；画像变化后的旧结果会重新分析/);
   assert.match(views, /tag-recommend/);
-  assert.match(views, /后续/);
+  assert.doesNotMatch(views, /本轮不可选|tag:\s*'后续'|disabled:\s*true/);
+  assert.match(views, /后续同类可不提示/);
   assert.match(views, /找到 \$\{freshCount\} 个新岗位/);
   assert.match(views, /job-new/);
   assert.match(sidepanel, /OPEN_OPTIONS/);
-  assert.match(sidepanel, /force: mode === 'force'/);
-  assert.match(sidepanel, /analysisTargets\(checked, mode\)/);
+  assert.match(sidepanel, /analysisUsesForce\(mode\)/);
+  assert.match(sidepanel, /analysisTargets\(checked, mode, fingerprint\)/);
+  assert.match(sidepanel, /analysisEmptyMessage\(mode, checked\.length\)/);
+  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  assert.match(background, /from '\.\.\/common\/profileFingerprint\.js'/);
+  assert.match(background, /withProfileFp\(cache\[cacheKey\], fp\)/);
+  assert.match(background, /withProfileFp\(sanitizeMatch\(raw\), fp\)/);
+  assert.doesNotMatch(background, /function profileFingerprint/);
   assert.match(sidepanel, /JOB_DELETE/);
   assert.doesNotMatch(views, /准备未处理岗位|处理下一个|当前可见|批量分析/);
   assert.doesNotMatch(views, />导出已选</);

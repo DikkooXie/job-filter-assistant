@@ -1028,8 +1028,7 @@
 .analyze-label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 650; line-height: 1.35; }
 .job-panel .analyze-option.is-disabled .analyze-label { color: var(--jp-muted); font-weight: 550; }
 .analyze-desc { font-size: 11px; color: var(--jp-muted); line-height: 1.4; }
-.tag-recommend,
-.tag-later {
+.tag-recommend {
   display: inline-flex;
   align-items: center;
   font-size: 10px;
@@ -1037,9 +1036,9 @@
   line-height: 16px;
   border-radius: 999px;
   padding: 1px 7px;
+  color: #0f1419;
+  background: #f0b429;
 }
-.tag-recommend { color: #0f1419; background: #f0b429; }
-.tag-later { color: var(--jp-muted); background: var(--jp-surface-2); border: 1px solid var(--jp-line-strong); font-weight: 650; }
 .analyze-actions { display: flex; gap: 8px; margin-top: 14px; }
 .job-panel .analyze-actions .jp-btn { min-height: 38px; border-radius: 9px; }
 .job-panel .analyze-actions .jp-btn-primary { flex: 1; }

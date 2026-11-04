@@ -164,11 +164,27 @@ export function noteCapturedJobs(session, jobs) {
   return { ready: true, seen, fresh, arrived };
 }
 
-// 智能分析抽屉的范围。unscored 只跑已选里还没有分析结果的岗位；force 原样返回已选，交给 AI_MATCH_SCORE 的 force。
-// 画像指纹项本轮不可选，不返回岗位。
-export function analysisTargets(jobs, mode) {
+// 智能分析抽屉的范围。unscored 只跑已选里还没有分析结果的岗位；force 原样返回已选。
+// fingerprint：没有匹配结果，或结果上的画像戳不是当前指纹。调用方对该批传 force，避免旧缓存短路。
+export function analysisTargets(jobs, mode, fingerprint) {
   const list = (jobs || []).filter((job) => job?.uid);
   if (mode === 'force') return list.slice();
   if (mode === 'unscored') return list.filter((job) => !job.match);
+  if (mode === 'fingerprint') {
+    const fp = String(fingerprint ?? '');
+    return list.filter((job) => !job.match || String(job.match.profileFp ?? '') !== fp);
+  }
   return [];
+}
+
+// 当前画像下未分析、以及全部重跑，都不能复用旧的匹配缓存。
+export function analysisUsesForce(mode) {
+  return mode === 'force' || mode === 'fingerprint';
+}
+
+// 这一批没有可分析岗位时的提示。fingerprint 在确实选了岗位时说明它们已盖上当前画像戳。
+export function analysisEmptyMessage(mode, selectedCount) {
+  if (mode === 'unscored') return '所选岗位都已有分析结果';
+  if (mode === 'fingerprint' && selectedCount) return '所选岗位都已在当前画像下分析过';
+  return '未选择岗位';
 }

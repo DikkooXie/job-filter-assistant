@@ -1,11 +1,12 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
+import { pickActiveProvider, profileFingerprint } from '../common/profileFingerprint.js';
 import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
-import { analysisTargets, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { analysisEmptyMessage, analysisTargets, analysisUsesForce, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
 import { AnalyzeSheet, BatchStrip, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
@@ -428,11 +429,30 @@ export default function Sidepanel() {
     } catch (error) { notify(error.message, true); }
     update();
   };
-  const startAnalysis = (mode) => {
-    const targets = analysisTargets(checked, mode);
+  const startAnalysis = async (mode) => {
     s.analyzeOpen = false;
+    update();
+    let fingerprint = '';
+    if (mode === 'fingerprint') {
+      try {
+        const [profile, settings, providers] = await Promise.all([
+          send(MSG.PROFILE_GET),
+          send(MSG.SETTINGS_GET),
+          send(MSG.AI_PROVIDERS_GET),
+        ]);
+        s.profile = profile;
+        s.settings = settings;
+        s.providers = providers;
+        fingerprint = profileFingerprint(profile, pickActiveProvider(providers, settings?.activeProviderId));
+      } catch (error) {
+        notify(error?.message || '无法读取当前画像', true);
+        update();
+        return;
+      }
+    }
+    const targets = analysisTargets(checked, mode, fingerprint);
     if (!targets.length) {
-      notify(mode === 'unscored' ? '所选岗位都已有分析结果' : '未选择岗位');
+      notify(analysisEmptyMessage(mode, checked.length));
       update();
       return;
     }
@@ -441,7 +461,7 @@ export default function Sidepanel() {
       clearTimeout(s.successTimer);
       s.batch = emptyBatch();
     }
-    const next = enqueueBatch(s.batch, targets, { source: 'manual', force: mode === 'force' });
+    const next = enqueueBatch(s.batch, targets, { source: 'manual', force: analysisUsesForce(mode) });
     if (next === s.batch) {
       notify('所选岗位已在队列中');
       update();
