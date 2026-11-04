@@ -81,20 +81,11 @@
 }
 
 .settings-brand-mark {
-  display: grid;
+  display: block;
   flex: none;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--s-border);
-  border-radius: 8px;
-  background: var(--s-inset);
-  color: var(--s-ink-1);
-}
-
-.settings-brand-mark svg {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .settings-brand-name {

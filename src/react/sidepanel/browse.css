@@ -261,6 +261,7 @@
 }
 .app-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
 .heading-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.sp-logo { flex: none; width: 28px; height: 28px; display: block; object-fit: contain; }
 .app-heading h1 {
   min-width: 0;
   font-size: 19px;

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import markUrl from '../../../icons/128.png';
 import { runningDevBuild } from '../../common/build.js';
 import { CHANGELOG_RETURN_KEY, SETTINGS_PAGES, changelogReturnTarget, formatSavedClock, isChangelogHash, nextNavIndex, sectionTargetId } from './pageHash.js';
 import ChangelogPage from './ChangelogPage.jsx';
@@ -117,7 +118,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
   return <div className="settings-shell" inert={busy ? true : undefined}>
     <aside className="settings-sidebar">
       <div className="settings-brand">
-        <span className="settings-brand-mark"><Icon name="filters" /></span>
+        <img className="settings-brand-mark" src={markUrl} alt="" width={28} height={28} />
         <span className="settings-brand-name">Offercome</span>
         {dev && <span className="settings-dev">dev</span>}
       </div>
