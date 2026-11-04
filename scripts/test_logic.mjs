@@ -2203,12 +2203,16 @@ test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
   assert.doesNotMatch(hover, /flex-basis/);
 });
 
-test('智能分析抽屉内容与底钮有 16px 左右 inset 和安全区底边距', () => {
+test('智能分析抽屉按 4pt 终锁留白', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
   const sheet = browse.match(/\.analyze-sheet \{[^}]*\}/)?.[0] || '';
-  assert.match(sheet, /padding:\s*10px 16px calc\(16px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
-  assert.match(browse, /\.analyze-sheet \.sheet-handle \{[^}]*margin-top:\s*0/);
+  assert.match(sheet, /padding:\s*12px 16px calc\(16px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
+  assert.match(browse, /\.analyze-sheet \.sheet-handle \{[^}]*margin:\s*0 auto 12px/);
+  assert.match(browse, /\.job-panel \.analyze-sub \{[^}]*margin-top:\s*8px/);
+  assert.match(browse, /\.job-panel \.analyze-sub \{[^}]*margin-bottom:\s*16px/);
+  assert.match(browse, /\.analyze-options \{[^}]*gap:\s*8px/);
+  assert.match(browse, /\.analyze-actions \{[^}]*margin-top:\s*12px/);
   assert.match(browse, /\.analyze-actions \{[^}]*gap:\s*8px/);
   assert.match(browse, /\.sheet-content \{[^}]*padding:\s*8px 16px 22px/);
 });
@@ -2364,6 +2368,12 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.match(browse, /\.queue-drawer\s*\{[^}]*height:\s*52%/);
   assert.match(browse, /\.queue-drawer\s*\{[^}]*max-height:\s*52%/);
   assert.match(browse, /\.queue-scroll\s*\{[^}]*overflow:\s*auto/);
+  assert.match(browse, /\.queue-head\s*\{[^}]*padding:\s*0 14px;/);
+  assert.doesNotMatch(browse.match(/\.queue-head\s*\{[^}]*\}/)?.[0] || '', /padding-bottom|8px/);
+  assert.match(browse, /\.queue-bar\s*\{[^}]*margin-top:\s*12px/);
+  assert.match(browse, /\.job-panel \.queue-summary\s*\{[^}]*margin-top:\s*12px/);
+  assert.match(browse, /\.queue-chips\s*\{[^}]*margin-top:\s*16px/);
+  assert.match(browse, /\.queue-chips\s*\{[^}]*margin-bottom:\s*12px/);
   assert.match(browse, /#1a222c/);
   assert.match(browse, /#0f1419/);
   assert.doesNotMatch(browse, /background:\s*#(?:0f0|00|16a34a|22c55e)[^;]*;\s*color:\s*#f0b429/);
