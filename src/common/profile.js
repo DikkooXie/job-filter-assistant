@@ -65,6 +65,23 @@ export function appendPreferenceNote(notes, sentence) {
   return `${current}\n${line}`;
 }
 
+// 把「不喜欢」的整句写进雷点。不进 notes：备注只表示可以接受，匹配提示要求据此不降分。
+// 整句保持一条，不按顿号拆开，避免把自然语言拆成芯片。
+export function appendDealbreaker(preference = {}, sentence) {
+  const source = preference && typeof preference === 'object' ? preference : {};
+  const base = {
+    ...source,
+    avoidKeywords: Array.isArray(source.avoidKeywords) ? source.avoidKeywords : [],
+    dealbreakers: Array.isArray(source.dealbreakers) ? source.dealbreakers : [],
+    notes: typeof source.notes === 'string' ? source.notes : '',
+  };
+  const line = String(sentence ?? '').trim();
+  if (!line) return base;
+  const existing = getDealbreakers(base);
+  if (existing.some((item) => item.trim().toLowerCase() === line.toLowerCase())) return base;
+  return updateDealbreakers(base, [...existing, line]);
+}
+
 // 保留原字段归属；删除时同时删除两处，新雷点写入 dealbreakers。
 export function updateDealbreakers(preference, next) {
   const keys = new Set(next.map((item) => item.trim().toLowerCase()));

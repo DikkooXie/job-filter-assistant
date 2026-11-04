@@ -209,6 +209,69 @@ function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }) {
   );
 }
 
+export function DislikeSheet({ job, saving, onClose, onSave }) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [draft, setDraft] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return undefined;
+    const previous = document.activeElement;
+    const field = root.querySelector('textarea');
+    field?.focus();
+    const nodes = () => [...root.querySelectorAll('button,textarea')].filter((element) => !element.disabled);
+    const onKey = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const items = nodes();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    root.addEventListener('keydown', onKey);
+    return () => {
+      root.removeEventListener('keydown', onKey);
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, []);
+  const title = job?.title || '该岗位';
+  const salary = String(job?.salaryText || '').trim();
+  const city = String(job?.city || '').trim();
+  const submit = async () => {
+    if (saving || !draft.trim()) return;
+    setError('');
+    const result = await onSave(draft);
+    if (typeof result === 'string' && result) setError(result);
+  };
+  return (
+    <div className="scrim dislike-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="sheet dislike-sheet" role="dialog" aria-modal="true" aria-labelledby="dislike-title" ref={ref}>
+        <div className="sheet-handle" aria-hidden="true" />
+        <h2 id="dislike-title">不喜欢的地方</h2>
+        <p className="sheet-sub">画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。</p>
+        <p className="dislike-context">针对 · <strong>{title}</strong>{salary ? ` · ${salary}` : ''}{city ? ` · ${city}` : ''}</p>
+        <textarea
+          id="dislike-note"
+          rows={4}
+          aria-label="不喜欢的地方"
+          placeholder="例如：太偏销售、不要驻场…"
+          value={draft}
+          disabled={saving}
+          onChange={(event) => { setDraft(event.target.value); if (error) setError(''); }}
+        />
+        {error && <p className="dislike-error" role="alert">{error}</p>}
+        <div className="dislike-actions">
+          <button type="button" className="jp-btn" disabled={saving} onClick={onClose}>取消</button>
+          <button type="button" className="jp-btn jp-btn-primary" disabled={saving || !draft.trim()} onClick={submit}>确认写入</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function LibraryCount({ shown, total, freshCount, onShowFresh }) {
   const fresh = freshCount > 0;
   const [expanded, setExpanded] = useState(false);
@@ -353,7 +416,6 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
       if (performance.now() - armedAt.current < 180) return;
       setConfirming(null);
       if (kind === 'delete') onDelete();
-      else onDislike();
       return;
     }
     armedAt.current = performance.now();
@@ -445,11 +507,10 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
                 type="button"
                 className="act-icon dislike"
                 data-row-action="dislike"
-                aria-pressed={confirming === 'dislike'}
-                aria-hidden={confirming && confirming !== 'dislike' ? true : undefined}
-                tabIndex={confirming && confirming !== 'dislike' ? -1 : 0}
-                aria-label={confirming === 'dislike' ? `确认不喜欢 ${name}` : `不喜欢 ${name}`}
-                onClick={() => arm('dislike')}
+                aria-hidden={confirming ? true : undefined}
+                tabIndex={confirming ? -1 : 0}
+                aria-label={`不喜欢 ${name}`}
+                onClick={onDislike}
               >
                 <HeartCrack aria-hidden="true" />
                 <span className="lbl" aria-hidden="true">不喜欢</span>
