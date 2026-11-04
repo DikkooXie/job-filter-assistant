@@ -9,16 +9,13 @@
   margin-bottom: 16px;
 }
 .popup-logo {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #0a84ff, #30d1b0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  box-shadow: var(--shadow-sm);
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex: none;
+  object-fit: contain;
+  background: none;
+  box-shadow: none;
 }
 .popup-title { font-size: 15px; font-weight: 600; }
 .popup-sub { font-size: 11px; color: var(--text-3); }
@@ -68,8 +65,7 @@
 .mode-seg .segmented button { flex: 1; }
 
 .popup-root { width: 340px; max-width: 100vw; padding: 16px; background: var(--bg-elevated); }
-.popup-logo { background: var(--accent); border-radius: 6px; box-shadow: none; font-size: 0; }
-.popup-logo::after { content: "岗"; font-size: 14px; color: #fff; font-weight: 600; }
+.popup-logo { width: 28px; height: 28px; background: none; border-radius: 0; box-shadow: none; }
 .popup-sub, .stat .lbl, .toggle-row .t-desc { font-size: 12px; }
 .ctx-pill { border-radius: 6px; }
 .stat-grid { gap: 0; border: 1px solid var(--separator); border-radius: var(--radius); overflow: hidden; margin-bottom: 8px; }

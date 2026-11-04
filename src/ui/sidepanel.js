@@ -208,9 +208,15 @@ function renderTopBar(shown, mode) {
   ]);
 
   const titleRow = h('div', { class: 'sp-title-row' }, [
-    h('div', { class: 'sp-logo', text: '🎯' }),
+    h('img', {
+      class: 'sp-logo',
+      src: new URL('../../icons/128.png', import.meta.url).href,
+      alt: '',
+      width: '28',
+      height: '28',
+    }),
     h('div', {}, [
-      h('div', { class: 'sp-title', text: '岗位面板' }),
+      h('div', { class: 'sp-title', text: 'Offercome' }),
       h('div', {
         class: 'sp-count',
         text: mode === 'library' ? `共 ${jobs.length} 个岗位 · 显示 ${shown}` : ctxLabel(),

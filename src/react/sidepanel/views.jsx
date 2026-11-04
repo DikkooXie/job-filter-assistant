@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import markUrl from '../../../icons/128.png';
 import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { GREETING_LEVELS, DIM_LABELS } from '../../common/ai/prompts.js';
 import { analysisGrade, analysisSummary, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
@@ -311,6 +312,7 @@ export function ListHeader({
     <header className="app-header">
       <div className="app-heading">
         <div className="heading-title">
+          <img className="sp-logo" src={markUrl} alt="Offercome" width={28} height={28} />
           <h1>岗位库</h1>
           {dev && <span className="dev-mark">dev</span>}
           <span className="library-count-slot" aria-live="polite">
