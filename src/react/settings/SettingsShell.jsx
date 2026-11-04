@@ -1,6 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { runningDevBuild } from '../../common/build.js';
 import { SETTINGS_PAGES, formatSavedClock, nextNavIndex, sectionTargetId } from './pageHash.js';
+import ChangelogDrawer from './ChangelogDrawer.jsx';
 
 function Icon({ name }) {
   const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -55,9 +56,39 @@ export function ProfileRail({ score }) {
   </aside>;
 }
 
-export default function SettingsShell({ page, hash, title, status, onRetry, version, notice, onDismissNotice, busy, rail, children }) {
+function VersionRow({ version, logOpen, onCheckUpdate, onToggleLog, logButtonRef }) {
+  if (!version) return null;
+  return <div className="settings-version">
+    <div className="settings-version-num">版本 {version}</div>
+    <div className="settings-version-links">
+      <button type="button" className="settings-version-check" onClick={onCheckUpdate}>检查更新</button>
+      <span className="settings-version-dot" aria-hidden="true">·</span>
+      <button
+        ref={logButtonRef}
+        type="button"
+        className="settings-version-log"
+        aria-expanded={logOpen}
+        aria-controls="settings-changelog"
+        onClick={onToggleLog}
+      >更新日志</button>
+    </div>
+  </div>;
+}
+
+export default function SettingsShell({ page, hash, title, status, onRetry, version, updateChannel, onCheckUpdate, notice, onDismissNotice, busy, rail, children }) {
   const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
   const dev = runningDevBuild();
+  const [logOpen, setLogOpen] = useState(false);
+  const logButtonRef = useRef(null);
+  const closeLog = useCallback((restoreFocus) => {
+    setLogOpen(false);
+    if (restoreFocus) requestAnimationFrame(() => logButtonRef.current?.focus());
+  }, []);
+  const toggleLog = () => setLogOpen((open) => !open);
+  const checkUpdate = () => {
+    setLogOpen(false);
+    onCheckUpdate?.();
+  };
   useEffect(() => {
     document.title = `${title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
   }, [title, dev]);
@@ -80,7 +111,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
           <span>{item.label}</span>
         </a>)}
       </nav>
-      {version && <div className="settings-version">版本 {version}</div>}
+      <VersionRow version={version} logOpen={logOpen} onCheckUpdate={checkUpdate} onToggleLog={toggleLog} logButtonRef={logButtonRef} />
     </aside>
     <div className="settings-main">
       <div className={page === 'profile' ? 'settings-frame is-profile' : 'settings-frame'}>
@@ -100,6 +131,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
           : <div className="settings-page">{children}</div>}
       </div>
     </div>
+    <ChangelogDrawer open={logOpen} channel={updateChannel} onClose={closeLog} />
   </div>;
 }
 

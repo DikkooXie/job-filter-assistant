@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RELEASE_PAGE, normalizeUpdateChannel } from '../common/update.js';
 import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../ui/update.js';
 import './update-panel.css';
@@ -99,7 +99,7 @@ function ManualSteps({ pageUrl, open, onToggle }) {
   </details>;
 }
 
-export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpdateChannel }) {
+export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpdateChannel, checkToken = 0 }) {
   const { version } = chrome.runtime.getManifest();
   const channel = normalizeUpdateChannel(updateChannel);
   const [folder, setFolder] = useState({ state: 'none', name: '' });
@@ -151,6 +151,22 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
       if (!next.hasUpdate) setMessage(next.message);
     } finally { setChecking(false); }
   });
+  // 侧栏「检查更新」只递增 checkToken，检查和安装结果仍留在本面板。
+  const seenCheck = useRef(0);
+  const checkRef = useRef(check);
+  checkRef.current = check;
+  const installingRef = useRef(installing);
+  installingRef.current = installing;
+  useEffect(() => {
+    if (!checkToken || checkToken === seenCheck.current) return;
+    seenCheck.current = checkToken;
+    if (installingRef.current) return;
+    checkRef.current();
+    const frame = requestAnimationFrame(() => {
+      document.getElementById('update-panel-title')?.scrollIntoView({ block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [checkToken]);
   const firstTime = folder.state === 'none';
   const install = () => onConfirm({
     title: `更新到 ${release.version}？`,

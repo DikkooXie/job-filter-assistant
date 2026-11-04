@@ -35,7 +35,7 @@ function SwitchRow({ label, hint, checked, onChange }) {
   </label>;
 }
 
-export default function GeneralTab({ settings, updateSettings, exportData, setConfirm, report }) {
+export default function GeneralTab({ settings, updateSettings, exportData, setConfirm, report, updateCheckToken = 0 }) {
   const [stats, setStats] = useState(null);
   const reloadRef = useRef(async () => {});
 
@@ -133,7 +133,7 @@ export default function GeneralTab({ settings, updateSettings, exportData, setCo
 
     {/* #7 负责「关于与更新」内部，这里只留页底挂载位。 */}
     <div className="gen-update-slot">
-      <UpdatePanel onConfirm={setConfirm} updateChannel={settings.updateChannel} onUpdateChannel={(updateChannel) => updateSettings({ updateChannel })} />
+      <UpdatePanel onConfirm={setConfirm} updateChannel={settings.updateChannel} onUpdateChannel={(updateChannel) => updateSettings({ updateChannel })} checkToken={updateCheckToken} />
     </div>
   </TabsContent>;
 }

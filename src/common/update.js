@@ -5,6 +5,7 @@ export const RELEASE_REPO = 'DikkooXie/job-filter-assistant';
 export const RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
 export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases`;
 export const RELEASE_PAGE = `https://github.com/${RELEASE_REPO}/releases/latest`;
+export const RELEASES_PAGE = `https://github.com/${RELEASE_REPO}/releases`;
 export const NO_PREVIEW_MESSAGE = '暂无预览版';
 export const AHEAD_OF_STABLE_MESSAGE = '当前高于正式版，请手动下载正式 zip 覆盖后重载';
 export const MAX_PACKAGE_BYTES = 40 * 1024 * 1024;
@@ -95,6 +96,58 @@ export function previewUnavailable(current) {
     aheadOfStable: false,
     message: NO_PREVIEW_MESSAGE,
   };
+}
+
+/** 发布名如果只是版本号，日志里不再重复显示。 */
+export function changelogTitle(name, version, tag) {
+  const title = String(name || '').trim();
+  if (!title) return '';
+  if (title === tag || title.replace(/^v/i, '') === String(version || '')) return '';
+  return title;
+}
+
+/** 把 Release 正文收成一行摘要：去掉常见标记，超长截断。 */
+export function changelogSummary(notes, limit = 80) {
+  const plain = String(notes || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/[*_~]/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const max = Number(limit) > 0 ? Number(limit) : 80;
+  if (plain.length <= max) return plain;
+  return `${plain.slice(0, max).trimEnd()}…`;
+}
+
+/**
+ * 最近发布列表 → 更新日志条目。数据仍是 GitHub Releases，不另建一份日志。
+ * 稳定通道只留正式版；预览通道保留预发布（草稿始终丢掉）。没有安装包也可以出现在日志里。
+ * 顺序沿用接口返回（通常是新的在前）。
+ */
+export function changelogEntries(list, channel = 'stable') {
+  if (!Array.isArray(list)) throw new Error('发布列表格式不正确');
+  const mode = normalizeUpdateChannel(channel);
+  const items = [];
+  for (const json of list) {
+    if (!json || typeof json !== 'object' || json.draft) continue;
+    if (mode !== 'preview' && json.prerelease) continue;
+    const tag = String(json.tag_name || '');
+    const version = tag.replace(/^v/i, '');
+    if (!parseVersion(version)) continue;
+    items.push({
+      version,
+      tag,
+      title: changelogTitle(json.name, version, tag),
+      summary: changelogSummary(json.body),
+      publishedAt: json.published_at || '',
+      pageUrl: json.html_url || '',
+      prerelease: json.prerelease === true,
+    });
+  }
+  return items;
 }
 
 /** 预览检查的纯结果：有包则比较版本，没有则走「暂无预览版」。 */
