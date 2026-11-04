@@ -1,4 +1,5 @@
-// 岗位浏览预览用的虚构数据。只在预览页加载，不进入扩展包。
+// 岗位浏览预览用的虚构数据。只由 extension-pages/sidepanel-browse-preview.jsx 加载，不进入扩展包。
+// 正式侧栏 extension-pages/sidepanel.jsx 不引用本文件；空库不会回落到这里的岗位。
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') || 'normal';
 

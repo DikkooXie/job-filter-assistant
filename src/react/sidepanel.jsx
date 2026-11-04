@@ -6,6 +6,7 @@ import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
 import { filterVisibleJobs, librarySurface, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
 import { FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, NoticeToast, SurfaceState } from './sidepanel/views.jsx';
 import './sidepanel/browse.css';
 
@@ -57,7 +58,7 @@ function appliedLabel(view) {
   return parts.join(' · ');
 }
 
-/** 正式岗位侧栏。列表只展示已有匹配和流程状态；分析与招呼语仍沿用原有消息。 */
+/** 正式岗位侧栏。列表、筛选、批量与导出都只用 JOB_LIST_REQUEST 读回的已收录岗位。 */
 export default function Sidepanel() {
   const [, redraw] = useReducer((value) => value + 1, 0);
   const state = useRef(null);
@@ -86,9 +87,10 @@ export default function Sidepanel() {
     const first = !s.settings;
     if (first) { s.loading = true; s.loadError = null; update(); }
     try {
-      const [jobs, settings, profile, providers, activeCtx] = await Promise.all([
+      const [listed, settings, profile, providers, activeCtx] = await Promise.all([
         send(MSG.JOB_LIST_REQUEST), send(MSG.SETTINGS_GET), send(MSG.PROFILE_GET), send(MSG.AI_PROVIDERS_GET), send(MSG.ACTIVE_CONTEXT_REQUEST).catch(() => null),
       ]);
+      const jobs = jobsForLibrary(listed);
       const keys = jobs.map((job) => progressKey(job.uid));
       const stored = keys.length ? await chrome.storage.local.get(keys) : {};
       if (version !== s.reloadVersion) return;
@@ -162,7 +164,7 @@ export default function Sidepanel() {
     if (s.scoring.has(job.uid)) return false;
     if (!s.providers.length) { notify('请先在设置中配置 AI 接口', true); send(MSG.OPEN_OPTIONS); return false; }
     s.scoring.add(job.uid); update();
-    try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = await send(MSG.JOB_LIST_REQUEST); notify('分析完成'); return true; }
+    try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST)); notify('分析完成'); return true; }
     catch (error) { notify(error.message, true); return false; }
     finally { s.scoring.delete(job.uid); update(); }
   };
@@ -219,7 +221,7 @@ export default function Sidepanel() {
           if (index === 0) throw new Error(`分析失败：${message}`);
         }
         s.scoring.delete(uid);
-        s.jobs = await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs);
+        s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs));
         update();
         if (index < uids.length - 1) await sleep(500);
       }
@@ -270,6 +272,16 @@ export default function Sidepanel() {
     openDetail(found, 'info', true);
   };
   const resetView = () => setView({ search: '', platform: 'all', verdict: 'all', sort: 'recent' });
+  const openBossBrowse = () => {
+    try {
+      const opened = chrome.tabs.create({ url: BOSS_BROWSE_URL });
+      if (opened && typeof opened.then === 'function') {
+        opened.catch((error) => notify(error?.message || '无法打开 BOSS 直聘', true));
+      }
+    } catch (error) {
+      notify(error?.message || '无法打开 BOSS 直聘', true);
+    }
+  };
 
   const filtered = s.settings ? applyFilters(s.jobs, s.settings.filters) : s.jobs;
   const list = s.settings ? filterVisibleJobs(filtered, s.view) : [];
@@ -374,7 +386,7 @@ export default function Sidepanel() {
         />
       ) : surface === 'loading' ? <SurfaceState kind="loading" />
         : surface === 'error' ? <SurfaceState kind="error" message={s.loadError} onRetry={reload} />
-          : surface === 'empty' ? <SurfaceState kind="empty" />
+          : surface === 'empty' ? <SurfaceState kind="empty" onBrowseBoss={openBossBrowse} />
             : (
               <div className="list-scroll" ref={listRef}>
                 {profileScore < 40 && <p className="library-hint"><button type="button" onClick={() => send(MSG.OPEN_OPTIONS)}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
@@ -390,7 +402,7 @@ export default function Sidepanel() {
                       progressStatus={s.progress.get(item.uid)?.status}
                       onToggle={() => { if (s.checked.has(item.uid)) s.checked.delete(item.uid); else s.checked.add(item.uid); update(); }}
                       onOpen={openDetail}
-                      onStar={async () => { try { s.jobs = await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid }); update(); } catch (error) { notify(error.message, true); } }}
+                      onStar={async () => { try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid })); update(); } catch (error) { notify(error.message, true); } }}
                     />
                   ))}</div>}
               </div>
@@ -423,7 +435,7 @@ export default function Sidepanel() {
           onExportSelected={() => batchExport(checked)}
           onClearLibrary={async () => {
             if (!confirm('确定清空所有已收录岗位？此操作不可撤销。')) return;
-            try { s.jobs = await send(MSG.JOB_CLEAR_REQUEST); s.checked.clear(); s.lastViewedUid = null; notify('已清空岗位库'); }
+            try { s.jobs = jobsForLibrary(await send(MSG.JOB_CLEAR_REQUEST)); s.checked.clear(); s.lastViewedUid = null; notify('已清空岗位库'); }
             catch (error) { notify(error.message, true); }
           }}
         />
@@ -447,7 +459,7 @@ const DETAIL_SUBS = ['info', 'match', 'company', 'resume', 'flow'];
 async function removeSelected(target, s, update, notify) {
   if (!confirm(`确定删除岗位「${target.title}」？此操作无法撤销。`)) return;
   try {
-    s.jobs = await send(MSG.JOB_DELETE, { uid: target.uid });
+    s.jobs = jobsForLibrary(await send(MSG.JOB_DELETE, { uid: target.uid }));
     s.checked.delete(target.uid);
     if (s.lastViewedUid === target.uid) s.lastViewedUid = null;
     update();
