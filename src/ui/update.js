@@ -99,7 +99,7 @@ async function fetchGithub(url) {
 /**
  * 按通道查询可安装版本。
  * stable：/releases/latest，拒绝 prerelease（与现网一致）。
- * preview：最近 20 条里第一个带 zip 的 prerelease；没有则返回「暂无预览版」，不抛错。
+ * preview：最近 20 条里版本号最高、且带 zip 的非草稿 prerelease；没有则返回「暂无预览版」，不抛错。
  * 正式版不比当前新时 hasUpdate 为 false；稳定通道上当前更高则带 aheadOfStable，不静默降级。
  */
 export async function fetchLatestRelease(channel = 'stable') {
