@@ -372,7 +372,8 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   const fp = profileFingerprint(profile, provider);
   const cache = await getMatchCache();
   // 提示词更新后重新生成，避免复用旧版招呼语。
-  const cacheKey = `${job.uid}::greeting-v2::${fp}`;
+  // v4：两个历史偏好字段统一作为雷点进行字面与语义判断。
+  const cacheKey = `${job.uid}::prompt-v4::${fp}`;
   if (!force && cache[cacheKey]) {
     await setJobMatch(job.uid, cache[cacheKey]);
     return cache[cacheKey];

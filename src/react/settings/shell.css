@@ -104,6 +104,18 @@
   color: var(--s-ink-1);
 }
 
+.settings-dev {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--s-accent-line);
+  border-radius: 5px;
+  background: var(--s-accent-soft);
+  color: var(--s-accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
 .settings-nav {
   display: flex;
   flex-direction: column;
@@ -369,9 +381,7 @@
 
   .settings-rail {
     position: static;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    display: block;
   }
 }
 

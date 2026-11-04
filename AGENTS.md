@@ -17,7 +17,7 @@ Chrome / Edge 扩展（Manifest V3）：浏览 BOSS直聘 或 前程无忧 时�
 ## 常用命令
 
 ```bash
-npm run build     # 构建到 dist/，然后把 manifest、icons、background、content、common、vendor 原样复制过去
+npm run build     # 构建到 dist/，开发产物名称带 · dev；发布脚本使用正式名称
 npm run dev       # Vite 开发服务器（只方便调样式，扩展能力需要构建后加载 dist/）
 npm test          # 逻辑测试：node scripts/test_logic.mjs
 npm run release   # 打包发布，需先确认 build 通过

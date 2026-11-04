@@ -104,6 +104,7 @@
       onMessage: { addListener: (fn)=>listeners.push(fn), removeListener: ()=>{} },
       openOptionsPage: () => console.log('[mock] openOptionsPage'),
       getURL: (p) => '/' + p,
+      getManifest: () => ({ name: '岗位筛选助手 · dev', version: '1.0.3.1' }),
     },
     storage: { local: { get: async()=>({}), set: async()=>{}, remove: async()=>{} }, onChanged: { addListener: ()=>{}, removeListener: ()=>{} } },
     // 测试辅助：模拟用户在网站上点开另一个岗位（触发 CURRENT_JOB 广播）

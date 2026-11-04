@@ -4,7 +4,7 @@
 // 对单个岗位应用筛选，返回 { keep, matchedInclude[], matchedExclude[], risks[], reasons[] }
 export function evaluateJob(job, filters) {
   const f = filters || {};
-  const hay = buildHaystack(job);
+  const hay = jobText(job);
   const result = { keep: true, matchedInclude: [], matchedExclude: [], risks: [], reasons: [] };
 
   // 屏蔽公司
@@ -96,7 +96,8 @@ export function autoScoreUids(jobs, filters) {
   return applyFilters(jobs, filters).map((j) => j.uid);
 }
 
-function buildHaystack(job) {
+// 岗位全文（小写），供筛选与偏好的字面匹配共用。
+export function jobText(job) {
   return [
     job.title,
     job.company,

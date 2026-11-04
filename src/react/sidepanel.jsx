@@ -10,6 +10,7 @@ import { scoreProfile } from '../common/profile.js';
 import { applyFilters } from '../common/filters.js';
 import { VERDICT_LABELS, GREETING_LEVELS, normalizeGreetings, DIM_LABELS } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
+import { runningDevBuild } from '../common/build.js';
 
 const progressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
 const progressKey = (uid) => `job-progress-v1:${encodeURIComponent(uid)}`;
@@ -231,7 +232,7 @@ export default function Sidepanel() {
 
   return <div className="flex h-screen flex-col bg-background text-foreground">
     <header className="flex flex-col gap-3 border-b p-4">
-      <div className="flex items-center gap-2"><div className="min-w-0 flex-1"><h1 className="font-semibold">岗位面板</h1><p className="text-sm text-muted-foreground">{s.view.tab === 'library' ? `共 ${s.jobs.length} 个岗位 · 显示 ${list.length}` : contextLabel}</p></div>{s.view.tab === 'current' && <Button variant="ghost" size="sm" onClick={refreshContext} aria-label="刷新当前页面">↻</Button>}<Button variant="ghost" size="sm" onClick={options} aria-label="设置">设置</Button></div>
+      <div className="flex items-center gap-2"><div className="min-w-0 flex-1"><h1 className="flex items-center gap-2 font-semibold">岗位面板{runningDevBuild() && <span className="rounded border border-border px-1 text-[10px] font-medium leading-4 text-muted-foreground">dev</span>}</h1><p className="text-sm text-muted-foreground">{s.view.tab === 'library' ? `共 ${s.jobs.length} 个岗位 · 显示 ${list.length}` : contextLabel}</p></div>{s.view.tab === 'current' && <Button variant="ghost" size="sm" onClick={refreshContext} aria-label="刷新当前页面">↻</Button>}<Button variant="ghost" size="sm" onClick={options} aria-label="设置">设置</Button></div>
       <nav className="flex gap-2" aria-label="面板导航">{[['library', '岗位库'], ['current', '当前岗位']].map(([key, label]) => <Button key={key} size="sm" variant={s.view.tab === key ? 'default' : 'outline'} onClick={() => switchTab(key)}>{label}</Button>)}</nav>
       {s.view.tab === 'library' && <><Input value={s.view.search} onChange={(e) => setView({ search: e.target.value })} placeholder="搜索岗位/公司/技能" aria-label="搜索岗位" /><div className="flex flex-wrap items-center gap-1">{[['all', '全部平台'], ['boss', 'BOSS'], ['qcwy', '51job']].map(([key, label]) => <Button size="sm" key={key} variant={s.view.platform === key ? 'secondary' : 'ghost'} onClick={() => setView({ platform: key })}>{label}</Button>)}<label className="ml-auto flex items-center gap-2 text-sm"><Switch size="sm" checked={!!s.settings?.filters?.enabled} disabled={!s.settings} onCheckedChange={setFilterEnabled} />开启过滤</label></div><div className="flex flex-wrap items-center gap-1">{[['all', '全部'], ['strong', '强匹配'], ['good', '较匹配'], ['fair', '一般'], ['unscored', '未分析']].map(([key, label]) => <Button size="sm" key={key} variant={s.view.verdict === key ? 'secondary' : 'ghost'} onClick={() => setView({ verdict: key })}>{label}</Button>)}<select className="rounded-md border bg-background p-1 text-sm" aria-label="排序" value={s.view.sort} onChange={(e) => setView({ sort: e.target.value })}><option value="recent">最近收录</option><option value="score">匹配分</option><option value="salary">薪资</option></select></div></>}
     </header>

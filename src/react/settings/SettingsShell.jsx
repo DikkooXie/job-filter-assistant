@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { runningDevBuild } from '../../common/build.js';
 import { SETTINGS_PAGES, formatSavedClock, nextNavIndex } from './pageHash.js';
 
 function Icon({ name }) {
@@ -56,15 +57,17 @@ export function ProfileRail({ score }) {
 
 export default function SettingsShell({ page, title, status, onRetry, version, notice, onDismissNotice, busy, rail, children }) {
   const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
+  const dev = runningDevBuild();
   useEffect(() => {
-    document.title = `${title} · 岗位筛选助手`;
-  }, [title]);
+    document.title = `${title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
+  }, [title, dev]);
 
   return <div className="settings-shell" inert={busy ? true : undefined}>
     <aside className="settings-sidebar">
       <div className="settings-brand">
         <span className="settings-brand-mark"><Icon name="filters" /></span>
         <span className="settings-brand-name">岗位筛选助手</span>
+        {dev && <span className="settings-dev">dev</span>}
       </div>
       <nav className="settings-nav" aria-label="设置页面" onKeyDown={onNavKeyDown}>
         {SETTINGS_PAGES.map((item) => <a key={item.id} href={`#${item.id}`} aria-current={page === item.id ? 'page' : undefined}>

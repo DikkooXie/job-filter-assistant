@@ -35,9 +35,12 @@ if (!flag('--dry-run')) {
 }
 
 run('npm', ['test']);
-run('npm', ['run', 'build']);
+// 发版包不能带本地开发标记
+run('npm', ['run', 'build'], { env: { ...process.env, JFA_RELEASE: '1' } });
 const built = JSON.parse(readFileSync(resolve(distDir, 'manifest.json'), 'utf8'));
-if (built.version !== version || built.key !== manifest.key) throw new Error('dist/manifest.json 与源 manifest 不一致');
+if (built.version !== version || built.key !== manifest.key || built.name !== manifest.name) {
+  throw new Error('dist/manifest.json 与源 manifest 不一致（名称可能被 dev 标记改动）');
+}
 
 mkdirSync(outDir, { recursive: true });
 const zipPath = resolve(outDir, `job-filter-assistant-${version}.zip`);

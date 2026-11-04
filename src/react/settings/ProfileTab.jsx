@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { toList } from '../../ui/ui-common.js';
+import { getDealbreakers, updateDealbreakers } from '../../common/profile.js';
 import './profile.css';
 
 const IMPORT_MODES = [
@@ -26,8 +28,7 @@ const DRAFT_ROWS = [
   ['工作概述', (d) => d.workSummary],
   ['项目概述', (d) => d.projectSummary],
   ['核心成就', (d) => d.highlights],
-  ['规避关键词', (d) => d.preference.avoidKeywords],
-  ['一票否决', (d) => d.preference.dealbreakers],
+  ['雷点', (d) => getDealbreakers(d.preference)],
   ['给 AI 的说明', (d) => d.preference.notes],
 ];
 
@@ -142,8 +143,7 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
     <section className="profile-group">
       <h2>偏好与禁区</h2>
       <div className="profile-fields">
-        <ProfileTags label="规避关键词" value={profile.preference.avoidKeywords} placeholder="回车添加，如 外包" note="命中时降低匹配分，岗位仍会保留" onChange={(next) => onEdit('preference', 'avoidKeywords', next)} />
-        <ProfileTags label="一票否决" value={profile.preference.dealbreakers} placeholder="回车添加" note="命中时 AI 判为不合适，岗位仍会保留" onChange={(next) => onEdit('preference', 'dealbreakers', next)} />
+        <ProfileTags label="雷点" value={getDealbreakers(profile.preference)} placeholder="回车添加，如 外包、大小周" note="字面或 AI 语义命中都会降低匹配分，岗位仍会保留" onChange={(next) => onEdit(null, 'preference', updateDealbreakers(profile.preference, next))} />
         <ProfileField label="给 AI 的说明" htmlFor="profile-notes">
           <textarea id="profile-notes" className="area-input" value={valueOf('preference', 'notes') || ''} onChange={editText('preference', 'notes')} />
         </ProfileField>
@@ -191,13 +191,20 @@ function ProfileTags({ label, value = [], onChange, placeholder, note }) {
 
 function DraftPreview({ draft, onApply, onDiscard }) {
   const rows = DRAFT_ROWS.map(([label, read]) => [label, read(draft)]).filter(([, value]) => value && value.length);
-  return <div className="draft-box">
-    <h3>画像草稿</h3>
-    <dl>{rows.map(([label, value]) => <div className="draft-line" key={label}><dt>{label}：</dt><dd>{Array.isArray(value) ? value.join('、') : value}</dd></div>)}</dl>
-    <div className="draft-actions">
-      <button type="button" className="s-btn s-btn-primary" onClick={() => onApply(false)}>合并到画像</button>
-      <button type="button" className="s-btn s-btn-outline" onClick={() => onApply(true)}>替换现有画像</button>
-      <button type="button" className="s-btn s-btn-ghost" onClick={onDiscard}>放弃</button>
-    </div>
-  </div>;
+  return <Dialog open onOpenChange={(open) => { if (!open) onDiscard(); }}>
+    <DialogContent className="draft-dialog" showCloseButton={false}>
+      <div className="draft-heading">
+        <DialogTitle>画像草稿</DialogTitle>
+        <DialogDescription>请核对抽取结果，确认后写入画像。</DialogDescription>
+      </div>
+      <div className="draft-body">
+        {rows.length ? <dl>{rows.map(([label, value]) => <div className="draft-line" key={label}><dt>{label}</dt><dd>{Array.isArray(value) ? value.join('、') : value}</dd></div>)}</dl> : <p>没有识别到画像内容。</p>}
+      </div>
+      <div className="draft-actions">
+        <button type="button" className="s-btn s-btn-primary" onClick={() => onApply(false)}>合并到画像</button>
+        <button type="button" className="s-btn s-btn-outline" onClick={() => onApply(true)}>替换现有画像</button>
+        <button type="button" className="s-btn s-btn-ghost" onClick={onDiscard}>放弃</button>
+      </div>
+    </DialogContent>
+  </Dialog>;
 }

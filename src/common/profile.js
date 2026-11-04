@@ -35,13 +35,34 @@ export function emptyProfile() {
     highlights: [], // 核心成就 bullet
     // 求职偏好与禁区
     preference: {
-      avoidKeywords: [], // 不想要的岗位特征
-      dealbreakers: [], // 硬性排除
+      avoidKeywords: [], // 历史雷点字段
+      dealbreakers: [], // 雷点：字面匹配与 AI 语义判断，命中降分
       notes: '', // 自由备注给 AI 的额外说明
     },
     updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
+}
+
+// 两个历史字段共同构成用户看到的雷点，忽略大小写去重。
+export function getDealbreakers(preference = {}) {
+  const seen = new Set();
+  return [...(preference.dealbreakers || []), ...(preference.avoidKeywords || [])].filter((item) => {
+    const key = item.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+// 保留原字段归属；删除时同时删除两处，新雷点写入 dealbreakers。
+export function updateDealbreakers(preference, next) {
+  const keys = new Set(next.map((item) => item.trim().toLowerCase()));
+  const avoidKeywords = preference.avoidKeywords.filter((item) => keys.has(item.trim().toLowerCase()));
+  const oldKeys = new Set(getDealbreakers(preference).map((item) => item.trim().toLowerCase()));
+  const dealbreakers = preference.dealbreakers.filter((item) => keys.has(item.trim().toLowerCase()));
+  dealbreakers.push(...next.filter((item) => !oldKeys.has(item.trim().toLowerCase())));
+  return { ...preference, avoidKeywords, dealbreakers };
 }
 
 // 完整度评分项（权重合计 100）
