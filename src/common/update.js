@@ -174,6 +174,25 @@ export function changelogBullets(notes) {
   return bullets;
 }
 
+/** 可解析的发布时间（毫秒）。空值或非法时返回 null，排序改走版本号。 */
+function changelogPublishedMs(iso) {
+  if (!iso) return null;
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * 新的在前。两边都有发布时间且不相等时按时间降序；
+ * 任一缺失、非法或时间相同则按版本号降序。
+ * GitHub /releases 按 tag_name 字符串降序，四段版本不能依赖列表顺序。
+ */
+function compareChangelogEntries(a, b) {
+  const ta = changelogPublishedMs(a.publishedAt);
+  const tb = changelogPublishedMs(b.publishedAt);
+  if (ta !== null && tb !== null && ta !== tb) return tb - ta;
+  return compareVersions(b.version, a.version);
+}
+
 /** 发布时刻，本地时区，精确到分钟。无法解析时返回空字符串。 */
 export function formatChangelogWhen(iso) {
   const date = new Date(iso);
@@ -209,7 +228,7 @@ export function changelogSummary(notes, limit = 80) {
 /**
  * 最近发布列表 → 更新日志条目。数据仍是 GitHub Releases，不另建一份日志。
  * 稳定通道只留正式版；预览通道保留预发布（草稿始终丢掉）。没有安装包也可以出现在日志里。
- * 顺序沿用接口返回（通常是新的在前）。
+ * 返回前按发布时间降序；时间戳缺失、非法或相同时按版本号降序。
  */
 export function changelogEntries(list, channel = 'stable') {
   if (!Array.isArray(list)) throw new Error('发布列表格式不正确');
@@ -232,6 +251,7 @@ export function changelogEntries(list, channel = 'stable') {
       prerelease: json.prerelease === true,
     });
   }
+  items.sort(compareChangelogEntries);
   return items;
 }
 

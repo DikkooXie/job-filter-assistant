@@ -1258,6 +1258,44 @@ test('更新日志按通道过滤正式版和预发布，版本号标题不重�
   assert.throws(() => changelogEntries({ message: 'nope' }), /格式不正确/);
   assert.equal(RELEASES_PAGE, 'https://github.com/DikkooXie/job-filter-assistant/releases');
 });
+test('更新日志按发布时间降序，缺时间戳时按版本号降序', () => {
+  // GitHub /releases 按 tag 字符串降序，.9 会排在 .11 前面；发布时间新的应排到最前。
+  const githubStringOrder = [
+    release({
+      tag_name: 'v1.0.3.9', name: 'v1.0.3.9', prerelease: true,
+      published_at: '2026-11-03T08:00:00Z', body: '九点',
+    }),
+    release({
+      tag_name: 'v1.0.3.11', name: 'v1.0.3.11', prerelease: true,
+      published_at: '2026-11-04T08:00:00Z', body: '十一',
+    }),
+    release({ tag_name: 'v1.0.3.12', prerelease: true, draft: true, published_at: '2026-11-05T08:00:00Z', body: '草稿' }),
+    release({ tag_name: 'latest', prerelease: false, published_at: '2026-11-06T08:00:00Z', body: '坏版本' }),
+  ];
+  const sorted = changelogEntries(githubStringOrder, 'preview');
+  assert.equal(sorted[0].version, '1.0.3.11');
+  assert.deepEqual(sorted.map((item) => item.version), ['1.0.3.11', '1.0.3.9']);
+  assert.deepEqual(changelogEntries(githubStringOrder, 'stable'), []);
+
+  const missingTime = [
+    release({ tag_name: 'v1.0.3.9', name: 'v1.0.3.9', prerelease: true, published_at: '', body: '九' }),
+    release({ tag_name: 'v1.0.3.11', name: 'v1.0.3.11', prerelease: true, body: '十一' }),
+  ];
+  assert.equal(changelogEntries(missingTime, 'preview')[0].version, '1.0.3.11');
+  assert.deepEqual(changelogEntries(missingTime, 'preview').map((item) => item.version), ['1.0.3.11', '1.0.3.9']);
+
+  const equalTime = [
+    release({ tag_name: 'v1.0.3.9', name: 'v1.0.3.9', prerelease: true, published_at: '2026-11-04T08:00:00Z' }),
+    release({ tag_name: 'v1.0.3.11', name: 'v1.0.3.11', prerelease: true, published_at: '2026-11-04T08:00:00Z' }),
+  ];
+  assert.equal(changelogEntries(equalTime, 'preview')[0].version, '1.0.3.11');
+
+  const invalidTime = [
+    release({ tag_name: 'v1.0.3.2', name: 'v1.0.3.2', prerelease: true, published_at: 'not-a-date' }),
+    release({ tag_name: 'v1.0.3.11', name: 'v1.0.3.11', prerelease: true, published_at: 'also-bad' }),
+  ];
+  assert.equal(changelogEntries(invalidTime, 'preview')[0].version, '1.0.3.11');
+});
 test('更新日志条目去掉预览前缀、issue 号和方案代号，时间带到分钟', () => {
   assert.deepEqual(
     changelogBullets('预览：智能分析第三项按当前画像指纹补跑（#64）'),
