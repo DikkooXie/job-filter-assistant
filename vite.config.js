@@ -58,8 +58,11 @@ export default defineConfig({
         // 共享模块会被抽成一个 chunk。代表模块一变，Rollup 就会把原来的 badge.js
         // 改名成别的文件，更新时旧文件不会被清掉。只要这个 chunk 里还有 badge 组件，就沿用原名。
         chunkFileNames(chunkInfo) {
-          const sharedBadge = (chunkInfo.moduleIds || []).some((id) => id.includes('/components/ui/badge'));
-          return `assets/${sharedBadge ? 'badge' : chunkInfo.name}.js`;
+          const ids = chunkInfo.moduleIds || [];
+          if (ids.some((id) => id.includes('/components/ui/badge'))) return 'assets/badge.js';
+          // 画像和开发标识在同一个共享 chunk。浮窗不再引用 build.js 时，Rollup 会把原 profile.js 改名为 build.js，更新后旧文件会留下。
+          if (ids.some((id) => id.includes('/common/profile.js'))) return 'assets/profile.js';
+          return `assets/${chunkInfo.name}.js`;
         },
         assetFileNames: 'assets/[name][extname]',
       },

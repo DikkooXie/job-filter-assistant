@@ -30,7 +30,7 @@ const state = {
     privacy: { redactPII: true, sendCompanyName: true, confirmBeforeSend: false },
     filters: { enabled: false, keywordsInclude: [], keywordsExclude: ['外包', '实习'], riskKeywords: ['驻场'], cities: [], salaryMinK: null, salaryMaxK: null, experience: [], degrees: [], excludeCompanies: [] },
   },
-  providers: [{ id: 'demo', name: '演示接口', protocol: 'openai-chat', baseUrl: 'https://example.invalid/v1', apiKey: 'sk-demo', model: 'demo', extraHeaders: {}, temperature: 0.3, maxTokens: 2048 }],
+  providers: params.get('providers') === '0' ? [] : [{ id: 'demo', name: '演示接口', protocol: 'openai-chat', baseUrl: 'https://example.invalid/v1', apiKey: 'sk-demo', model: 'demo', extraHeaders: {}, temperature: 0.3, maxTokens: 2048 }],
   profile: {
     schemaVersion: 1,
     target: { jobTitles: ['前端工程师'], cities: ['深圳'], salaryMinK: 18, salaryMaxK: 30, industries: ['互联网'], companySizes: [], workModes: [] },

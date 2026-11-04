@@ -25,17 +25,6 @@ function render() {
   const scored = jobs.filter((j) => j.match).length;
   const strong = jobs.filter((j) => j.match && (j.match.verdict === 'strong' || j.match.verdict === 'good')).length;
 
-  // header
-  app.appendChild(
-    h('div', { class: 'popup-header' }, [
-      h('div', { class: 'popup-logo', text: '🎯' }),
-      h('div', {}, [
-        h('div', { class: 'popup-title', text: '岗位筛选助手' }),
-        h('div', { class: 'popup-sub', text: 'BOSS直聘 · 前程无忧' }),
-      ]),
-    ]),
-  );
-
   // 当前站点上下文
   const onSite = !!ctx.platform;
   app.appendChild(

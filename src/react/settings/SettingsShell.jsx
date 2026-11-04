@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { runningDevBuild } from '../../common/build.js';
-import { SETTINGS_PAGES, formatSavedClock, nextNavIndex } from './pageHash.js';
+import { SETTINGS_PAGES, formatSavedClock, nextNavIndex, sectionTargetId } from './pageHash.js';
 
 function Icon({ name }) {
   const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -55,12 +55,17 @@ export function ProfileRail({ score }) {
   </aside>;
 }
 
-export default function SettingsShell({ page, title, status, onRetry, version, notice, onDismissNotice, busy, rail, children }) {
+export default function SettingsShell({ page, hash, title, status, onRetry, version, notice, onDismissNotice, busy, rail, children }) {
   const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
   const dev = runningDevBuild();
   useEffect(() => {
     document.title = `${title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
   }, [title, dev]);
+  useEffect(() => {
+    const target = sectionTargetId(hash);
+    if (!target) return;
+    document.getElementById(target)?.scrollIntoView({ block: 'start' });
+  }, [hash]);
 
   return <div className="settings-shell" inert={busy ? true : undefined}>
     <aside className="settings-sidebar">

@@ -260,6 +260,20 @@
 .btn-warn:hover { background: #f59300; }
 .btn-warn:disabled { opacity: 0.5; }
 
+.model-notice {
+  margin: 0 16px 10px;
+  padding: 8px 12px;
+  background: var(--fill);
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.model-notice .linklike { margin-left: auto; }
+
 /* 画像提醒条 */
 .profile-hint {
   margin: 0 16px 10px;

@@ -1,4 +1,5 @@
-/* AI 接口页。只作用于 .ai-page，避免碰到侧栏框架和其他三个页面。 */
+/* 模型接口页。只作用于 .ai-page，避免碰到侧栏框架和其他三个页面。 */
+#ai-list-title { scroll-margin-top: 72px; }
 
 .ai-page {
   flex: none;

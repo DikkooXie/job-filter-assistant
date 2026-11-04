@@ -1228,16 +1228,26 @@ test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
   assert.doesNotMatch(queueSrc, /import\(/);
 });
 
-const { pageFromHash, isUpdatedHash, nextNavIndex, SETTINGS_PAGES } = await import('../src/react/settings/pageHash.js');
+const { pageFromHash, isUpdatedHash, nextNavIndex, SETTINGS_PAGES, optionsUrlHash, sectionTargetId } = await import('../src/react/settings/pageHash.js');
 test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () => {
   assert.deepEqual(SETTINGS_PAGES.map((page) => page.id), ['profile', 'ai', 'filters', 'general']);
+  assert.equal(SETTINGS_PAGES.find((page) => page.id === 'ai').label, '模型接口');
   assert.equal(pageFromHash(''), 'profile');
   assert.equal(pageFromHash('#profile'), 'profile');
   assert.equal(pageFromHash('#ai'), 'ai');
+  assert.equal(pageFromHash('#ai-list'), 'ai');
   assert.equal(pageFromHash('#filters'), 'filters');
   assert.equal(pageFromHash('#general'), 'general');
   assert.equal(pageFromHash('#updated'), 'general');
   assert.equal(pageFromHash('#nope'), 'profile');
+  assert.equal(sectionTargetId('#ai'), 'ai-list-title');
+  assert.equal(sectionTargetId('#ai-list'), 'ai-list-title');
+  assert.equal(sectionTargetId('#profile'), '');
+  assert.equal(optionsUrlHash('ai', 'options.html#profile'), '#ai');
+  assert.equal(optionsUrlHash('ai', 'options.html#ai'), '#ai-list');
+  assert.equal(optionsUrlHash('ai', 'options.html#ai-list'), '#ai');
+  assert.equal(optionsUrlHash('profile', ''), '#profile');
+  assert.equal(optionsUrlHash(undefined, ''), '');
   assert.equal(isUpdatedHash('#updated'), true);
   assert.equal(isUpdatedHash('#general'), false);
   assert.equal(nextNavIndex(0, 'ArrowDown', 4), 1);
