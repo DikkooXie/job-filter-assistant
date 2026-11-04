@@ -272,11 +272,11 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
                 aria-pressed={confirming === 'delete'}
                 aria-hidden={confirming && confirming !== 'delete' ? true : undefined}
                 tabIndex={confirming && confirming !== 'delete' ? -1 : 0}
-                aria-label={confirming === 'delete' ? `确认删除 ${name}` : `删除 ${name}`}
+                aria-label={confirming === 'delete' ? `再次点击确认删除 ${name}` : `删除 ${name}`}
                 onClick={() => arm('delete')}
               >
                 <Trash2 aria-hidden="true" />
-                <span className="lbl" aria-hidden="true">删除</span>
+                <span className="lbl" aria-hidden="true">{confirming === 'delete' ? '再次点击确认删除' : '删除'}</span>
               </button>
               <button
                 type="button"

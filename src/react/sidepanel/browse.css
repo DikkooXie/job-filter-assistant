@@ -840,7 +840,12 @@
   background: var(--jp-confirm-dislike);
   border-color: var(--jp-confirm-dislike);
 }
-.actions-row.is-confirm-delete .act-icon.del .lbl,
+.actions-row.is-confirm-delete .act-icon.del .lbl {
+  max-width: 200px;
+  opacity: 1;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
 .actions-row.is-confirm-dislike .act-icon.dislike .lbl {
   max-width: 4.5em;
   opacity: 1;

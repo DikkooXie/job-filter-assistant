@@ -1744,6 +1744,19 @@ test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
   assert.doesNotMatch(hover, /flex-basis/);
 });
 
+test('删除确认态文案是再次点击确认删除', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  assert.match(views, /confirming === 'delete' \? '再次点击确认删除' : '删除'/);
+  assert.match(views, /aria-label=\{confirming === 'delete' \? `再次点击确认删除 \$\{name\}`/);
+  assert.doesNotMatch(views, /\? `确认删除 \$\{name\}`/);
+  const confirmLbl = browse.match(/\.actions-row\.is-confirm-delete \.act-icon\.del \.lbl \{[^}]*\}/)?.[0] || '';
+  assert.match(confirmLbl, /max-width:\s*200px/);
+  assert.match(confirmLbl, /font-weight:\s*650/);
+  assert.match(browse, /\.actions-row\.is-confirm-dislike \.act-icon\.dislike \.lbl \{[^}]*max-width:\s*4\.5em/);
+});
+
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const profile = fs.readFileSync(path.join(root, 'src/react/settings/profile.css'), 'utf8');
