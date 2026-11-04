@@ -59,6 +59,7 @@ function respond(msg) {
     case 'ACTIVE_CONTEXT_REQUEST': return { platform: state.ctx.platform, url: state.ctx.url, jobKey: state.ctx.jobKey, isChat: state.ctx.isChat, platformName: state.ctx.platform === 'boss' ? 'BOSS直聘' : '前程无忧' };
     case 'AI_PROVIDERS_GET': return state.providers;
     case 'PROFILE_GET': return state.profile;
+    case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
     case 'AI_MATCH_SCORE': {
       const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z' };
       state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match } : job);

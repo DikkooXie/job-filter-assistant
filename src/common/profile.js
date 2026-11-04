@@ -55,6 +55,16 @@ export function getDealbreakers(preference = {}) {
   });
 }
 
+// 把「可以接受」的说明追加进画像备注。不改字段名；空句和已有的同一句不再追加。
+export function appendPreferenceNote(notes, sentence) {
+  const line = String(sentence ?? '').trim();
+  const current = String(notes ?? '').trim();
+  if (!line) return current;
+  if (!current) return line;
+  if (current === line || current.endsWith(`\n${line}`)) return current;
+  return `${current}\n${line}`;
+}
+
 // 保留原字段归属；删除时同时删除两处，新雷点写入 dealbreakers。
 export function updateDealbreakers(preference, next) {
   const keys = new Set(next.map((item) => item.trim().toLowerCase()));

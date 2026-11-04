@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, Search, Settings, Star, Trash2, X } from 'lucide-react';
-import { GREETING_LEVELS, VERDICT_LABELS, DIM_LABELS } from '../../common/ai/prompts.js';
-import { analysisGrade, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
+import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
+import { GREETING_LEVELS, DIM_LABELS } from '../../common/ai/prompts.js';
+import { analysisGrade, analysisSummary, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
-  ['match', '匹配'],
+  ['match', '分析'],
   ['company', '公司'],
   ['resume', '简历'],
   ['flow', '流程'],
 ];
+const DIM_KEYS = ['skill', 'experience', 'requirement', 'location'];
 
 function Tags({ values }) {
   if (!values?.length) return null;
@@ -28,26 +29,181 @@ function Facts({ rows }) {
   );
 }
 
-function Analysis({ match }) {
+function GradeMarks({ grade }) {
   return (
-    <div>
-      {match.summary && <p>{match.summary}</p>}
-      {match.eligible === false && match.blockers?.length > 0 && (
-        <>
-          <h3>存在硬性门槛</h3>
-          <ul>{match.blockers.map((item, index) => <li key={index}>{item}</li>)}</ul>
-        </>
-      )}
-      {match.dims && ['skill', 'experience', 'requirement', 'location'].filter((key) => match.dims[key] != null).map((key) => (
-        <div className="dim-row" key={key}>
-          <span>{DIM_LABELS[key]}</span>
-          <progress max="100" value={match.dims[key]} aria-label={DIM_LABELS[key]} />
-          <span>{match.dims[key]}</span>
+    <span className="segs" aria-hidden="true">
+      {Array.from({ length: 5 }, (_, index) => (
+        <span key={index} className={index < grade.filled ? `cell on ${grade.tone}` : 'cell'} />
+      ))}
+    </span>
+  );
+}
+
+function JobSummaryCard({ job, onOpenAnalysis }) {
+  const summary = analysisSummary(job);
+  if (!summary.grade) {
+    return (
+      <section className="detail-summary">
+        <h3>分析摘要</h3>
+        <div className="analysis bare detail-sum">
+          <div className="analysis-top">
+            <span className="grade muted">尚未分析</span>
+          </div>
+          <div className="sum-foot">
+            <button type="button" className="detail-jump" onClick={onOpenAnalysis}>去分析<ChevronRight aria-hidden="true" /></button>
+          </div>
         </div>
-      ))}
-      {[['契合点', match.reasons], ['差距/需补齐', match.gaps], ['风险提示', match.risks]].map(([title, values]) => values?.length > 0 && (
-        <div key={title}><h3>{title}</h3><ul>{values.map((item, index) => <li key={index}>{item}</li>)}</ul></div>
-      ))}
+      </section>
+    );
+  }
+  const { grade } = summary;
+  return (
+    <section className="detail-summary">
+      <h3>分析摘要</h3>
+      <div className="analysis detail-sum">
+        <div className="analysis-top">
+          <div className="sum-main">
+            <GradeMarks grade={grade} />
+            <span className={`grade ${grade.tone}`}>{grade.label}</span>
+          </div>
+          <span className={`score-num ${grade.tone}`}>{grade.score}<span className="score-den">/100</span></span>
+        </div>
+        {summary.summary && <p className="detail-sum-copy">{summary.summary}</p>}
+        <div className="sum-foot">
+          {summary.warnLabel && (
+            <span className="warn-chip warn">
+              <span className="dot" aria-hidden="true" />
+              {summary.warnLabel}
+            </span>
+          )}
+          <button type="button" className="detail-jump" onClick={onOpenAnalysis}>查看完整分析<ChevronRight aria-hidden="true" /></button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
+  const summary = analysisSummary(job);
+  const risks = riskLines(job);
+  const match = job.match;
+  const dims = DIM_KEYS
+    .map((key) => [key, match?.dims?.[key]])
+    .filter(([, value]) => value != null);
+  return (
+    <>
+      {summary.grade ? (
+        <>
+          <div className="score-card">
+            <div className="a-top">
+              <div className="segs-row">
+                <GradeMarks grade={summary.grade} />
+                <span className={`grade ${summary.grade.tone}`}>{summary.grade.label}</span>
+              </div>
+              <div className="score-wrap">
+                <span className={`score-num ${summary.grade.tone}`}>{summary.grade.score}</span>
+                <span className="score-den">/100</span>
+              </div>
+            </div>
+            {summary.summary && <p className="a-sum">{summary.summary}</p>}
+          </div>
+          {dims.length > 0 && (
+            <div className="dims">
+              {dims.map(([key, value]) => (
+                <div className="dim" key={key}>
+                  <span className="dim-lab">{DIM_LABELS[key]}</span>
+                  <div className="dim-track" role="meter" aria-label={DIM_LABELS[key]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}>
+                    <div className={value < 40 ? 'dim-fill low' : 'dim-fill'} style={{ width: `${value}%` }} />
+                  </div>
+                  <span className="dim-n">{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {match.eligible === false && match.blockers?.length > 0 && (
+            <section className="detail-sec">
+              <h3>存在硬性门槛</h3>
+              <ul className="bullet-list gap">{match.blockers.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            </section>
+          )}
+          {match.reasons?.length > 0 && (
+            <section className="detail-sec">
+              <h3>契合点</h3>
+              <ul className="bullet-list">{match.reasons.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            </section>
+          )}
+          {match.gaps?.length > 0 && (
+            <section className="detail-sec">
+              <h3>差距 / 需补齐</h3>
+              <ul className="bullet-list gap">{match.gaps.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            </section>
+          )}
+        </>
+      ) : (
+        <p className="analysis-empty">尚未分析</p>
+      )}
+      {risks.length > 0 && (
+        <section className="detail-sec">
+          <h3>风险提示</h3>
+          <div className="detail-warn">
+            {risks.map((line) => (
+              <div className="detail-warn-row" key={line}>
+                <CircleAlert aria-hidden="true" />
+                <span className="warn-txt">{line}</span>
+                <button type="button" className="tune-link" onClick={() => onAccept(line)}>可以接受</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+      <button type="button" className="reanalyze" disabled={scoring} onClick={onAnalyze}>
+        <RefreshCw aria-hidden="true" />
+        {scoring ? '分析中…' : summary.grade ? '重新分析' : '分析'}
+      </button>
+    </>
+  );
+}
+
+function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }) {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const root = ref.current;
+    if (!root) return undefined;
+    const previous = document.activeElement;
+    const field = root.querySelector('textarea');
+    field?.focus();
+    const nodes = () => [...root.querySelectorAll('button,textarea')].filter((element) => !element.disabled);
+    const onKey = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const items = nodes();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    root.addEventListener('keydown', onKey);
+    return () => {
+      root.removeEventListener('keydown', onKey);
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, []);
+  return (
+    <div className="scrim accept-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="sheet accept-sheet" role="dialog" aria-modal="true" aria-labelledby="accept-risk-title" ref={ref}>
+        <div className="sheet-handle" aria-hidden="true" />
+        <h2 id="accept-risk-title">接受这条</h2>
+        <p className="sheet-sub">将这条风险记入画像偏好，后续同类可不提示</p>
+        <p className="accept-origin"><strong>本条</strong>：{risk}</p>
+        <label htmlFor="accept-risk-note">自然语言（可改）</label>
+        <textarea id="accept-risk-note" rows={4} value={draft} onChange={(event) => onDraft(event.target.value)} />
+        <div className="accept-actions">
+          <button type="button" className="jp-btn" onClick={onClose}>取消</button>
+          <button type="button" className="jp-btn jp-btn-primary" disabled={saving || !draft.trim()} onClick={onSave}>{saving ? '写入中…' : '写入画像'}</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -239,7 +395,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, onToggle
             <button
               type="button"
               className="analysis-main"
-              aria-label={grade ? `查看 ${job.company || '该岗位'} 的匹配分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的匹配，尚未分析`}
+              aria-label={grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，尚未分析`}
               onClick={() => onOpen(job.uid, 'match')}
             >
               {grade ? (
@@ -516,10 +672,29 @@ function FlowStatus({ status }) {
 export function JobDetail({
   mode, job, sub, followLive, progressStatus, greeting, greetLevel, advice, scoring, tailoring,
   hasProfile, dev, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onGreetLevel, onCopy,
-  onSend, onMarkSent, onOpenOriginal, onDelete, onProfileSettings,
+  onSend, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
 }) {
   const titleRef = useRef(null);
+  const [accepting, setAccepting] = useState(null);
+  const [acceptDraft, setAcceptDraft] = useState('');
+  const [acceptSaving, setAcceptSaving] = useState(false);
   useEffect(() => { if (mode === 'job') titleRef.current?.focus(); }, [job?.uid, mode]);
+  useEffect(() => { setAccepting(null); setAcceptDraft(''); }, [job?.uid, sub]);
+  const openAccept = (line) => {
+    setAccepting(line);
+    setAcceptDraft(`可以接受：${line}`);
+  };
+  const saveAccept = async () => {
+    const text = acceptDraft.trim();
+    if (!text || acceptSaving) return;
+    setAcceptSaving(true);
+    try {
+      const ok = await onAcceptRisk?.(text);
+      if (ok !== false) setAccepting(null);
+    } finally {
+      setAcceptSaving(false);
+    }
+  };
   const onTabsKey = (event) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     const buttons = [...event.currentTarget.querySelectorAll('button')];
@@ -576,35 +751,15 @@ export function JobDetail({
                   {(job.skills?.length || job.tags?.length) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags).slice(0, 20)} /></>}
                   {job.welfare?.length > 0 && <><h3>福利</h3><Tags values={job.welfare.slice(0, 20)} /></>}
                   <h3>岗位描述</h3>
-                  <p className="pre">{job.description || '暂无岗位描述。打开原岗位页面可以看招聘方发布的全文。'}</p>
+                  <p className="pre desc-box">{job.description || '暂无岗位描述，可打开原岗位查看完整 JD。'}</p>
                   {exclusionReasons(job).length > 0 && (
                     <div className="exclusion"><Filter aria-hidden="true" /><div><strong>开启过滤后将隐藏</strong><span>{exclusionReasons(job).join('；')}</span></div></div>
                   )}
-                  {riskLines(job).map((line) => <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>)}
-                  <div className="detail-actions">
-                    {job.url && <button type="button" className="jp-btn jp-btn-primary" onClick={onOpenOriginal}><ExternalLink aria-hidden="true" />打开原岗位</button>}
-                    <button type="button" className="jp-btn jp-btn-danger" onClick={onDelete}>删除</button>
-                  </div>
+                  <JobSummaryCard job={job} onOpenAnalysis={() => onSub('match')} />
                 </>
               )}
               {sub === 'match' && (
-                job.match ? (
-                  <>
-                    <div className={`analysis-score ${job.match.verdict || ''}`}><strong>{job.match.score}<small> / 100</small></strong><span>{VERDICT_LABELS[job.match.verdict] || '已分析'}</span></div>
-                    <Analysis match={job.match} />
-                    <div className="detail-actions">
-                      <button type="button" className="jp-btn" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '重新分析'}</button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3>还没有匹配分析</h3>
-                    <p>已保存的岗位里还没有这份结果。分析会使用你配置的模型接口。</p>
-                    <div className="detail-actions">
-                      <button type="button" className="jp-btn jp-btn-primary" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '分析匹配'}</button>
-                    </div>
-                  </>
-                )
+                <AnalysisBody job={job} scoring={scoring} onAnalyze={onAnalyze} onAccept={openAccept} />
               )}
               {sub === 'company' && (
                 <>
@@ -656,7 +811,7 @@ export function JobDetail({
                   <FlowStatus status={progressStatus} />
                   {!job.match ? (
                       <div className="detail-actions">
-                        <p>还没有可编辑的招呼语。可以先做一次匹配分析。</p>
+                        <p>还没有可编辑的招呼语。可以先做一次分析。</p>
                         <button type="button" className="jp-btn jp-btn-primary" disabled={scoring} onClick={onAnalyze}>{scoring ? '分析中…' : '生成招呼语'}</button>
                       </div>
                     ) : (
@@ -680,6 +835,30 @@ export function JobDetail({
                 </>
               )}
             </div>
+            <footer className="detail-sticky">
+              <button type="button" className="jp-btn jp-btn-primary detail-open" disabled={!job.url} onClick={onOpenOriginal}>
+                <ExternalLink aria-hidden="true" />打开原岗位
+              </button>
+              <button type="button" className={`detail-act${job.star ? ' is-on' : ''}`} aria-pressed={!!job.star} aria-label={job.star ? `取消收藏 ${job.title || ''}` : `收藏 ${job.title || ''}`} onClick={onStar}>
+                <Star aria-hidden="true" fill={job.star ? 'currentColor' : 'none'} />
+              </button>
+              <button type="button" className="detail-act" aria-label={`不喜欢 ${job.title || ''}`} onClick={onDislike}>
+                <HeartCrack aria-hidden="true" />
+              </button>
+              <button type="button" className="detail-act detail-act-del" aria-label={`删除 ${job.title || ''}`} onClick={onDelete}>
+                <Trash2 aria-hidden="true" />
+              </button>
+            </footer>
+            {accepting && (
+              <AcceptRiskSheet
+                risk={accepting}
+                draft={acceptDraft}
+                saving={acceptSaving}
+                onDraft={setAcceptDraft}
+                onClose={() => { if (!acceptSaving) setAccepting(null); }}
+                onSave={saveAccept}
+              />
+            )}
           </>
         )}
       </section>
