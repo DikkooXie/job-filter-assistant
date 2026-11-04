@@ -6,7 +6,7 @@ const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') || 'normal';
 
 const jobs = [
-  { uid: 'boss:s1', platform: 'boss', jobId: 's1', title: '前端开发工程师', salaryText: '18–25K', salaryMinK: 18, salaryMaxK: 25, city: '深圳', district: '南山', experience: '应届', degree: '本科', skills: ['Vue 3', 'TypeScript', 'AI 应用'], tags: [], welfare: ['补充医疗'], company: '青禾科技', companyIndustry: '软件', companyScale: '100–499人', companyType: '民营', companyStage: 'A轮', hrName: '周宁', hrTitle: '招聘', description: '参与业务前端功能开发，维护组件与工程规范。', url: 'https://example.invalid/jobs/s1', savedAt: '2026-11-01T08:00:00.000Z', lastSeenAt: '2026-11-04T08:00:00.000Z', star: true, match: { score: 92, verdict: 'strong', summary: 'Vue 与 TypeScript 要求吻合，有 AI 应用工程实践的加分项。', reasons: ['Vue 与 TypeScript 吻合'], gaps: [], risks: [], eligible: true, blockers: [], dims: { skill: 90, experience: 80, requirement: 88, location: 92 } } },
+  { uid: 'boss:s1', platform: 'boss', jobId: 's1', title: '前端开发工程师', salaryText: '18–25K', salaryMinK: 18, salaryMaxK: 25, city: '深圳', district: '南山', experience: '应届', degree: '本科', skills: ['Vue 3', 'TypeScript', 'AI 应用'], tags: [], welfare: ['补充医疗'], company: '青禾科技', companyIndustry: '软件', companyScale: '100–499人', companyType: '民营', companyStage: 'A轮', hrName: '周宁', hrTitle: '招聘', description: '参与业务前端功能开发，维护组件与工程规范。', url: 'https://example.invalid/jobs/s1', savedAt: '2026-11-01T08:00:00.000Z', lastSeenAt: '2026-11-04T08:00:00.000Z', star: true, greetingDraft: '您好，我对贵司前端岗很感兴趣。近两年主要做 React / TypeScript，有中后台与可视化经验，期待进一步沟通。', match: { score: 92, verdict: 'strong', summary: 'Vue 与 TypeScript 要求吻合，有 AI 应用工程实践的加分项。', reasons: ['Vue 与 TypeScript 吻合'], gaps: [], risks: [], eligible: true, blockers: [], dims: { skill: 90, experience: 80, requirement: 88, location: 92 } } },
   { uid: 'boss:s2', platform: 'boss', jobId: 's2', title: 'AI 应用全栈工程师', salaryText: '20–30K', salaryMinK: 20, salaryMaxK: 30, city: '深圳', district: '福田', experience: '1–3年', degree: '本科', skills: ['React', 'Node.js', 'LLM'], tags: [], welfare: [], company: '远山智能', companyIndustry: '人工智能', companyScale: '20–99人', companyType: '民营', companyStage: '天使轮', hrName: '', hrTitle: '', description: '独立交付 AI 应用功能，和产品一起迭代。', url: 'https://example.invalid/jobs/s2', savedAt: '2026-11-01T07:00:00.000Z', lastSeenAt: '2026-11-04T07:00:00.000Z', star: false, match: { score: 84, verdict: 'good', summary: '技术方向契合，但独立交付经验要求高于应届岗位，建议在沟通中确认。', reasons: ['技术方向契合'], gaps: ['独立交付经验'], risks: ['要求独立交付，沟通时确认是否接受应届生'], eligible: true, blockers: [] } },
   { uid: 'qcwy:s3', platform: 'qcwy', jobId: 's3', title: 'Web 前端开发（校招）', salaryText: '15–22K', salaryMinK: 15, salaryMaxK: 22, city: '广州', district: '天河', experience: '应届', degree: '本科', skills: ['JavaScript', 'Vue', '工程化'], tags: [], welfare: [], company: '方舟网络', companyIndustry: '互联网', companyScale: '500–999人', companyType: '民营', companyStage: '', hrName: '陈敏', hrTitle: 'HR', description: '校招前端岗位，参与业务页面开发。', url: 'https://example.invalid/jobs/s3', savedAt: '2026-11-01T06:00:00.000Z', lastSeenAt: '2026-11-04T06:00:00.000Z', star: false, match: null },
   { uid: 'boss:s4', platform: 'boss', jobId: 's4', title: '前端工程师 · 企业级低代码与可视化协作平台方向', salaryText: '18–28K', salaryMinK: 18, salaryMaxK: 28, city: '深圳', district: '宝安', experience: '1–3年', degree: '本科', skills: ['React', '可视化', '组件库'], tags: [], welfare: [], company: '墨石软件', companyIndustry: '企业服务', companyScale: '100–499人', companyType: '民营', companyStage: 'B轮', hrName: '', hrTitle: '', description: '负责低代码与可视化协作平台的前端组件。', url: 'https://example.invalid/jobs/s4', savedAt: '2026-11-01T05:00:00.000Z', lastSeenAt: '2026-11-04T05:00:00.000Z', star: false, match: { score: 78, verdict: 'good', summary: '组件开发与工程化经验相关，需要补充复杂业务场景的实践说明。', reasons: ['组件经验相关'], gaps: ['复杂业务场景'], risks: [], eligible: true, blockers: [] } },
@@ -20,6 +20,26 @@ const store = {
   'job-progress-v1:boss%3As4': { status: 'prepared', at: '2026-11-03T01:00:00.000Z' },
   'job-progress-v1:boss%3As6': { status: 'opened', at: '2026-11-03T02:00:00.000Z' },
   'job-progress-v1:qcwy%3As8': { status: 'sent', at: '2026-11-03T03:00:00.000Z' },
+  'job-progress-v1:boss%3As2': { status: 'sent', at: '2026-11-03T04:00:00.000Z' },
+  // s8：已过招呼，两个真实节点，并有待确认的新节点（E3）。s2：初聊、无待确认（E2）。
+  'job-comm-v1:qcwy%3As8': {
+    nodes: [
+      { id: 'greet', label: '打招呼', state: 'done', sub: '11/02', detail: '已发 + 简历图' },
+      { id: 'chat', label: '初聊', state: 'current', detail: '已回复' },
+    ],
+    pending: { id: 'onsite', label: '一面', sub: '周五', hint: '摘自对话' },
+    baseline: '',
+    sync: { at: '2026-11-04T06:22:00.000Z', count: 12 },
+  },
+  'job-comm-v1:boss%3As2': {
+    nodes: [
+      { id: 'greet', label: '打招呼', state: 'done', sub: '11/01', detail: '已发' },
+      { id: 'chat', label: '初聊', state: 'current', detail: '' },
+    ],
+    pending: null,
+    baseline: '',
+    sync: { at: '2026-11-04T03:08:00.000Z', count: 5 },
+  },
 };
 const listeners = [];
 const scoreDelay = Number(params.get('scoreDelay') || 0);
