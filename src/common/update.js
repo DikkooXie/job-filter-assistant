@@ -106,6 +106,83 @@ export function changelogTitle(name, version, tag) {
   return title;
 }
 
+const ISSUE_GROUP = /[（(]\s*#\d+(?:\s*[/／]\s*#\d+)*\s*[)）]/g;
+const BARE_ISSUE = /(^|[\s，。；、])#\d+\b/g;
+const SCHEME_CODE = /方案\s+[A-Za-z甲乙丙丁]/g;
+
+function stripChannelLead(text) {
+  let next = String(text || '').trim();
+  let prev;
+  do {
+    prev = next;
+    next = next.replace(/^(?:预览|稳定)\s*[:：]\s*/, '').trim();
+  } while (next !== prev);
+  return next;
+}
+
+function plainBullet(text) {
+  const unmarked = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/[*_~]/g, '');
+  return stripChannelLead(unmarked)
+    .replace(ISSUE_GROUP, '')
+    .replace(BARE_ISSUE, '$1')
+    .replace(SCHEME_CODE, '')
+    .replace(/[（(]\s*[)）]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([，。；、：:])/g, '$1')
+    .replace(/([，、；]){2,}/g, '$1')
+    .replace(/^[，、；;：:\s]+/, '')
+    .replace(/[；;，、\s]+$/, '')
+    .trim();
+}
+
+/**
+ * Release 正文 → 面向用户的条目。展示层清洗，不改发版说明本身。
+ * 去掉重复的「预览：/稳定：」、issue 号和「方案 X」代号；按行、分号或句号拆开。
+ * 没有可显示内容时返回空数组，调用方只留版本和时间。
+ */
+export function changelogBullets(notes) {
+  const raw = String(notes || '').replace(/\r\n/g, '\n').trim();
+  if (!raw) return [];
+  const lines = raw.split('\n').map((line) => line.trim()).filter(Boolean);
+  const contentLines = lines.filter((line) => !/^#{1,6}\s+/.test(line));
+  const listLines = contentLines.filter((line) => /^[-*•]\s+/.test(line) || /^\d+[.)．]\s+/.test(line));
+  const useList = listLines.length > 0 && listLines.length === contentLines.length;
+  const chunks = useList
+    ? listLines.map((line) => line.replace(/^[-*•]\s+/, '').replace(/^\d+[.)．]\s+/, ''))
+    : lines
+      .map((line) => line.replace(/^#{1,6}\s+/, ''))
+      .join('\n')
+      .split(/\n+|；|;|。/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  const bullets = [];
+  for (const chunk of chunks) {
+    const text = plainBullet(chunk);
+    if (text) bullets.push(text);
+  }
+  return bullets;
+}
+
+/** 发布时刻，本地时区，精确到分钟。无法解析时返回空字符串。 */
+export function formatChangelogWhen(iso) {
+  const date = new Date(iso);
+  if (!iso || Number.isNaN(date.getTime())) return '';
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 与已安装版本号完全一致（允许一侧带 v 前缀）时，时间线上标「当前」。 */
+export function isCurrentChangelogVersion(version, installed) {
+  const norm = (value) => String(value || '').trim().replace(/^v/i, '');
+  const current = norm(installed);
+  const release = norm(version);
+  return !!current && current === release;
+}
+
 /** 把 Release 正文收成一行摘要：去掉常见标记，超长截断。 */
 export function changelogSummary(notes, limit = 80) {
   const plain = String(notes || '')
@@ -142,6 +219,7 @@ export function changelogEntries(list, channel = 'stable') {
       tag,
       title: changelogTitle(json.name, version, tag),
       summary: changelogSummary(json.body),
+      bullets: changelogBullets(json.body),
       publishedAt: json.published_at || '',
       pageUrl: json.html_url || '',
       prerelease: json.prerelease === true,

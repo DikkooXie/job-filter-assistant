@@ -11,7 +11,7 @@ import { useSaveQueue } from './settings/useSaveQueue.js';
 import { useInitialSettings } from './settings/useInitialSettings.js';
 import { useSettingsHash } from './settings/useSettingsHash.js';
 import SettingsShell, { ProfileRail, extensionVersion } from './settings/SettingsShell.jsx';
-import { SETTINGS_PAGES, pageFromHash } from './settings/pageHash.js';
+import { SETTINGS_PAGES, isChangelogHash, pageFromHash } from './settings/pageHash.js';
 import ProfileTab from './settings/ProfileTab.jsx';
 import AiTab from './settings/AiTab.jsx';
 import FiltersTab from './settings/FiltersTab.jsx';
@@ -37,7 +37,8 @@ export default function Options() {
   const { page, hash } = useSettingsHash();
   const [updateCheckToken, setUpdateCheckToken] = useState(0);
   const requestUpdateCheck = useCallback(() => {
-    if (pageFromHash(location.hash) !== 'general') location.hash = '#general';
+    // #updated 的 page 已是 general，这里不能改写它。日志页的 page 会落到画像，必须先离开。
+    if (isChangelogHash(location.hash) || pageFromHash(location.hash) !== 'general') location.hash = '#general';
     setUpdateCheckToken((n) => n + 1);
   }, []);
   useInitialSettings({ settingsRef, providersRef, profileRef, setSettings, setProviders, setProfile, report });
