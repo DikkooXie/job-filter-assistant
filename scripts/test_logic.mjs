@@ -34,6 +34,7 @@ import {
   parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
   RELEASE_API, RELEASES_API, NO_PREVIEW_MESSAGE, AHEAD_OF_STABLE_MESSAGE,
   normalizeUpdateChannel, releaseRequest, selectPreviewRelease, resolvePreviewCheck, assessUpdate,
+  changelogTitle, changelogSummary, changelogEntries, RELEASES_PAGE,
 } from '../src/common/update.js';
 
 let pass = 0;
@@ -1077,6 +1078,47 @@ test('稳定通道上正式版更旧时只提示手动覆盖，不标记可更�
   assert.equal(previewCurrent.hasUpdate, false);
   assert.equal(previewCurrent.aheadOfStable, false);
 });
+test('更新日志按通道过滤正式版和预发布，版本号标题不重复', () => {
+  const note = '**更新**机制的 [说明](https://example.com) `代码`';
+  const list = [
+    release({
+      tag_name: 'v1.0.3.7', name: 'v1.0.3.7', prerelease: true, draft: false,
+      published_at: '2026-11-04T07:26:09Z', body: '预览：列表抽屉',
+      html_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/tag/v1.0.3.7',
+    }),
+    release({
+      tag_name: 'v1.0.3', name: '固定文件名', prerelease: false,
+      published_at: '2026-11-02T12:28:37Z', body: note, assets: [],
+    }),
+    release({ tag_name: 'v9.9.9', prerelease: false, draft: true, body: '草稿' }),
+    release({ tag_name: 'latest', prerelease: false, body: '坏版本' }),
+    null,
+  ];
+  assert.equal(changelogTitle('v1.0.3.7', '1.0.3.7', 'v1.0.3.7'), '');
+  assert.equal(changelogTitle('固定文件名', '1.0.3', 'v1.0.3'), '固定文件名');
+  assert.equal(changelogSummary(note), '更新机制的 说明 代码');
+  const long = '字'.repeat(120);
+  const summary = changelogSummary(long);
+  assert.equal(summary.length, 81);
+  assert.ok(summary.endsWith('…'));
+  const stable = changelogEntries(list, 'stable');
+  assert.equal(stable.length, 1);
+  assert.equal(stable[0].version, '1.0.3');
+  assert.equal(stable[0].title, '固定文件名');
+  assert.equal(stable[0].summary, '更新机制的 说明 代码');
+  assert.equal(stable[0].prerelease, false);
+  assert.equal(stable[0].pageUrl, list[1].html_url);
+  const preview = changelogEntries(list, 'nope');
+  assert.deepEqual(preview.map((item) => item.version), ['1.0.3']);
+  const withPreview = changelogEntries(list, 'preview');
+  assert.deepEqual(withPreview.map((item) => item.version), ['1.0.3.7', '1.0.3']);
+  assert.equal(withPreview[0].title, '');
+  assert.equal(withPreview[0].summary, '预览：列表抽屉');
+  assert.equal(withPreview[0].prerelease, true);
+  assert.equal(withPreview[0].publishedAt, '2026-11-04T07:26:09Z');
+  assert.throws(() => changelogEntries({ message: 'nope' }), /格式不正确/);
+  assert.equal(RELEASES_PAGE, 'https://github.com/DikkooXie/job-filter-assistant/releases');
+});
 await testAsync('manifest key 计算出固定扩展 ID', async () => {
   assert.equal(await extensionIdFromKey(selfManifest.key), SELF_ID);
 });
@@ -1718,6 +1760,21 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(panel, /打开扩展管理页/);
   assert.match(updater, /resolvePreviewCheck/);
   assert.match(updater, /parseRelease\(await fetchGithub\(request\.url\)\)/);
+  assert.match(updater, /fetchReleaseNotes/);
+  assert.match(updater, /releaseRequest\('preview'\)/);
+  assert.match(updater, /changelogEntries\(json, channel\)/);
+  assert.match(panel, /checkToken/);
+  assert.match(panel, /fetchLatestRelease\(channel\)/);
+  const shell = fs.readFileSync(path.join(root, 'src/react/settings/SettingsShell.jsx'), 'utf8');
+  const drawer = fs.readFileSync(path.join(root, 'src/react/settings/ChangelogDrawer.jsx'), 'utf8');
+  assert.match(shell, /检查更新/);
+  assert.match(shell, /更新日志/);
+  assert.match(shell, /onCheckUpdate/);
+  assert.doesNotMatch(shell, /改动区/);
+  assert.match(drawer, /fetchReleaseNotes/);
+  assert.match(drawer, /在 GitHub 查看全部/);
+  assert.doesNotMatch(drawer, /示意条目/);
+  assert.doesNotMatch(drawer, /CHANGELOG\.md/);
   assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
   assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);

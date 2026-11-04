@@ -11,7 +11,7 @@ import { useSaveQueue } from './settings/useSaveQueue.js';
 import { useInitialSettings } from './settings/useInitialSettings.js';
 import { useSettingsHash } from './settings/useSettingsHash.js';
 import SettingsShell, { ProfileRail, extensionVersion } from './settings/SettingsShell.jsx';
-import { SETTINGS_PAGES } from './settings/pageHash.js';
+import { SETTINGS_PAGES, pageFromHash } from './settings/pageHash.js';
 import ProfileTab from './settings/ProfileTab.jsx';
 import AiTab from './settings/AiTab.jsx';
 import FiltersTab from './settings/FiltersTab.jsx';
@@ -35,6 +35,11 @@ export default function Options() {
   }, []);
   const { enqueue, flush, retry, status } = useSaveQueue(report);
   const { page, hash } = useSettingsHash();
+  const [updateCheckToken, setUpdateCheckToken] = useState(0);
+  const requestUpdateCheck = useCallback(() => {
+    if (pageFromHash(location.hash) !== 'general') location.hash = '#general';
+    setUpdateCheckToken((n) => n + 1);
+  }, []);
   useInitialSettings({ settingsRef, providersRef, profileRef, setSettings, setProviders, setProfile, report });
   const updateSettings = (patch) => {
     const old = settingsRef.current;
@@ -109,12 +114,12 @@ export default function Options() {
   const score = scoreProfile(profile);
   const title = SETTINGS_PAGES.find((item) => item.id === page)?.label || '个人画像';
   return <>
-    <SettingsShell page={page} hash={hash} title={title} status={status} onRetry={retry} version={extensionVersion()} notice={notice} onDismissNotice={() => setNotice(null)} busy={busy} rail={page === 'profile' ? <ProfileRail score={score} /> : null}>
+    <SettingsShell page={page} hash={hash} title={title} status={status} onRetry={retry} version={extensionVersion()} updateChannel={settings.updateChannel} onCheckUpdate={requestUpdateCheck} notice={notice} onDismissNotice={() => setNotice(null)} busy={busy} rail={page === 'profile' ? <ProfileRail score={score} /> : null}>
       <Tabs value={page} onValueChange={(next) => { if (next && location.hash !== `#${next}`) location.hash = `#${next}`; }}>
         <ProfileTab profile={profile} draft={draft} report={report} onEdit={editProfile} onImportFiles={importProfileFiles} onExtractText={extract} onApplyDraft={applyDraft} onDiscardDraft={() => setDraft(null)} onClear={requestClearProfile} />
         <AiTab {...{ action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, setConfirm }} />
         <FiltersTab settings={settings} updateSettings={updateSettings} />
-        <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} />
+        <GeneralTab {...{ settings, updateSettings, exportData, setConfirm, report }} updateCheckToken={updateCheckToken} />
       </Tabs>
     </SettingsShell>
     <Dialog open={!!confirm} onOpenChange={(open) => { if (!open) setConfirm(null); }}><DialogContent><DialogHeader><DialogTitle>{confirm?.title}</DialogTitle><DialogDescription>{confirm?.body}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>取消</Button><Button variant="destructive" disabled={!!busy} onClick={() => action(async () => { setBusy('正在处理…'); try { await confirm.run(); setConfirm(null); } finally { setBusy(''); } })}>确认</Button></DialogFooter></DialogContent></Dialog>

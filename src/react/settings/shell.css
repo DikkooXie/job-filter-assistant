@@ -154,7 +154,13 @@
 
 .settings-nav a:focus-visible,
 .save-retry:focus-visible,
-.settings-notice button:focus-visible {
+.settings-notice button:focus-visible,
+.settings-version-check:focus-visible,
+.settings-version-log:focus-visible,
+.settings-log-close:focus-visible,
+.settings-log-retry:focus-visible,
+.settings-log-ver:focus-visible,
+.settings-log-foot a:focus-visible {
   outline: 2px solid var(--s-accent);
   outline-offset: 2px;
   box-shadow: 0 0 0 3px var(--s-focus);
@@ -167,6 +173,196 @@
   color: var(--s-ink-3);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.settings-version-num {
+  color: var(--s-ink-3);
+}
+
+.settings-version-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 5px;
+}
+
+.settings-version-check,
+.settings-version-log,
+.settings-log-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.settings-version-check {
+  color: var(--s-accent);
+  font-weight: 500;
+  text-decoration-color: var(--s-accent-line);
+}
+
+.settings-version-log {
+  color: var(--s-ink-3);
+  font-weight: 400;
+  text-decoration-color: color-mix(in srgb, var(--s-ink-3) 45%, transparent);
+}
+
+.settings-version-log[aria-expanded="true"] {
+  color: var(--s-accent);
+  font-weight: 500;
+  text-decoration-color: var(--s-accent-line);
+}
+
+.settings-version-dot {
+  color: var(--s-ink-3);
+  opacity: 0.45;
+  font-size: 10px;
+}
+
+.settings-log-scrim {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 248px;
+  background: color-mix(in srgb, var(--s-ink-1) 28%, transparent);
+}
+
+.settings-log-panel {
+  position: fixed;
+  z-index: 31;
+  left: calc(248px + 16px);
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow: hidden;
+  border: 1px solid var(--s-border-strong);
+  border-radius: 12px;
+  background: var(--s-field);
+  box-shadow: var(--s-shadow);
+}
+
+.settings-log-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--s-border);
+}
+
+.settings-log-title {
+  margin: 0;
+  color: var(--s-ink-1);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.settings-log-sub {
+  margin: 2px 0 0;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-log-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--s-border-strong);
+  border-radius: 7px;
+  background: var(--s-surface-2);
+  color: var(--s-ink-2);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-log-list {
+  min-height: 0;
+  padding: 6px 8px 10px;
+  overflow: auto;
+}
+
+.settings-log-state {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--s-ink-2);
+  font-size: 13px;
+}
+
+.settings-log-retry {
+  margin-left: 8px;
+  color: var(--s-accent);
+  font-weight: 500;
+  text-decoration-color: var(--s-accent-line);
+}
+
+.settings-log-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.settings-log-item:hover {
+  background: var(--s-surface-2);
+}
+
+.settings-log-date {
+  padding-top: 2px;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-log-ver {
+  color: var(--s-accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+}
+
+.settings-log-name {
+  margin: 2px 0 0;
+  color: var(--s-ink-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-log-desc {
+  margin: 3px 0 0;
+  color: var(--s-ink-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-log-foot {
+  padding: 8px 16px 12px;
+  border-top: 1px solid var(--s-border);
+  color: var(--s-ink-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.settings-log-foot a {
+  color: var(--s-ink-2);
+  text-underline-offset: 2px;
 }
 
 .settings-main {
@@ -403,6 +599,16 @@
   .settings-brand,
   .settings-version {
     display: none;
+  }
+
+  .settings-log-scrim {
+    left: 0;
+  }
+
+  .settings-log-panel {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
   }
 
   .settings-nav {

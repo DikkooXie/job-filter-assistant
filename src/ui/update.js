@@ -3,7 +3,7 @@
 import { unzipSync, strFromU8 } from '../vendor/fflate.module.js';
 import {
   MAX_PACKAGE_BYTES, parseRelease, releaseRequest, resolvePreviewCheck, assessUpdate, previewUnavailable,
-  packageManifestError, isSameInstall, planWrites, unzipGuard, toHex, staleAssets,
+  packageManifestError, isSameInstall, planWrites, unzipGuard, toHex, staleAssets, changelogEntries,
 } from '../common/update.js';
 
 const DB_NAME = 'jobHelperUpdate';
@@ -116,6 +116,21 @@ export async function fetchLatestRelease(channel = 'stable') {
   }
   const release = parseRelease(await fetchGithub(request.url));
   return { ...assessUpdate(release, current, 'stable'), previewUnavailable: false };
+}
+
+/**
+ * 当前通道的更新日志。请求地址与预览检查相同（最近 20 条 Release），
+ * 稳定通道再去掉预发布。404 视为空列表。
+ */
+export async function fetchReleaseNotes(channel = 'stable') {
+  const url = releaseRequest('preview').url;
+  try {
+    const json = await fetchGithub(url);
+    return changelogEntries(json, channel);
+  } catch (error) {
+    if (error?.status === 404) return [];
+    throw error;
+  }
 }
 
 async function download(url, onProgress) {
