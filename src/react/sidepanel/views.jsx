@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, ExternalLink, Filter, Search, Settings, Star, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Briefcase, ChevronRight, CircleAlert, ExternalLink, Filter, HeartCrack, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { GREETING_LEVELS, VERDICT_LABELS, DIM_LABELS } from '../../common/ai/prompts.js';
-import { exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines } from './browseModel.js';
+import { analysisGrade, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines } from './browseModel.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
@@ -100,16 +100,49 @@ export function ListHeader({
   );
 }
 
-export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpen, onStar }) {
-  const verdict = job.match?.verdict;
-  const verdictText = job.match ? (VERDICT_LABELS[verdict] || verdict || '已分析') : '未分析';
+export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpen, onStar, onDelete, onDislike }) {
+  const grade = analysisGrade(job.match);
   const risks = riskLines(job);
   const reasons = exclusionReasons(job);
-  const summary = job.match?.summary || '';
-  const riskAsStatus = !job.match && risks.length > 0;
-  const inlineRisks = riskAsStatus ? risks.slice(1) : risks;
+  const summary = grade ? (job.match?.summary || '') : '';
+  const [confirming, setConfirming] = useState(null);
+  const armedAt = useRef(0);
+  const rowRef = useRef(null);
+  const name = job.title || '岗位';
+
+  useEffect(() => { setConfirming(null); }, [job.uid]);
+
+  useEffect(() => {
+    if (!confirming) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape') setConfirming(null); };
+    const onPointer = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const action = target?.closest('[data-row-action]');
+      if (action && rowRef.current?.contains(action) && action.dataset.rowAction === confirming) return;
+      setConfirming(null);
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [confirming]);
+
+  const arm = (kind) => {
+    if (confirming === kind) {
+      if (performance.now() - armedAt.current < 180) return;
+      setConfirming(null);
+      if (kind === 'delete') onDelete();
+      else onDislike();
+      return;
+    }
+    armedAt.current = performance.now();
+    setConfirming(kind);
+  };
+
   return (
-    <article className={`job-row${returned ? ' just-viewed' : ''}`} data-job-uid={job.uid}>
+    <article ref={rowRef} className={`job-row${returned ? ' just-viewed' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
       <div className="row-top">
         <input type="checkbox" aria-label={`选择 ${job.company || ''} ${job.title || '岗位'}`} checked={checked} onChange={onToggle} />
         <button type="button" className="job-title" onClick={() => onOpen(job.uid, 'info')}>{job.title || '未命名岗位'}</button>
@@ -136,42 +169,78 @@ export function JobRow({ job, checked, returned, progressStatus, onToggle, onOpe
         {(job.skills?.length ? job.skills : job.tags || []).length > 0 && (
           <ul className="skills" aria-label="岗位技能">{(job.skills?.length ? job.skills : job.tags).slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
         )}
-        <div className="row-assessment">
-          <div className="assessment-copy">
-            {riskAsStatus ? (
-              <button
-                type="button"
-                className="match-summary is-risk"
-                aria-label={`查看 ${job.company || '该岗位'} 的风险提示，尚未分析`}
-                onClick={() => onOpen(job.uid, 'match')}
-              >
-                <CircleAlert aria-hidden="true" /><span>{risks[0]}</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={`match-summary ${verdict || 'none'}`}
-                aria-label={job.match ? `查看 ${job.company || '该岗位'} 的匹配分析：${job.match.score} 分，${verdictText}` : `查看 ${job.company || '该岗位'} 的匹配，尚未分析`}
-                onClick={() => onOpen(job.uid, 'match')}
-              >
-                {job.match
-                  ? <span className="match-result"><strong>{job.match.score}</strong><span>{verdictText}</span></span>
-                  : verdictText}
+        <div className={`analysis${grade ? '' : ' bare'}`}>
+          <div className="analysis-top">
+            <button
+              type="button"
+              className="analysis-main"
+              aria-label={grade ? `查看 ${job.company || '该岗位'} 的匹配分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的匹配，尚未分析`}
+              onClick={() => onOpen(job.uid, 'match')}
+            >
+              {grade ? (
+                <>
+                  <span className="segs" aria-hidden="true">
+                    {Array.from({ length: 5 }, (_, index) => (
+                      <span key={index} className={index < grade.filled ? `cell on ${grade.tone}` : 'cell'} />
+                    ))}
+                  </span>
+                  <span className={`grade ${grade.tone}`}>{grade.label}</span>
+                </>
+              ) : <span className="grade muted">尚未分析</span>}
+            </button>
+            {grade && (
+              <button type="button" className={`score-num ${grade.tone}`} aria-label={`${grade.score} 分`} onClick={() => onOpen(job.uid, 'match')}>
+                {grade.score}
               </button>
             )}
-            {summary && <button type="button" className="match-reason" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
-            {inlineRisks.map((line) => (
-              <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>
-            ))}
           </div>
-          <button
-            type="button"
-            className={`flow-link${progressStatus ? ' progressed' : ''}`}
-            aria-label={`${job.company || '该岗位'}，流程：${flowStatusLabel(progressStatus)}`}
-            onClick={() => onOpen(job.uid, 'flow')}
-          >
-            {flowEntryLabel(progressStatus)}<ChevronRight aria-hidden="true" />
-          </button>
+          {summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
+        </div>
+        {risks.map((line) => (
+          <div className="risk" key={line}><CircleAlert aria-hidden="true" /><span>{line}</span></div>
+        ))}
+        <div className="row-actions">
+          <div className="row-actions-inner">
+            <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
+              <button
+                type="button"
+                className="act-icon del"
+                data-row-action="delete"
+                aria-pressed={confirming === 'delete'}
+                aria-hidden={confirming && confirming !== 'delete' ? true : undefined}
+                tabIndex={confirming && confirming !== 'delete' ? -1 : 0}
+                aria-label={confirming === 'delete' ? `确认删除 ${name}` : `删除 ${name}`}
+                onClick={() => arm('delete')}
+              >
+                <Trash2 aria-hidden="true" />
+                <span className="lbl" aria-hidden="true">删除</span>
+              </button>
+              <button
+                type="button"
+                className="act-icon dislike"
+                data-row-action="dislike"
+                aria-pressed={confirming === 'dislike'}
+                aria-hidden={confirming && confirming !== 'dislike' ? true : undefined}
+                tabIndex={confirming && confirming !== 'dislike' ? -1 : 0}
+                aria-label={confirming === 'dislike' ? `确认不喜欢 ${name}` : `不喜欢 ${name}`}
+                onClick={() => arm('dislike')}
+              >
+                <HeartCrack aria-hidden="true" />
+                <span className="lbl" aria-hidden="true">不喜欢</span>
+              </button>
+              <button
+                type="button"
+                className={`act-greet${progressStatus ? ' progressed' : ''}`}
+                data-row-action="greet"
+                tabIndex={confirming ? -1 : 0}
+                aria-hidden={confirming ? true : undefined}
+                aria-label={`${job.company || '该岗位'}，${flowStatusLabel(progressStatus)}`}
+                onClick={() => onOpen(job.uid, 'flow')}
+              >
+                {flowEntryLabel(progressStatus)}<ChevronRight aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
         {reasons.length > 0 && (
           <div className="exclusion">
