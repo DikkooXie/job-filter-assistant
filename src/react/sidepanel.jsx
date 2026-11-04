@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
-import { appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
+import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
 import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
@@ -8,7 +8,7 @@ import { runningDevBuild } from '../common/build.js';
 import { analysisTargets, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
-import { AnalyzeSheet, BatchStrip, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
+import { AnalyzeSheet, BatchStrip, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
 import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -74,7 +74,7 @@ export default function Sidepanel() {
     saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, noticeTimer: null, notice: '', noticeBatch: false, error: false, loading: true,
     modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
     capsuleUntil: 0, capsuleTimer: null, scrollLockTimer: null, ignoreScrollDismiss: false,
-    moreOpen: false, analyzeOpen: false,
+    moreOpen: false, analyzeOpen: false, dislikeJob: null, dislikeSaving: false,
   };
   const s = state.current;
   const update = () => redraw();
@@ -578,7 +578,7 @@ export default function Sidepanel() {
             try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: job.uid })); update(); }
             catch (error) { notify(error.message, true); }
           }}
-          onDislike={() => job && dislikeJob(job, s, update, notify)}
+          onDislike={() => job && dislikeJob(job, s, update)}
           onDelete={() => job && removeSelected(job, s, update, notify)}
           onAcceptRisk={async (text) => {
             try {
@@ -617,7 +617,7 @@ export default function Sidepanel() {
                       onOpen={openDetail}
                       onStar={async () => { try { s.jobs = jobsForLibrary(await send(MSG.JOB_STAR_TOGGLE, { uid: item.uid })); update(); } catch (error) { notify(error.message, true); } }}
                       onDelete={() => deleteJob(item, s, update, notify)}
-                      onDislike={() => dislikeJob(item, s, update, notify)}
+                      onDislike={() => dislikeJob(item, s, update)}
                     />
                   ))}</div>}
               </div>
@@ -625,7 +625,7 @@ export default function Sidepanel() {
       {showListChrome && surface !== 'loading' && surface !== 'error' && (
         <BatchStrip
           model={stripModel(s.batch)}
-          onOpenQueue={() => { s.queueOpen = true; s.analyzeOpen = false; s.filterOpen = false; update(); }}
+          onOpenQueue={() => { if (s.dislikeSaving) return; s.queueOpen = true; s.analyzeOpen = false; s.filterOpen = false; s.dislikeJob = null; update(); }}
           onRetryFailed={() => retryQueue(null)}
         />
       )}
@@ -645,7 +645,7 @@ export default function Sidepanel() {
           onToggleMenu={(open) => { s.moreOpen = open; update(); }}
           onDeleteSelected={deleteChecked}
           onExportSelected={() => { s.moreOpen = false; batchExport(checked); }}
-          onAnalyze={() => { s.moreOpen = false; s.filterOpen = false; s.queueOpen = false; s.analyzeOpen = true; update(); }}
+          onAnalyze={() => { if (s.dislikeSaving) return; s.moreOpen = false; s.filterOpen = false; s.queueOpen = false; s.analyzeOpen = true; s.dislikeJob = null; update(); }}
           onWorkbench={() => send(MSG.OPEN_OPTIONS)}
         />
       )}
@@ -673,7 +673,15 @@ export default function Sidepanel() {
           onClose={() => { s.filterOpen = false; update(); }}
         />
       )}
-      {s.notice && !s.filterOpen && <NoticeToast message={s.notice} error={s.error} batch={s.noticeBatch} />}
+      {s.dislikeJob && (
+        <DislikeSheet
+          job={s.dislikeJob}
+          saving={s.dislikeSaving}
+          onClose={() => { if (s.dislikeSaving) return; s.dislikeJob = null; update(); }}
+          onSave={(text) => saveDislike(text, s, update, notify)}
+        />
+      )}
+      {s.notice && !s.filterOpen && !s.dislikeJob && <NoticeToast message={s.notice} error={s.error} batch={s.noticeBatch} />}
     </div>
   );
 }
@@ -696,5 +704,34 @@ async function removeSelected(target, s, update, notify) {
   await deleteJob(target, s, update, notify);
 }
 
-// 不喜欢的原因写入画像属于 #26。列表这里只完成满行确认，确认后调用本函数，不另建存储或消息。
-function dislikeJob() {}
+// 不喜欢只打开底抽屉。写入走 saveDislike，不在这里重跑分析。
+function dislikeJob(target, s, update) {
+  if (!target || s.dislikeSaving) return;
+  s.dislikeJob = target;
+  s.filterOpen = false;
+  s.analyzeOpen = false;
+  s.queueOpen = false;
+  s.moreOpen = false;
+  update();
+}
+
+// 整句写入雷点。成功后只 toast，不调用分析。
+async function saveDislike(text, s, update, notify) {
+  const sentence = String(text ?? '').trim();
+  if (!sentence || s.dislikeSaving) return false;
+  s.dislikeSaving = true;
+  update();
+  try {
+    const current = s.profile?.preference ? s.profile : emptyProfile();
+    const preference = appendDealbreaker(current.preference, sentence);
+    s.profile = await send(MSG.PROFILE_SAVE, { profile: { ...current, preference } });
+    s.dislikeJob = null;
+    s.dislikeSaving = false;
+    notify('已写入画像');
+    return true;
+  } catch (error) {
+    s.dislikeSaving = false;
+    update();
+    return error?.message || '写入失败';
+  }
+}

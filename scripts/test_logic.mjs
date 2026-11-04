@@ -12,7 +12,7 @@ import { loadSettings, mergeSettings, saveSettings } from '../src/common/setting
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary } from '../src/common/platforms.js';
 import { mergeJobs } from '../src/common/jobsStore.js';
-import { appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
+import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import {
   MAX_PROFILE_IMPORT_BYTES, applyProfileDraft, assertFilesWithinLimit, combineMaterialExtracts, parseProfileJson, planJsonFile, planResumeFiles,
 } from '../src/common/profileImport.js';
@@ -644,6 +644,28 @@ test('匹配提示要求尊重画像里已经接受的事项', () => {
   assert.ok(system.includes('preference.notes'));
   assert.ok(system.includes('可以接受'));
   assert.ok(system.includes('不要写入 risks'));
+});
+
+test('不喜欢的整句写入雷点，不进可以接受的备注，也不按顿号拆开', () => {
+  const pref = { avoidKeywords: ['外包'], dealbreakers: ['大小周'], notes: '可以接受异地' };
+  const next = appendDealbreaker(pref, '  太偏销售、不要驻场  ');
+  assert.deepEqual(next.avoidKeywords, ['外包']);
+  assert.deepEqual(next.dealbreakers, ['大小周', '太偏销售、不要驻场']);
+  assert.equal(next.notes, '可以接受异地');
+  assert.deepEqual(getDealbreakers(next), ['大小周', '太偏销售、不要驻场', '外包']);
+  const again = appendDealbreaker(next, '太偏销售、不要驻场');
+  assert.deepEqual(again.dealbreakers, ['大小周', '太偏销售、不要驻场']);
+  assert.equal(appendDealbreaker(pref, '   ').notes, '可以接受异地');
+  assert.deepEqual(appendDealbreaker(pref, '  ').dealbreakers, ['大小周']);
+  const saved = sanitizeProfile({ preference: appendDealbreaker(pref, '太偏销售、不要驻场') });
+  assert.deepEqual(saved.preference.dealbreakers, ['大小周', '太偏销售、不要驻场']);
+  assert.equal(saved.preference.notes, '可以接受异地');
+  const profile = emptyProfile();
+  profile.preference = appendDealbreaker(profile.preference, '太偏销售、不要驻场');
+  const user = buildMatchPrompt(profile, { title: '销售驻场', description: '需要驻场销售' })[1].content;
+  assert.ok(user.includes('太偏销售、不要驻场'));
+  assert.ok(!user.includes('不喜欢：'));
+  assert.equal(profile.preference.notes, '');
 });
 
 test('历史雷点合并去重，编辑时删除两处并保留其他数据', () => {
@@ -2116,7 +2138,41 @@ test('删除确认态文案是再次点击确认删除', () => {
   const confirmLbl = browse.match(/\.actions-row\.is-confirm-delete \.act-icon\.del \.lbl \{[^}]*\}/)?.[0] || '';
   assert.match(confirmLbl, /max-width:\s*200px/);
   assert.match(confirmLbl, /font-weight:\s*650/);
-  assert.match(browse, /\.actions-row\.is-confirm-dislike \.act-icon\.dislike \.lbl \{[^}]*max-width:\s*4\.5em/);
+  assert.doesNotMatch(browse, /is-confirm-dislike/);
+  assert.doesNotMatch(views, /arm\('dislike'\)/);
+});
+
+test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重跑', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const row = views.slice(views.indexOf('export function JobRow'), views.indexOf('export function ListFooter'));
+  const sheet = views.slice(views.indexOf('export function DislikeSheet'), views.indexOf('function LibraryCount'));
+  const save = sidepanel.slice(sidepanel.indexOf('async function saveDislike'));
+  assert.match(row, /data-row-action="dislike"/);
+  assert.match(row, /onClick=\{onDislike\}/);
+  assert.match(row, /aria-label=\{`不喜欢 \$\{name\}`\}/);
+  assert.doesNotMatch(row, /arm\('dislike'\)|确认不喜欢/);
+  assert.match(sheet, /不喜欢的地方/);
+  assert.match(sheet, /画像不完善时 AI 易高分误判。用一句话告诉我要避开什么，写入画像。/);
+  assert.match(sheet, /placeholder="例如：太偏销售、不要驻场…"/);
+  assert.match(sheet, /针对 · <strong>/);
+  assert.match(sheet, />取消</);
+  assert.match(sheet, />确认写入</);
+  assert.doesNotMatch(sheet, /checkbox|type="checkbox"|权重|\+权重|雷点列表|重新分析/);
+  assert.match(sidepanel, /<DislikeSheet/);
+  assert.match(sidepanel, /onDislike=\{\(\) => dislikeJob\(/);
+  assert.match(sidepanel, /onDislike=\{\(\) => job && dislikeJob\(/);
+  assert.match(save, /appendDealbreaker/);
+  assert.match(save, /PROFILE_SAVE/);
+  assert.match(save, /已写入画像/);
+  assert.doesNotMatch(save, /AI_MATCH|startAnalysis|重新分析|analyze\(/);
+  const primary = browse.match(/\.job-panel \.dislike-sheet \.jp-btn-primary \{[^}]*\}/)?.[0] || '';
+  assert.match(primary, /background:\s*#2dd4bf/);
+  assert.match(primary, /color:\s*#0f1419/);
+  assert.match(browse, /\.scrim\.dislike-scrim \{[^}]*rgba\(0,\s*0,\s*0,\s*\.55\)/);
+  assert.match(browse, /\.sheet\.dislike-sheet \{[^}]*border-radius:\s*16px 16px 0 0/);
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
