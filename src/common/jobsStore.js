@@ -79,7 +79,7 @@ export async function toggleStar(uid) {
   return next;
 }
 
-// 写回单个岗位的匹配分
+// 写回单个岗位的匹配分。profileFp 由打分路径盖上，这里原样保存，不另算指纹。
 export async function setJobMatch(uid, match) {
   const list = await loadJobs();
   const next = list.map((j) => (j.uid === uid ? { ...j, match } : j));

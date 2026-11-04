@@ -1,5 +1,7 @@
 // 岗位浏览预览用的虚构数据。只由 extension-pages/sidepanel-browse-preview.jsx 加载，不进入扩展包。
 // 正式侧栏 extension-pages/sidepanel.jsx 不引用本文件；空库不会回落到这里的岗位。
+import { profileFingerprint } from '../src/common/profileFingerprint.js';
+
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') || 'normal';
 
@@ -45,6 +47,18 @@ const state = {
   failUids: new Set(String(params.get('fail') || '').split(',').filter(Boolean)),
 };
 
+function previewFingerprint() {
+  return profileFingerprint(state.profile, state.providers[0] || { model: 'demo' });
+}
+
+// s1/s2 盖当前画像戳，指纹模式应跳过；s4 盖过期戳，应重新分析。其余已有结果视为尚未盖戳。
+const previewFp = state.providers.length ? previewFingerprint() : '';
+for (const job of state.jobs) {
+  if (!job.match || !previewFp) continue;
+  if (job.uid === 'boss:s1' || job.uid === 'boss:s2') job.match = { ...job.match, profileFp: previewFp };
+  else if (job.uid === 'boss:s4') job.match = { ...job.match, profileFp: 'stale-preview-fp' };
+}
+
 function broadcast(msg) { listeners.forEach((fn) => { try { fn(msg, {}, () => {}); } catch { /* 预览监听失败不影响页面 */ } }); }
 
 function respond(msg) {
@@ -64,7 +78,7 @@ function respond(msg) {
     case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
     case 'AI_MATCH_SCORE': {
       if (state.failUids.has(msg.uid)) throw new Error('超时');
-      const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z' };
+      const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z', profileFp: previewFingerprint() };
       state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match } : job);
       return match;
     }

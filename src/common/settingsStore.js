@@ -1,6 +1,7 @@
 // 设置与 AI 供应商列表的 storage 读写。
 import { STORAGE_KEYS, defaultSettings, defaultFilters } from './constants.js';
 import { sanitizeProviderList } from './ai/providers.js';
+import { pickActiveProvider } from './profileFingerprint.js';
 import { normalizeUpdateChannel } from './update.js';
 
 const SET_KEY = STORAGE_KEYS.settings;
@@ -42,9 +43,7 @@ export async function saveProviders(list) {
 // 取当前启用的供应商（settings.activeProviderId 指向；否则取第一个可用）
 export async function getActiveProvider() {
   const [settings, providers] = await Promise.all([loadSettings(), loadProviders()]);
-  if (!providers.length) return null;
-  const byId = providers.find((p) => p.id === settings.activeProviderId);
-  return byId || providers[0];
+  return pickActiveProvider(providers, settings.activeProviderId);
 }
 
 function isObj(x) {

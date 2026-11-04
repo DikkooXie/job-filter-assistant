@@ -9,6 +9,7 @@ import {
   loadSettings, saveSettings, loadProviders, saveProviders, getActiveProvider,
 } from '../common/settingsStore.js';
 import { loadProfile, saveProfile, clearProfile, sanitizeProfile } from '../common/profile.js';
+import { profileFingerprint, withProfileFp } from '../common/profileFingerprint.js';
 import { sanitizeProvider } from '../common/ai/providers.js';
 import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js';
 import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor } from '../common/ai/prompts.js';
@@ -411,15 +412,16 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   // v4：两个历史偏好字段统一作为雷点进行字面与语义判断。
   const cacheKey = `${job.uid}::prompt-v4::${fp}`;
   if (!force && cache[cacheKey]) {
-    await setJobMatch(job.uid, cache[cacheKey]);
-    return cache[cacheKey];
+    const match = withProfileFp(cache[cacheKey], fp);
+    await setJobMatch(job.uid, match);
+    return match;
   }
 
   const prompt = buildMatchPrompt(profile, job, {
     includeCompany: settings.privacy.sendCompanyName,
   });
   const raw = await chatJson(provider, prompt, { json: true, maxTokens: 1024 });
-  const match = sanitizeMatch(raw);
+  const match = withProfileFp(sanitizeMatch(raw), fp);
   cache[cacheKey] = match;
   await setMatchCache(cache);
   await setJobMatch(job.uid, match);
@@ -461,26 +463,6 @@ async function scoreBatch(uids, { force = false } = {}) {
   }
   broadcast(MSG.JOBS_UPDATED, { batchScored: true });
   return results;
-}
-
-// 画像+供应商指纹：任一变化则缓存失效
-function profileFingerprint(profile, provider) {
-  const s = JSON.stringify({
-    t: profile.target,
-    c: profile.capabilities,
-    b: profile.basics,
-    w: profile.workSummary,
-    pj: profile.projectSummary,
-    h: profile.highlights,
-    pr: profile.preference,
-    m: provider.model,
-  });
-  // 简单 hash
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) | 0;
-  }
-  return String(h >>> 0);
 }
 
 async function exportJobs(format) {
