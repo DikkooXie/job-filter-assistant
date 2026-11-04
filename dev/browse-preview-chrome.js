@@ -20,6 +20,7 @@ const store = {
   'job-progress-v1:qcwy%3As8': { status: 'sent', at: '2026-11-03T03:00:00.000Z' },
 };
 const listeners = [];
+const scoreDelay = Number(params.get('scoreDelay') || 0);
 const state = {
   jobs: scenario === 'empty' ? [] : jobs.map((job) => ({ ...job })),
   failReads: scenario === 'error',
@@ -41,6 +42,7 @@ const state = {
     updatedAt: '2026-11-01T00:00:00.000Z', createdAt: '2026-11-01T00:00:00.000Z',
   },
   ctx: { platform: 'qcwy', url: 'https://example.invalid/jobs/s3', jobKey: 's3', isChat: false },
+  failUids: new Set(String(params.get('fail') || '').split(',').filter(Boolean)),
 };
 
 function broadcast(msg) { listeners.forEach((fn) => { try { fn(msg, {}, () => {}); } catch { /* 预览监听失败不影响页面 */ } }); }
@@ -61,6 +63,7 @@ function respond(msg) {
     case 'PROFILE_GET': return state.profile;
     case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
     case 'AI_MATCH_SCORE': {
+      if (state.failUids.has(msg.uid)) throw new Error('超时');
       const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z' };
       state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match } : job);
       return match;
@@ -77,7 +80,8 @@ window.chrome = {
     lastError: null,
     id: 'browse-preview',
     sendMessage(msg, cb) {
-      const finish = (env) => { if (typeof cb === 'function') setTimeout(() => cb(env), 20); };
+      const latency = msg.type === 'AI_MATCH_SCORE' ? (scoreDelay || 20) : 20;
+      const finish = (env) => { if (typeof cb === 'function') setTimeout(() => cb(env), latency); };
       if (msg.type === 'JOB_LIST_REQUEST' && state.hangReads) return undefined;
       if (msg.type === 'JOB_LIST_REQUEST' && state.failReads) return finish({ ok: false, error: '本地数据暂时无法读取' });
       try { finish({ ok: true, data: respond(msg) }); }
@@ -142,4 +146,8 @@ window.__previewRemoveJob = (uid) => {
   broadcast({ type: 'JOBS_UPDATED' });
 };
 window.__previewAllowReads = () => { state.failReads = false; state.hangReads = false; };
+window.__previewFail = (uid, on = true) => { if (on) state.failUids.add(uid); else state.failUids.delete(uid); };
+window.__previewAutoQueue = (uids) => broadcast({ type: 'JOBS_UPDATED', autoQueue: uids });
+const previewAuto = String(params.get('auto') || '').split(',').filter(Boolean);
+if (previewAuto.length) setTimeout(() => broadcast({ type: 'JOBS_UPDATED', autoQueue: previewAuto }), 600);
 window.__previewState = state;

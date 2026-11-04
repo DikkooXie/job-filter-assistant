@@ -21,6 +21,9 @@ import {
   analysisGrade, analysisSummary, analysisTargets, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
+import {
+  QUEUE_PREVIEW, SUCCESS_HOLD_MS, batchCounts, cancelRemaining, cardCopy, drawerModel, emptyBatch, enqueueBatch, estimateMinutes, finishPhase, retryFailed, settle as settleItem, stripModel, takeNext, visibleSections,
+} from '../src/react/sidepanel/batchQueue.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
@@ -2077,6 +2080,98 @@ test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
   assert.ok(paste.includes('抽取画像'));
   assert.ok(paste.indexOf('textarea') < paste.indexOf('paste-bar'));
   assert.ok(paste.indexOf('paste-bar') < paste.indexOf('抽取画像'));
+});
+
+test('批量进度细条不占主钮，队列只露前几条并区分自动', () => {
+  const jobs = Array.from({ length: 80 }, (_, index) => ({ uid: `j${index + 1}`, title: `岗位${index + 1}` }));
+  let batch = enqueueBatch(emptyBatch(), jobs, { source: 'manual' });
+  assert.equal(batch.phase, 'running');
+  assert.equal(batchCounts(batch).total, 80);
+  assert.equal(enqueueBatch(batch, jobs.slice(0, 5), { source: 'manual' }), batch);
+  for (let n = 1; n <= 11; n += 1) batch = settleItem(batch, `j${n}`, { ok: true });
+  batch = settleItem(batch, 'j12', { ok: false, error: '超时' });
+  batch = { ...batch, items: batch.items.map((item) => item.uid === 'j13' ? { ...item, status: 'running' } : item) };
+  assert.equal(takeNext(batch).uid, 'j14');
+  const strip = stripModel(batch);
+  assert.equal(strip.visible, true);
+  assert.equal(strip.tone, 'running');
+  assert.equal(strip.auto, false);
+  assert.equal(strip.label, '13/80 · 分析中');
+  const drawer = drawerModel(batch);
+  assert.equal(drawer.summary, '已完成 11 · 失败 1 · 排队 67');
+  assert.equal(drawer.queuedPreview.length, QUEUE_PREVIEW);
+  assert.equal(drawer.queuedHidden, 63);
+  assert.ok(QUEUE_PREVIEW >= 3 && QUEUE_PREVIEW <= 5);
+  assert.equal(estimateMinutes(67), 18);
+  assert.equal(drawer.estimate, '约 18 分');
+  assert.match(cardCopy(batch, 'j13').label, /正在匹配画像与 JD · 第 13\/80/);
+  assert.equal(cardCopy(batch, 'j14').label, '排队中');
+  assert.equal(cardCopy(batch, 'j12').hint, '可从队列重试');
+  assert.equal(cardCopy(batch, 'j1'), null);
+  const cancelled = cancelRemaining(batch);
+  assert.equal(cancelled.items.some((item) => item.status === 'queued'), false);
+  assert.equal(cancelled.items.some((item) => item.uid === 'j13' && item.status === 'running'), true);
+  assert.equal(cancelled.items.some((item) => item.uid === 'j12' && item.status === 'failed'), true);
+  const retried = retryFailed(finishPhase(settleItem(cancelled, 'j13', { ok: true })), 'j12');
+  assert.equal(retried.phase, 'running');
+  assert.equal(retried.items.at(-1).uid, 'j12');
+  assert.equal(retried.items.at(-1).status, 'queued');
+  const auto = enqueueBatch(emptyBatch(), [{ uid: 'a1', title: '品牌设计师' }], { source: 'auto' });
+  const autoRunning = { ...auto, items: auto.items.map((item) => ({ ...item, status: 'running' })) };
+  assert.equal(stripModel(autoRunning).auto, true);
+  assert.equal(stripModel(autoRunning).label, '1/1 · 分析中');
+  assert.match(cardCopy(autoRunning, 'a1').label, /^自动分析 · 正在匹配画像与 JD/);
+  assert.equal(cardCopy({ ...auto, items: auto.items.map((item) => ({ ...item, status: 'queued' })) }, 'a1').label, '自动 · 排队中');
+  const failedOnly = finishPhase(settleItem(autoRunning, 'a1', { ok: false, error: '超时' }));
+  assert.equal(failedOnly.phase, 'failed');
+  assert.equal(stripModel(failedOnly).label, '1 失败 · 0 完成');
+  assert.equal(stripModel(failedOnly).tone, 'failed');
+  const done = finishPhase(settleItem(autoRunning, 'a1', { ok: true }));
+  assert.equal(done.phase, 'success');
+  assert.equal(stripModel(done).label, '1 完成');
+  assert.equal(visibleSections(batch, 'failed').running.length, 0);
+  assert.equal(visibleSections(batch, 'failed').queuedHidden, 0);
+  assert.equal(SUCCESS_HOLD_MS, 1600);
+
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, 'src/react/sidepanel/batchQueue.js'), 'utf8');
+  const footerStart = views.indexOf('export function ListFooter');
+  const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
+  const footer = views.slice(footerStart, sheetStart);
+  assert.match(footer, /智能分析/);
+  assert.match(footer, /进入工作台/);
+  assert.doesNotMatch(footer, /disabled=\{busy\}|分析中|队列|重试失败/);
+  assert.match(views, /data-batch-strip/);
+  assert.match(views, /data-queue-drawer="half"/);
+  assert.match(views, /取消剩余/);
+  assert.match(views, /重试失败/);
+  assert.match(views, />自动</);
+  assert.match(views, /还有 \{view\.queuedHidden\} 条/);
+  assert.match(views, /queueCard\?\.hint/);
+  assert.match(queue, /可从队列重试/);
+  assert.match(queue, /正在匹配画像与 JD/);
+  assert.match(queue, /自动分析 · /);
+  assert.doesNotMatch(views, /批量分析/);
+  assert.match(sidepanel, /批量结束 · \$\{done\} 完成/);
+  assert.match(sidepanel, /enqueueBatch\(s\.batch, targets, \{ source: 'manual'/);
+  assert.match(sidepanel, /acceptAuto\(autoQueue\)/);
+  assert.doesNotMatch(sidepanel, /batchBusy/);
+  assert.match(browse, /\.batch-strip\s*\{[^}]*background:\s*#151a21/);
+  assert.match(browse, /\.batch-strip\s*\{[^}]*color:\s*#2dd4bf/);
+  assert.match(browse, /\.batch-strip\.is-failed\s*\{[^}]*color:\s*#f0b429/);
+  assert.match(browse, /\.queue-drawer\s*\{[^}]*height:\s*52%/);
+  assert.match(browse, /\.queue-drawer\s*\{[^}]*max-height:\s*52%/);
+  assert.match(browse, /\.queue-scroll\s*\{[^}]*overflow:\s*auto/);
+  assert.match(browse, /#1a222c/);
+  assert.match(browse, /#0f1419/);
+  assert.doesNotMatch(browse, /background:\s*#(?:0f0|00|16a34a|22c55e)[^;]*;\s*color:\s*#f0b429/);
+  assert.match(background, /autoQueue: uids/);
+  assert.match(background, /sidePanelIsOpen/);
+  assert.match(background, /contextTypes: \['SIDE_PANEL'\]/);
 });
 
 // ---------- 汇总 ----------
