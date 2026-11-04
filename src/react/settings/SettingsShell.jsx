@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { runningDevBuild } from '../../common/build.js';
-import { SETTINGS_PAGES, formatSavedClock, nextNavIndex, sectionTargetId } from './pageHash.js';
-import ChangelogDrawer from './ChangelogDrawer.jsx';
+import { CHANGELOG_RETURN_KEY, SETTINGS_PAGES, changelogReturnTarget, formatSavedClock, isChangelogHash, nextNavIndex, sectionTargetId } from './pageHash.js';
+import ChangelogPage from './ChangelogPage.jsx';
 
 function Icon({ name }) {
   const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' };
@@ -56,9 +56,9 @@ export function ProfileRail({ score }) {
   </aside>;
 }
 
-function VersionRow({ version, logOpen, onCheckUpdate, onToggleLog, logButtonRef }) {
+function VersionRow({ version, logOpen, onCheckUpdate, onOpenLog, logButtonRef }) {
   if (!version) return null;
-  return <div className="settings-version">
+  return <div className={logOpen ? 'settings-version is-log' : 'settings-version'}>
     <div className="settings-version-num">版本 {version}</div>
     <div className="settings-version-links">
       <button type="button" className="settings-version-check" onClick={onCheckUpdate}>检查更新</button>
@@ -67,36 +67,52 @@ function VersionRow({ version, logOpen, onCheckUpdate, onToggleLog, logButtonRef
         ref={logButtonRef}
         type="button"
         className="settings-version-log"
-        aria-expanded={logOpen}
-        aria-controls="settings-changelog"
-        onClick={onToggleLog}
+        aria-current={logOpen ? 'page' : undefined}
+        onClick={onOpenLog}
       >更新日志</button>
     </div>
   </div>;
 }
 
+function Notice({ notice, onDismiss }) {
+  if (!notice) return null;
+  return <div className={notice.error ? 'settings-notice is-error' : 'settings-notice'} role={notice.error ? 'alert' : 'status'}>
+    <span>{notice.message}</span>
+    <button type="button" aria-label="关闭提示" onClick={onDismiss}>×</button>
+  </div>;
+}
+
 export default function SettingsShell({ page, hash, title, status, onRetry, version, updateChannel, onCheckUpdate, notice, onDismissNotice, busy, rail, children }) {
+  const logOpen = isChangelogHash(hash);
   const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
   const dev = runningDevBuild();
-  const [logOpen, setLogOpen] = useState(false);
   const logButtonRef = useRef(null);
-  const closeLog = useCallback((restoreFocus) => {
-    setLogOpen(false);
-    if (restoreFocus) requestAnimationFrame(() => logButtonRef.current?.focus());
+  const openLog = useCallback(() => {
+    if (isChangelogHash(location.hash)) return;
+    try { sessionStorage.setItem(CHANGELOG_RETURN_KEY, location.hash || '#profile'); } catch { /* 隐私模式写不进去时，返回仍落到个人画像 */ }
+    location.hash = '#changelog';
   }, []);
-  const toggleLog = () => setLogOpen((open) => !open);
-  const checkUpdate = () => {
-    setLogOpen(false);
-    onCheckUpdate?.();
-  };
+  const backFromLog = useCallback(() => {
+    let saved = '';
+    try { saved = sessionStorage.getItem(CHANGELOG_RETURN_KEY) || ''; } catch { /* 读不到就回个人画像 */ }
+    const target = changelogReturnTarget(saved);
+    if (location.hash !== target) location.hash = target;
+    requestAnimationFrame(() => logButtonRef.current?.focus());
+  }, []);
   useEffect(() => {
-    document.title = `${title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
-  }, [title, dev]);
+    document.title = `${logOpen ? '更新日志' : title} · 岗位筛选助手${dev ? ' · dev' : ''}`;
+  }, [title, dev, logOpen]);
   useEffect(() => {
+    if (logOpen) return;
     const target = sectionTargetId(hash);
     if (!target) return;
     document.getElementById(target)?.scrollIntoView({ block: 'start' });
-  }, [hash]);
+  }, [hash, logOpen]);
+
+  const banner = (notice || status?.phase === 'error') ? <>
+    <Notice notice={notice} onDismiss={onDismissNotice} />
+    {status?.phase === 'error' && <SaveStatus status={status} onRetry={onRetry} />}
+  </> : null;
 
   return <div className="settings-shell" inert={busy ? true : undefined}>
     <aside className="settings-sidebar">
@@ -106,32 +122,30 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
         {dev && <span className="settings-dev">dev</span>}
       </div>
       <nav className="settings-nav" aria-label="设置页面" onKeyDown={onNavKeyDown}>
-        {SETTINGS_PAGES.map((item) => <a key={item.id} href={`#${item.id}`} aria-current={page === item.id ? 'page' : undefined}>
+        {SETTINGS_PAGES.map((item) => <a key={item.id} href={`#${item.id}`} aria-current={!logOpen && page === item.id ? 'page' : undefined}>
           <Icon name={item.id} />
           <span>{item.label}</span>
         </a>)}
       </nav>
-      <VersionRow version={version} logOpen={logOpen} onCheckUpdate={checkUpdate} onToggleLog={toggleLog} logButtonRef={logButtonRef} />
+      <VersionRow version={version} logOpen={logOpen} onCheckUpdate={onCheckUpdate} onOpenLog={openLog} logButtonRef={logButtonRef} />
     </aside>
-    <div className="settings-main">
-      <div className={page === 'profile' ? 'settings-frame is-profile' : 'settings-frame'}>
-        <header className="settings-header">
-          <div className="settings-heading">
-            <h1>{title}</h1>
-            {lead && <p className="settings-lead">{lead}</p>}
-          </div>
-          <SaveStatus status={status} onRetry={onRetry} />
-        </header>
-        {notice && <div className={notice.error ? 'settings-notice is-error' : 'settings-notice'} role={notice.error ? 'alert' : 'status'}>
-          <span>{notice.message}</span>
-          <button type="button" aria-label="关闭提示" onClick={onDismissNotice}>×</button>
-        </div>}
-        {page === 'profile'
-          ? <div className="settings-columns"><div className="settings-page">{children}</div>{rail}</div>
-          : <div className="settings-page">{children}</div>}
-      </div>
-    </div>
-    <ChangelogDrawer open={logOpen} channel={updateChannel} onClose={closeLog} />
+    {logOpen
+      ? <ChangelogPage channel={updateChannel} version={version} onBack={backFromLog} banner={banner} />
+      : <div className="settings-main">
+        <div className={page === 'profile' ? 'settings-frame is-profile' : 'settings-frame'}>
+          <header className="settings-header">
+            <div className="settings-heading">
+              <h1>{title}</h1>
+              {lead && <p className="settings-lead">{lead}</p>}
+            </div>
+            <SaveStatus status={status} onRetry={onRetry} />
+          </header>
+          <Notice notice={notice} onDismiss={onDismissNotice} />
+          {page === 'profile'
+            ? <div className="settings-columns"><div className="settings-page">{children}</div>{rail}</div>
+            : <div className="settings-page">{children}</div>}
+        </div>
+      </div>}
   </div>;
 }
 

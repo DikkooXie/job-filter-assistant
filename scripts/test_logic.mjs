@@ -35,7 +35,7 @@ import {
   parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
   RELEASE_API, RELEASES_API, NO_PREVIEW_MESSAGE, AHEAD_OF_STABLE_MESSAGE,
   normalizeUpdateChannel, releaseRequest, selectPreviewRelease, resolvePreviewCheck, assessUpdate,
-  changelogTitle, changelogSummary, changelogEntries, RELEASES_PAGE,
+  changelogTitle, changelogSummary, changelogBullets, formatChangelogWhen, isCurrentChangelogVersion, changelogEntries, RELEASES_PAGE,
 } from '../src/common/update.js';
 
 let pass = 0;
@@ -1137,10 +1137,47 @@ test('更新日志按通道过滤正式版和预发布，版本号标题不重�
   assert.deepEqual(withPreview.map((item) => item.version), ['1.0.3.7', '1.0.3']);
   assert.equal(withPreview[0].title, '');
   assert.equal(withPreview[0].summary, '预览：列表抽屉');
+  assert.deepEqual(withPreview[0].bullets, ['列表抽屉']);
   assert.equal(withPreview[0].prerelease, true);
   assert.equal(withPreview[0].publishedAt, '2026-11-04T07:26:09Z');
   assert.throws(() => changelogEntries({ message: 'nope' }), /格式不正确/);
   assert.equal(RELEASES_PAGE, 'https://github.com/DikkooXie/job-filter-assistant/releases');
+});
+test('更新日志条目去掉预览前缀、issue 号和方案代号，时间带到分钟', () => {
+  assert.deepEqual(
+    changelogBullets('预览：智能分析第三项按当前画像指纹补跑（#64）'),
+    ['智能分析第三项按当前画像指纹补跑'],
+  );
+  assert.deepEqual(
+    changelogBullets('预览：批量分析进度细条与半高队列（#63）；设置左栏检查更新与更新日志（#66）；不喜欢自然语言写入雷点（#65）'),
+    ['批量分析进度细条与半高队列', '设置左栏检查更新与更新日志', '不喜欢自然语言写入雷点'],
+  );
+  assert.deepEqual(
+    changelogBullets('预览：列表警示区方案 A（#53）；操作行删除确认文案改为「再次点击确认删除」（#52/#54）'),
+    ['列表警示区', '操作行删除确认文案改为「再次点击确认删除」'],
+  );
+  assert.deepEqual(
+    changelogBullets('预览：含真抓 BOSS 岗位库（#43）、侧栏与设置文案拍板（#44）、列表与抽取画像方案 B（#45）。稳定通道不受影响。'),
+    ['含真抓 BOSS 岗位库、侧栏与设置文案拍板、列表与抽取画像', '稳定通道不受影响'],
+  );
+  assert.deepEqual(changelogBullets('预览：预览：重复（#9）'), ['重复']);
+  assert.deepEqual(changelogBullets('**预览：**列表（#1）'), ['列表']);
+  assert.deepEqual(changelogBullets('- 一项\n- 二项（#2）'), ['一项', '二项']);
+  assert.deepEqual(changelogBullets('**更新**机制的 [说明](https://example.com) `代码`'), ['更新机制的 说明 代码']);
+  assert.deepEqual(changelogBullets(''), []);
+  assert.deepEqual(changelogBullets('预览：'), []);
+  const iso = '2026-11-04T09:02:58Z';
+  const date = new Date(iso);
+  const pad = (value) => String(value).padStart(2, '0');
+  const expected = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  assert.equal(formatChangelogWhen(iso), expected);
+  assert.match(formatChangelogWhen(iso), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.equal(formatChangelogWhen(''), '');
+  assert.equal(formatChangelogWhen('nope'), '');
+  assert.equal(isCurrentChangelogVersion('1.0.3.9', '1.0.3.9'), true);
+  assert.equal(isCurrentChangelogVersion('v1.0.3.9', '1.0.3.9'), true);
+  assert.equal(isCurrentChangelogVersion('1.0.3.8', '1.0.3.9'), false);
+  assert.equal(isCurrentChangelogVersion('1.0.3.9', ''), false);
 });
 await testAsync('manifest key 计算出固定扩展 ID', async () => {
   assert.equal(await extensionIdFromKey(selfManifest.key), SELF_ID);
@@ -1543,7 +1580,7 @@ test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
   assert.doesNotMatch(queueSrc, /import\(/);
 });
 
-const { pageFromHash, isUpdatedHash, nextNavIndex, SETTINGS_PAGES, optionsUrlHash, sectionTargetId } = await import('../src/react/settings/pageHash.js');
+const { pageFromHash, isUpdatedHash, isChangelogHash, changelogReturnTarget, nextNavIndex, SETTINGS_PAGES, optionsUrlHash, sectionTargetId } = await import('../src/react/settings/pageHash.js');
 test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () => {
   assert.deepEqual(SETTINGS_PAGES.map((page) => page.id), ['profile', 'ai', 'filters', 'general']);
   assert.equal(SETTINGS_PAGES.find((page) => page.id === 'ai').label, '模型接口');
@@ -1554,7 +1591,18 @@ test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () =>
   assert.equal(pageFromHash('#filters'), 'filters');
   assert.equal(pageFromHash('#general'), 'general');
   assert.equal(pageFromHash('#updated'), 'general');
+  assert.equal(pageFromHash('#changelog'), 'profile');
   assert.equal(pageFromHash('#nope'), 'profile');
+  assert.equal(isChangelogHash('#changelog'), true);
+  assert.equal(isChangelogHash('#updated'), false);
+  assert.equal(isChangelogHash('#general'), false);
+  assert.equal(SETTINGS_PAGES.some((page) => page.id === 'changelog'), false);
+  assert.equal(changelogReturnTarget('#filters'), '#filters');
+  assert.equal(changelogReturnTarget('#ai-list'), '#ai-list');
+  assert.equal(changelogReturnTarget('#updated'), '#updated');
+  assert.equal(changelogReturnTarget('#changelog'), '#profile');
+  assert.equal(changelogReturnTarget('#nope'), '#profile');
+  assert.equal(changelogReturnTarget(''), '#profile');
   assert.equal(sectionTargetId('#ai'), 'ai-list-title');
   assert.equal(sectionTargetId('#ai-list'), 'ai-list-title');
   assert.equal(sectionTargetId('#profile'), '');
@@ -1789,15 +1837,43 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(panel, /checkToken/);
   assert.match(panel, /fetchLatestRelease\(channel\)/);
   const shell = fs.readFileSync(path.join(root, 'src/react/settings/SettingsShell.jsx'), 'utf8');
-  const drawer = fs.readFileSync(path.join(root, 'src/react/settings/ChangelogDrawer.jsx'), 'utf8');
+  const logPage = fs.readFileSync(path.join(root, 'src/react/settings/ChangelogPage.jsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
+  const shellCss = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
   assert.match(shell, /检查更新/);
   assert.match(shell, /更新日志/);
   assert.match(shell, /onCheckUpdate/);
+  assert.match(shell, /isChangelogHash/);
+  assert.match(shell, /changelogReturnTarget/);
+  assert.match(shell, /aria-current=\{!logOpen && page === item\.id \? 'page' : undefined\}/);
   assert.doesNotMatch(shell, /改动区/);
-  assert.match(drawer, /fetchReleaseNotes/);
-  assert.match(drawer, /在 GitHub 查看全部/);
-  assert.doesNotMatch(drawer, /示意条目/);
-  assert.doesNotMatch(drawer, /CHANGELOG\.md/);
+  assert.doesNotMatch(shell, /ChangelogDrawer/);
+  assert.doesNotMatch(shell, /location\.hash = '#general'/);
+  assert.match(logPage, /fetchReleaseNotes/);
+  assert.match(logPage, /在 GitHub 查看全部/);
+  assert.match(logPage, /近期版本改动一览/);
+  assert.match(logPage, /formatChangelogWhen/);
+  assert.match(logPage, /当前/);
+  assert.match(logPage, /返回设置/);
+  assert.doesNotMatch(logPage, /示意条目/);
+  assert.doesNotMatch(logPage, /CHANGELOG\.md/);
+  assert.doesNotMatch(logPage, /预览通道/);
+  assert.doesNotMatch(logPage, /settings-log-scrim/);
+  assert.match(options, /isChangelogHash\(location\.hash\) \|\| pageFromHash\(location\.hash\) !== 'general'/);
+  assert.match(panel, /location\.hash === '#updated'/);
+  assert.doesNotMatch(shellCss, /settings-log-scrim/);
+  assert.doesNotMatch(shellCss, /settings-log-panel/);
+  assert.doesNotMatch(shellCss, /50vh/);
+  assert.match(shellCss, /padding:\s*18px 28px 14px/);
+  assert.match(shellCss, /margin:\s*0 0 8px/);
+  assert.match(shellCss, /margin:\s*4px 0 0/);
+  assert.match(shellCss, /margin-top:\s*28px/);
+  assert.match(shellCss, /padding:\s*18px 28px 20px/);
+  assert.match(shellCss, /padding-left:\s*18px/);
+  assert.match(shellCss, /margin-bottom:\s*22px/);
+  assert.match(shellCss, /gap:\s*8px 12px/);
+  assert.match(shellCss, /margin-bottom:\s*8px/);
+  assert.match(shellCss, /gap:\s*5px/);
   assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
   assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);

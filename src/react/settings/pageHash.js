@@ -20,6 +20,23 @@ export function isUpdatedHash(hash) {
   return String(hash || '') === '#updated';
 }
 
+// 更新日志是主区里的一页，不是第五个设置导航项。
+// 不要把它写进 pageFromHash：未知 hash 仍回「个人画像」，#updated 仍回「通用与隐私」。
+export const CHANGELOG_HASH = '#changelog';
+export const CHANGELOG_RETURN_KEY = 'jfa-changelog-return';
+
+export function isChangelogHash(hash) {
+  return String(hash || '') === CHANGELOG_HASH;
+}
+
+const CHANGELOG_RETURN_HASHES = new Set(['#profile', '#ai', '#ai-list', '#filters', '#general', '#updated']);
+
+/** 「‹ 设置」回到进入日志前的地址。无法识别时回个人画像，且不会停在日志页自己。 */
+export function changelogReturnTarget(saved) {
+  const hash = String(saved || '');
+  return CHANGELOG_RETURN_HASHES.has(hash) ? hash : '#profile';
+}
+
 export function nextNavIndex(index, key, count) {
   if (count <= 0 || index < 0) return -1;
   if (key === 'Home') return 0;
