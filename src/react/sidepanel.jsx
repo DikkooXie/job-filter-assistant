@@ -8,7 +8,7 @@ import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings, replyEchoesInstruction } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
-import { analysisEmptyMessage, analysisTargets, analysisUsesForce, descriptionGap, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { analysisEmptyMessage, analysisTargets, analysisUsesForce, descriptionGap, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, librarySurface, noteCapturedJobs, returnFocusTarget, shouldReturnToListAfterDelete, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { sanitizeComm } from './sidepanel/commTab.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
@@ -663,7 +663,7 @@ export default function Sidepanel() {
             catch (error) { notify(error.message, true); }
           }}
           onDislike={() => job && dislikeJob(job, s, update)}
-          onDelete={() => job && deleteJob(job, s, update, notify)}
+          onDelete={() => job && deleteJob(job, s, update, notify, backToList)}
           onAcceptRisk={async (text) => {
             try {
               const current = s.profile?.preference ? s.profile : emptyProfile();
@@ -773,13 +773,23 @@ export default function Sidepanel() {
 
 const DETAIL_SUBS = ['info', 'match', 'company', 'resume', 'flow'];
 
-async function deleteJob(target, s, update, notify) {
+async function deleteJob(target, s, update, notify, backToList) {
+  const started = { screen: s.screen, selectedUid: s.selectedUid, deletedUid: target?.uid };
   try {
     s.jobs = jobsForLibrary(await send(MSG.JOB_DELETE, { uid: target.uid }));
     s.checked.delete(target.uid);
     s.freshIds.delete(target.uid);
     if (s.freshIds.size === 0) { clearTimeout(s.capsuleTimer); s.capsuleUntil = 0; }
     if (s.lastViewedUid === target.uid) s.lastViewedUid = null;
+    if (typeof backToList === 'function' && shouldReturnToListAfterDelete({
+      ...started,
+      screenNow: s.screen,
+      selectedUidNow: s.selectedUid,
+      jobs: s.jobs,
+    })) {
+      backToList();
+      return;
+    }
     update();
   } catch (error) { notify(error.message, true); }
 }

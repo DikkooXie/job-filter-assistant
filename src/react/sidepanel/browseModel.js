@@ -36,6 +36,22 @@ export function returnFocusTarget(visibleUids, returnedUid) {
   return { kind: 'search' };
 }
 
+// 详情两步删除成功，且删掉的就是当前这份详情时，回到列表。
+// 列表单条删除、批量删除、删除没生效，或等待期间已经离开这份详情，都留在当前屏幕。
+export function shouldReturnToListAfterDelete({
+  screen,
+  selectedUid,
+  deletedUid,
+  jobs,
+  screenNow = screen,
+  selectedUidNow = selectedUid,
+}) {
+  if (screen !== 'detail' || !deletedUid || selectedUid !== deletedUid) return false;
+  if (screenNow !== 'detail') return false;
+  if (selectedUidNow !== deletedUid && selectedUidNow != null) return false;
+  return !(jobs || []).some((job) => job && job.uid === deletedUid);
+}
+
 export function viewConditionsChanged(view) {
   return Boolean(
     String(view?.search || '').trim()
