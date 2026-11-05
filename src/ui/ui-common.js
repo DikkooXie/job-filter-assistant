@@ -62,17 +62,30 @@ export function esc(s) {
 
 let toastEl = null;
 let toastTimer = null;
+// 旧预览页（根目录 / dev 的 sidepanel、popup）没有 React。这里用同一套贴底反馈，不走浏览器 alert。
 export function toast(message, isError = false) {
+  const text = String(message ?? '').trim();
+  if (!text) return;
   if (!toastEl) {
     toastEl = document.createElement('div');
-    toastEl.className = 'toast';
+    toastEl.setAttribute('data-offercome-toast', '');
     document.body.appendChild(toastEl);
   }
-  toastEl.textContent = message;
-  toastEl.className = 'toast show' + (isError ? ' err' : '');
+  toastEl.replaceChildren();
+  const mark = document.createElement('span');
+  mark.className = 'toast-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.textContent = isError ? '!' : '✓';
+  const label = document.createElement('span');
+  label.className = 'toast-text';
+  label.textContent = text;
+  toastEl.append(mark, label);
+  toastEl.className = `toast show${isError ? ' err' : ''}`;
+  toastEl.setAttribute('role', isError ? 'alert' : 'status');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    toastEl.className = 'toast' + (isError ? ' err' : '');
+    if (!toastEl) return;
+    toastEl.className = `toast${isError ? ' err' : ''}`;
   }, 2600);
 }
 

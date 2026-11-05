@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
+import { Toaster, toast } from '@/components/ui/sonner';
 import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
 import { decideOpenOriginal } from '../common/ensureDescription.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
@@ -11,7 +12,9 @@ import { analysisEmptyMessage, analysisTargets, analysisUsesForce, descriptionGa
 import { sanitizeComm } from './sidepanel/commTab.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
-import { AnalyzeSheet, BatchStrip, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, NoticeToast, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
+import { AnalyzeSheet, BatchStrip, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, QueueDrawer, SurfaceState } from './sidepanel/views.jsx';
+import { ConfirmDialogHost } from './sidepanel/ConfirmDialog.jsx';
+import { askConfirm } from './sidepanel/confirmQueue.js';
 import './sidepanel/browse.css';
 
 const csvProgressLabels = { prepared: '已准备', opened: '已尝试打开沟通', sent: '已发送（手动确认）' };
@@ -86,7 +89,7 @@ export default function Sidepanel() {
     listScroll: 0, restoreList: false, filterOpen: false,
     view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), comm: new Map(), greetings: new Map(), advice: new Map(),
-    saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, noticeTimer: null, notice: '', noticeBatch: false, error: false, loading: true,
+    saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, loading: true,
     modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
     capsuleUntil: 0, capsuleTimer: null, scrollLockTimer: null, ignoreScrollDismiss: false,
     moreOpen: false, analyzeOpen: false, dislikeJob: null, dislikeSaving: false,
@@ -94,12 +97,12 @@ export default function Sidepanel() {
   const s = state.current;
   const update = () => redraw();
   const notify = (message, error = false, batch = false) => {
-    clearTimeout(s.noticeTimer);
-    s.notice = message;
-    s.error = error;
-    s.noticeBatch = !!batch && !error;
+    const text = String(message ?? '').trim();
+    if (!text) return;
+    const options = { duration: batch ? 3200 : 2600 };
+    if (error) toast.error(text, options);
+    else toast.success(text, options);
     update();
-    s.noticeTimer = setTimeout(() => { s.notice = ''; s.noticeBatch = false; update(); }, batch ? 3200 : 2600);
   };
   const setView = (patch) => { Object.assign(s.view, patch); update(); };
   const armCapsule = () => {
@@ -193,7 +196,6 @@ export default function Sidepanel() {
       chrome.runtime.onMessage.removeListener(listener);
       chrome.storage.onChanged.removeListener(onStorage);
       s.reloadVersion++;
-      clearTimeout(s.noticeTimer);
       clearTimeout(s.capsuleTimer);
       clearTimeout(s.scrollLockTimer);
       clearTimeout(s.successTimer);
@@ -257,7 +259,7 @@ export default function Sidepanel() {
   const openCommunication = async (job, text, { saveAsGreeting = false } = {}) => {
     const content = String(text || '').trim();
     if (!content) { notify(saveAsGreeting ? '招呼语为空' : '没有可复制的内容', true); return; }
-    if (s.settings.privacy?.confirmBeforeSend && !confirm(`确认打开 ${job.company || '该招聘方'} 的岗位并尝试进入沟通？\n内容将复制，请核对会话后手动发送。\n\n${content}`)) return;
+    if (s.settings.privacy?.confirmBeforeSend && !await askConfirm(`确认打开 ${job.company || '该招聘方'} 的岗位并尝试进入沟通？\n内容将复制，请核对会话后手动发送。\n\n${content}`)) return;
     if (saveAsGreeting) { s.greetings.set(job.uid, content); saveGreeting(job.uid, content); }
     try { await navigator.clipboard.writeText(content); } catch { notify('复制失败，请先手动复制', true); return; }
     if (!job.url) { notify('内容已复制，该岗位没有可打开的链接，请手动打开岗位页粘贴发送', true); return; }
@@ -451,7 +453,7 @@ export default function Sidepanel() {
     const noun = targets.length === 1
       ? `岗位「${targets[0].title || '未命名岗位'}」`
       : `已选的 ${targets.length} 个岗位`;
-    if (!confirm(`确定删除${noun}？此操作无法撤销。`)) return;
+    if (!await askConfirm(`确定删除${noun}？此操作无法撤销。`, { destructive: true })) return;
     try {
       let jobs = s.jobs;
       for (const job of targets) {
@@ -556,6 +558,26 @@ export default function Sidepanel() {
     };
   }, [freshKey, capsuleOn, s.screen]);
 
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const measure = () => {
+      const bars = [...panel.querySelectorAll('.selection-bar, .detail-sticky, :scope > .batch-strip')];
+      if (!bars.length) {
+        panel.style.setProperty('--jp-toast-lift', '16px');
+        return;
+      }
+      const panelBottom = panel.getBoundingClientRect().bottom;
+      const top = Math.min(...bars.map((node) => node.getBoundingClientRect().top));
+      panel.style.setProperty('--jp-toast-lift', `${Math.max(16, Math.round(panelBottom - top + 12))}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    panel.querySelectorAll('.selection-bar, .detail-sticky, .batch-strip').forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [s.screen, s.view.sub, checked.length, surface, selecting, s.batch.phase, s.batch.items?.length]);
+
   const showListChrome = s.screen !== 'detail';
   return (
     <div className="job-panel" ref={panelRef} data-screen={s.screen} data-surface={s.screen === 'detail' ? 'detail' : surface}>
@@ -629,7 +651,8 @@ export default function Sidepanel() {
           onNotice={notify}
           onMarkSent={async () => {
             if (!job) return;
-            if (!confirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`)) return;
+            const accepted = await askConfirm(`确认你已向 ${job.company || '该招聘方'} 发送消息？此操作只记录状态。`);
+            if (!accepted) return;
             try { await setProgress(job.uid, 'sent'); notify('已记录为手动确认发送'); }
             catch (error) { notify(`记录失败：${error.message}`, true); }
           }}
@@ -742,7 +765,8 @@ export default function Sidepanel() {
           onSave={(text) => saveDislike(text, s, update, notify)}
         />
       )}
-      {s.notice && !s.filterOpen && !s.dislikeJob && <NoticeToast message={s.notice} error={s.error} batch={s.noticeBatch} />}
+      <Toaster />
+      <ConfirmDialogHost />
     </div>
   );
 }

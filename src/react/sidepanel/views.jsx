@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import markUrl from '../../../icons/128.png';
-import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { DIM_LABELS } from '../../common/ai/prompts.js';
 import { analysisGrade, analysisSummary, descriptionGap, exclusionReasons, flowEntryLabel, flowStatusLabel, jobDescriptionText, platformLabel, riskLines, warningZone } from './browseModel.js';
 import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
@@ -1040,17 +1040,6 @@ export function ModelNotice({ onOpenSettings, onDismiss }) {
       <span>尚未配置模型接口。</span>
       <button type="button" className="text-action" onClick={onOpenSettings}>前往设置</button>
       <button type="button" className="model-notice-close" aria-label="关闭提示" onClick={onDismiss}><X aria-hidden="true" /></button>
-    </div>
-  );
-}
-
-export function NoticeToast({ message, error, batch = false }) {
-  if (!message) return null;
-  const mixed = batch && message.includes('失败');
-  return (
-    <div className={`jp-toast${error ? ' is-error' : ''}${batch ? ' is-batch' : ''}${mixed ? ' is-mixed' : ''}`} role={error ? 'alert' : 'status'}>
-      {batch && <CircleCheck className="toast-mark" aria-hidden="true" />}
-      <span>{message}</span>
     </div>
   );
 }

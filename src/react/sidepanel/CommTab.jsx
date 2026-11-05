@@ -96,7 +96,7 @@ function GreetWork({
   const ready = Boolean(greeting.trim());
   return (
     <section className="comm-work">
-      <div className="comm-work-k"><span>招呼语</span><em>单一稿 · 无分档</em></div>
+      <div className="comm-work-k"><span>招呼语</span></div>
       {ready ? (
         <textarea className="comm-draft" rows={4} aria-label="招呼语" value={greeting} onChange={(event) => onGreeting(event.target.value)} />
       ) : (
