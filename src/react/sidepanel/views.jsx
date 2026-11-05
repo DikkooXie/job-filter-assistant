@@ -392,16 +392,13 @@ function AnalysisWarnings({ job }) {
   );
 }
 
-export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }) {
-  const gap = descriptionGap(job);
-  const grade = gap ? null : analysisGrade(job.match);
-  const summary = grade ? (job.match?.summary || '') : '';
+// 列表和详情共用：第一次点删除只进入确认，180ms 内的连点不算第二次，再点才提交。
+function useDeleteConfirm(resetKey) {
   const [confirming, setConfirming] = useState(null);
   const armedAt = useRef(0);
-  const rowRef = useRef(null);
-  const name = job.title || '岗位';
+  const scopeRef = useRef(null);
 
-  useEffect(() => { setConfirming(null); }, [job.uid]);
+  useEffect(() => { setConfirming(null); }, [resetKey]);
 
   useEffect(() => {
     if (!confirming) return undefined;
@@ -409,7 +406,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
     const onPointer = (event) => {
       const target = event.target instanceof Element ? event.target : null;
       const action = target?.closest('[data-row-action]');
-      if (action && rowRef.current?.contains(action) && action.dataset.rowAction === confirming) return;
+      if (action && scopeRef.current?.contains(action) && action.dataset.rowAction === confirming) return;
       setConfirming(null);
     };
     window.addEventListener('keydown', onKey);
@@ -422,17 +419,27 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
 
   const arm = (kind) => {
     if (confirming === kind) {
-      if (performance.now() - armedAt.current < 180) return;
+      if (performance.now() - armedAt.current < 180) return false;
       setConfirming(null);
-      if (kind === 'delete') onDelete();
-      return;
+      return true;
     }
     armedAt.current = performance.now();
     setConfirming(kind);
+    return false;
   };
 
+  return { confirming, arm, scopeRef };
+}
+
+export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }) {
+  const gap = descriptionGap(job);
+  const grade = gap ? null : analysisGrade(job.match);
+  const summary = grade ? (job.match?.summary || '') : '';
+  const { confirming, arm, scopeRef } = useDeleteConfirm(job.uid);
+  const name = job.title || '岗位';
+
   return (
-    <article ref={rowRef} className={`job-row${returned ? ' just-viewed' : ''}${isNew ? ' is-new' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
+    <article ref={scopeRef} className={`job-row${returned ? ' just-viewed' : ''}${isNew ? ' is-new' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
       <div className="row-top">
         <input type="checkbox" aria-label={`选择 ${job.company || ''} ${job.title || '岗位'}`} checked={checked} onChange={onToggle} />
         <button type="button" className="job-title" onClick={() => onOpen(job.uid, 'info')}>
@@ -498,50 +505,114 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
           {!queueCard && summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
           {!queueCard && <AnalysisWarnings job={job} />}
         </div>
-        <div className="row-actions">
-          <div className="row-actions-inner">
-            <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
-              <button
-                type="button"
-                className="act-icon del"
-                data-row-action="delete"
-                aria-pressed={confirming === 'delete'}
-                aria-hidden={confirming && confirming !== 'delete' ? true : undefined}
-                tabIndex={confirming && confirming !== 'delete' ? -1 : 0}
-                aria-label={confirming === 'delete' ? `再次点击确认删除 ${name}` : `删除 ${name}`}
-                onClick={() => arm('delete')}
-              >
-                <Trash2 aria-hidden="true" />
-                <span className="lbl" aria-hidden="true">{confirming === 'delete' ? '再次点击确认删除' : '删除'}</span>
-              </button>
-              <button
-                type="button"
-                className="act-icon dislike"
-                data-row-action="dislike"
-                aria-hidden={confirming ? true : undefined}
-                tabIndex={confirming ? -1 : 0}
-                aria-label={`不喜欢 ${name}`}
-                onClick={onDislike}
-              >
-                <HeartCrack aria-hidden="true" />
-                <span className="lbl" aria-hidden="true">不喜欢</span>
-              </button>
-              <button
-                type="button"
-                className={`act-greet${progressStatus ? ' progressed' : ''}`}
-                data-row-action="greet"
-                tabIndex={confirming ? -1 : 0}
-                aria-hidden={confirming ? true : undefined}
-                aria-label={`${job.company || '该岗位'}，${flowStatusLabel(progressStatus)}`}
-                onClick={() => onOpen(job.uid, 'flow')}
-              >
-                {flowEntryLabel(progressStatus)}<ChevronRight aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <ListRowActions
+          name={name}
+          company={job.company}
+          confirming={confirming}
+          progressStatus={progressStatus}
+          onDelete={() => { if (arm('delete')) onDelete(); }}
+          onDislike={onDislike}
+          onGreet={() => onOpen(job.uid, 'flow')}
+        />
       </div>
     </article>
+  );
+}
+
+function DeleteRowButton({ confirming, name, onClick }) {
+  return (
+    <button
+      type="button"
+      className="act-icon del"
+      data-row-action="delete"
+      aria-pressed={confirming === 'delete'}
+      aria-hidden={confirming && confirming !== 'delete' ? true : undefined}
+      tabIndex={confirming && confirming !== 'delete' ? -1 : 0}
+      aria-label={confirming === 'delete' ? `再次点击确认删除 ${name}` : `删除 ${name}`}
+      onClick={onClick}
+    >
+      <Trash2 aria-hidden="true" />
+      <span className="lbl" aria-hidden="true">{confirming === 'delete' ? '再次点击确认删除' : '删除'}</span>
+    </button>
+  );
+}
+
+function DislikeRowButton({ confirming, name, onDislike }) {
+  return (
+    <button
+      type="button"
+      className="act-icon dislike"
+      data-row-action="dislike"
+      aria-hidden={confirming ? true : undefined}
+      tabIndex={confirming ? -1 : 0}
+      aria-label={`不喜欢 ${name}`}
+      onClick={onDislike}
+    >
+      <HeartCrack aria-hidden="true" />
+      <span className="lbl" aria-hidden="true">不喜欢</span>
+    </button>
+  );
+}
+
+function ListRowActions({ name, company, confirming, progressStatus, onDelete, onDislike, onGreet }) {
+  return (
+    <div className="row-actions">
+      <div className="row-actions-inner">
+        <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
+          <DeleteRowButton confirming={confirming} name={name} onClick={onDelete} />
+          <DislikeRowButton confirming={confirming} name={name} onDislike={onDislike} />
+          <button
+            type="button"
+            className={`act-greet${progressStatus ? ' progressed' : ''}`}
+            data-row-action="greet"
+            tabIndex={confirming ? -1 : 0}
+            aria-hidden={confirming ? true : undefined}
+            aria-label={`${company || '该岗位'}，${flowStatusLabel(progressStatus)}`}
+            onClick={onGreet}
+          >
+            {flowEntryLabel(progressStatus)}<ChevronRight aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }) {
+  const name = job.title || '岗位';
+  const starred = !!job.star;
+  const { confirming, arm, scopeRef } = useDeleteConfirm(job.uid);
+  return (
+    <footer className="detail-sticky" ref={scopeRef}>
+      <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
+        <button
+          type="button"
+          className="jp-btn jp-btn-primary detail-open"
+          data-row-action="open"
+          disabled={!job.url}
+          aria-hidden={confirming ? true : undefined}
+          tabIndex={confirming ? -1 : 0}
+          onClick={onOpenOriginal}
+        >
+          <ExternalLink aria-hidden="true" />打开原岗位
+        </button>
+        <button
+          type="button"
+          className={`act-icon fav${starred ? ' is-on' : ''}`}
+          data-row-action="star"
+          aria-pressed={starred}
+          aria-hidden={confirming ? true : undefined}
+          tabIndex={confirming ? -1 : 0}
+          aria-label={starred ? `取消收藏 ${name}` : `收藏 ${name}`}
+          onClick={onStar}
+        >
+          <Star aria-hidden="true" fill={starred ? 'currentColor' : 'none'} />
+          <span className="lbl" aria-hidden="true">{starred ? '取消收藏' : '收藏'}</span>
+        </button>
+        <DislikeRowButton confirming={confirming} name={name} onDislike={onDislike} />
+        <DeleteRowButton confirming={confirming} name={name} onClick={() => { if (arm('delete')) onDelete(); }} />
+      </div>
+    </footer>
   );
 }
 
@@ -879,20 +950,15 @@ export function JobDetail({
                 onSuggest={(payload) => onSuggest?.(job, payload)}
               />
             )}
-            {sub !== 'flow' && <footer className="detail-sticky">
-              <button type="button" className="jp-btn jp-btn-primary detail-open" disabled={!job.url} onClick={onOpenOriginal}>
-                <ExternalLink aria-hidden="true" />打开原岗位
-              </button>
-              <button type="button" className={`detail-act${job.star ? ' is-on' : ''}`} aria-pressed={!!job.star} aria-label={job.star ? `取消收藏 ${job.title || ''}` : `收藏 ${job.title || ''}`} onClick={onStar}>
-                <Star aria-hidden="true" fill={job.star ? 'currentColor' : 'none'} />
-              </button>
-              <button type="button" className="detail-act" aria-label={`不喜欢 ${job.title || ''}`} onClick={onDislike}>
-                <HeartCrack aria-hidden="true" />
-              </button>
-              <button type="button" className="detail-act detail-act-del" aria-label={`删除 ${job.title || ''}`} onClick={onDelete}>
-                <Trash2 aria-hidden="true" />
-              </button>
-            </footer>}
+            {sub !== 'flow' && (
+              <DetailActionBar
+                job={job}
+                onOpenOriginal={onOpenOriginal}
+                onStar={onStar}
+                onDislike={onDislike}
+                onDelete={onDelete}
+              />
+            )}
             {accepting && (
               <AcceptRiskSheet
                 risk={accepting}

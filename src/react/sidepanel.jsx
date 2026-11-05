@@ -640,7 +640,7 @@ export default function Sidepanel() {
             catch (error) { notify(error.message, true); }
           }}
           onDislike={() => job && dislikeJob(job, s, update)}
-          onDelete={() => job && removeSelected(job, s, update, notify)}
+          onDelete={() => job && deleteJob(job, s, update, notify)}
           onAcceptRisk={async (text) => {
             try {
               const current = s.profile?.preference ? s.profile : emptyProfile();
@@ -758,11 +758,6 @@ async function deleteJob(target, s, update, notify) {
     if (s.lastViewedUid === target.uid) s.lastViewedUid = null;
     update();
   } catch (error) { notify(error.message, true); }
-}
-
-async function removeSelected(target, s, update, notify) {
-  if (!confirm(`确定删除岗位「${target.title}」？此操作无法撤销。`)) return;
-  await deleteJob(target, s, update, notify);
 }
 
 // 不喜欢只打开底抽屉。写入走 saveDislike，不在这里重跑分析。
