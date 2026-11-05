@@ -32,6 +32,7 @@ import {
   canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, groupChatDays, ignorePending, isGreetGateOpen, nextChip,
   railSteps, sanitizeComm, suggestionFromChip, suggestionFromDemand, syncLabel,
 } from '../src/react/sidepanel/commTab.js';
+import { createConfirmQueue, splitConfirmCopy } from '../src/react/sidepanel/confirmQueue.js';
 import {
   QUEUE_PREVIEW, SUCCESS_HOLD_MS, batchCounts, cancelRemaining, cardCopy, drawerModel, emptyBatch, enqueueBatch, estimateMinutes, finishPhase, retryFailed, settle as settleItem, stripModel, takeNext, visibleSections,
 } from '../src/react/sidepanel/batchQueue.js';
@@ -3191,7 +3192,9 @@ test('沟通 Tab 按 LOCK-v2：气泡在滚动区，建议条贴底，底色共�
   assert.doesNotMatch(views, /\['flow', '流程'\]/);
   assert.doesNotMatch(comm, /回 HR|该问|摘录|精简版|标准版|详细版|标记已发送/);
   assert.match(comm, /说说怎么改这条建议/);
-  assert.doesNotMatch(comm, /输入沟通需求|单节点 · 不可展|模型建议|答\/问均可|建议回复|芯片|胶囊/);
+  assert.doesNotMatch(comm, /输入沟通需求|单节点 · 不可展|单一稿|无分档|模型建议|答\/问均可|建议回复|芯片|胶囊/);
+  assert.match(comm, /<span>招呼语<\/span>/);
+  assert.doesNotMatch(comm, /<em>/);
   assert.match(comm, /aria-label="复制建议"/);
   assert.match(comm, /aria-label="按说明改写建议"/);
   assert.match(comm, /aria-label="建议标签"/);
@@ -3278,6 +3281,79 @@ test('建议改写提示词把说明当指令，不把原文当成功回复', ()
   assert.equal(sanitizeSuggestReply('想确定一下是不是外包').text, '');
   assert.equal(replyEchoesInstruction('想确定一下是不是外包。', '想确定一下是不是外包'), true);
   assert.equal(replyEchoesInstruction('您好，想确认这个岗位是正式编制还是外包？', '想确定一下是不是外包'), false);
+});
+
+section('确认弹层与贴底反馈');
+test('确认队列取消不成功，确认才 resolve true，下一条排队', async () => {
+  const queue = createConfirmQueue();
+  let shown = null;
+  queue.attach((next) => { shown = next; });
+  const first = queue.ask('确定删除岗位「前端」？此操作无法撤销。', { destructive: true });
+  const second = queue.ask('确认你已向 甲公司 发送消息？此操作只记录状态。');
+  assert.equal(shown.message, '确定删除岗位「前端」？此操作无法撤销。');
+  assert.equal(shown.destructive, true);
+  queue.settle(false);
+  assert.equal(await first, false);
+  assert.equal(shown.destructive, false);
+  queue.settle(true);
+  assert.equal(await second, true);
+  queue.settle(true);
+  assert.equal(queue.current(), null);
+  const opened = splitConfirmCopy('确认打开 甲公司 的岗位并尝试进入沟通？\n内容将复制，请核对会话后手动发送。\n\n您好');
+  assert.equal(opened.title, '确认打开 甲公司 的岗位并尝试进入沟通？');
+  assert.match(opened.body, /^内容将复制，请核对会话后手动发送。\n\n您好$/);
+  assert.equal(splitConfirmCopy('确定删除已选的 2 个岗位？此操作无法撤销。').body, '');
+});
+test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注，反馈走 Sonner', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const srcDir = path.join(root, 'src');
+  const nativeCall = /(?<![A-Za-z0-9_$])(?:window\s*\.\s*)?(?:alert|confirm|prompt)\s*\(/g;
+  const callsIn = (text) => text.match(new RegExp(nativeCall.source, 'g')) || [];
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.(js|jsx)$/.test(entry.name)) files.push(full);
+    }
+  };
+  walk(srcDir);
+  const legacy = path.join(srcDir, 'ui', 'sidepanel.js');
+  const offenders = [];
+  for (const file of files) {
+    if (file === legacy) continue;
+    const hits = callsIn(fs.readFileSync(file, 'utf8'));
+    if (hits.length) offenders.push(`${path.relative(root, file)}: ${hits.join(', ')}`);
+  }
+  assert.deepEqual(offenders, []);
+  const legacyText = fs.readFileSync(legacy, 'utf8');
+  assert.equal(callsIn(legacyText).length, 4);
+  const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
+  assert.doesNotMatch(vite, /src\/ui\/sidepanel\.js/);
+  const sidepanel = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel.jsx'), 'utf8');
+  const comm = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel', 'CommTab.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel', 'browse.css'), 'utf8');
+  const common = fs.readFileSync(path.join(srcDir, 'ui', 'ui-common.js'), 'utf8');
+  assert.match(sidepanel, /askConfirm\(/);
+  assert.match(sidepanel, /from '@\/components\/ui\/sonner'/);
+  assert.match(sidepanel, /<Toaster \/>/);
+  assert.doesNotMatch(sidepanel, /NoticeToast|\.jp-toast/);
+  const markStart = sidepanel.indexOf('onMarkSent');
+  const markEnd = sidepanel.indexOf('onOpenOriginal', markStart);
+  const markBody = sidepanel.slice(markStart, markEnd);
+  const confirmAt = markBody.indexOf('askConfirm');
+  const progressAt = markBody.indexOf("setProgress(job.uid, 'sent')");
+  assert.ok(confirmAt >= 0 && progressAt > confirmAt);
+  assert.match(markBody.slice(confirmAt, progressAt), /if \(!accepted\) return/);
+  assert.doesNotMatch(markBody, /OPEN_JOB_CHAT|SEND_GREETING|clipboard/);
+  assert.doesNotMatch(comm, /单一稿|无分档|<em>/);
+  assert.doesNotMatch(browse, /\.jp-toast\b/);
+  assert.doesNotMatch(browse, /background:\s*var\(--jp-float-bg\)/);
+  assert.match(browse, /data-sonner-toaster/);
+  assert.match(browse, /--jp-surface-2/);
+  assert.match(browse, /data-type='error'/);
+  assert.match(common, /data-offercome-toast/);
+  assert.equal(callsIn(common).length, 0);
 });
 
 // ---------- 汇总 ----------

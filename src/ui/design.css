@@ -262,27 +262,48 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(120,120,128,0.4); }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* ---------- toast ---------- */
+/* ---------- toast：贴底暗色反馈，不用薄荷条 ---------- */
 .toast {
   position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%) translateY(12px);
-  background: rgba(28, 28, 30, 0.92);
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: var(--radius-pill);
+  left: 14px;
+  right: 14px;
+  bottom: 16px;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(216, 231, 237, .10);
+  background: #1d272c;
+  color: #e7edf0;
   font-size: 13px;
   font-weight: 500;
-  box-shadow: var(--shadow-lg);
+  line-height: 1.35;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .22);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
-  z-index: 99999;
-  backdrop-filter: blur(20px);
+  transform: translateY(8px);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
 }
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.toast.err { background: rgba(255, 59, 48, 0.95); }
+.toast.show { opacity: 1; transform: none; pointer-events: auto; }
+.toast-mark { flex: 0 0 auto; width: 16px; color: #2dd4bf; font-size: 13px; line-height: 1.35; }
+.toast-text {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.toast.err {
+  background: color-mix(in srgb, #e0818b 18%, #1d272c);
+  border-color: color-mix(in srgb, #e0818b 45%, transparent);
+  color: #e7edf0;
+}
+.toast.err .toast-mark { color: #e0818b; }
+@media (prefers-reduced-motion: reduce) {
+  .toast { transition: none; transform: none; }
+}
 
 /* ---------- 匹配分环形/条 ---------- */
 .score-badge {
