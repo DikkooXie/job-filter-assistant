@@ -844,8 +844,11 @@
   font-weight: 650;
   letter-spacing: 0.01em;
 }
+.actions-row.is-confirm-delete { gap: 0; }
 .actions-row.is-confirm-delete .act-icon.dislike,
-.actions-row.is-confirm-delete .act-greet {
+.actions-row.is-confirm-delete .act-icon.fav,
+.actions-row.is-confirm-delete .act-greet,
+.job-panel .actions-row.is-confirm-delete .detail-open {
   flex: 0 0 0px;
   width: 0;
   max-width: 0;
@@ -1289,23 +1292,17 @@
   border-top: 1px solid var(--jp-line);
   background: var(--jp-surface-2);
 }
-.job-panel .detail-open { flex: 1 1 auto; min-width: 0; height: 36px; border-radius: 8px; font-size: 13px; font-weight: 650; }
-.job-panel .detail-act {
+.job-panel .detail-open { flex: 1 1 auto; min-width: 0; height: 36px; border-radius: 8px; font-size: 13px; font-weight: 650; overflow: hidden; }
+.detail-sticky .actions-row { flex: 1 1 auto; width: 100%; padding-top: 0; }
+/* 详情底栏和「打开原岗位」同高。伸长、显名、确认拉满仍走上面的 .act-icon 规则。 */
+.detail-sticky .act-icon {
   height: 36px;
-  width: 36px;
-  flex: 0 0 36px;
+  min-width: 36px;
+  max-width: 36px;
   border-radius: 8px;
-  border: 1px solid var(--jp-line-strong);
-  background: var(--jp-field);
-  color: var(--jp-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
-.detail-act svg { width: 15px; height: 15px; }
-.job-panel .detail-act.is-on { color: var(--jp-accent); }
-.job-panel .detail-act:hover { color: var(--jp-ink); }
-.job-panel .detail-act-del:hover { color: var(--jp-del-hover-fg); background: var(--jp-del-hover-bg); border-color: var(--jp-del-hover-bd); }
+.detail-sticky .act-icon svg { width: 15px; height: 15px; }
+.job-panel .act-icon.fav.is-on { color: var(--jp-accent); }
 .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--jp-line-strong); margin: 10px auto 12px; }
 .accept-sheet { padding-bottom: 16px; border-radius: 16px 16px 0 0; }
 .accept-sheet h2 { font-size: 16px; font-weight: 650; }

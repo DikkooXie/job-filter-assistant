@@ -2502,7 +2502,8 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(sidepanel, /onDelete=\{\(\) => deleteJob\(/);
   assert.match(sidepanel, /onDislike=\{\(\) => dislikeJob\(/);
   assert.match(sidepanel, /JOB_DELETE/);
-  assert.match(sidepanel, /确定删除岗位/);
+  assert.match(sidepanel, /确定删除\$\{noun\}/);
+  assert.match(sidepanel, /onDelete=\{\(\) => job && deleteJob\(/);
   const footerStart = views.indexOf('export function ListFooter');
   const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
   const footer = views.slice(footerStart, sheetStart);
@@ -2542,6 +2543,36 @@ test('智能分析抽屉按 4pt 终锁留白', () => {
   assert.match(browse, /\.analyze-actions \{[^}]*margin-top:\s*12px/);
   assert.match(browse, /\.analyze-actions \{[^}]*gap:\s*8px/);
   assert.match(browse, /\.sheet-content \{[^}]*padding:\s*8px 16px 22px/);
+});
+
+test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const barStart = views.indexOf('function DetailActionBar');
+  const barEnd = views.indexOf('export function ListFooter');
+  const bar = views.slice(barStart, barEnd);
+  assert.ok(barStart > views.indexOf('function DeleteRowButton'));
+  assert.ok(barEnd > barStart);
+  assert.match(bar, /className=\{`actions-row/);
+  assert.match(bar, /<DeleteRowButton/);
+  assert.match(bar, /<DislikeRowButton/);
+  assert.match(bar, /className=\{`act-icon fav/);
+  assert.match(bar, /打开原岗位/);
+  assert.match(bar, /arm\('delete'\)/);
+  assert.match(bar, /<span className="lbl"/);
+  assert.doesNotMatch(bar, /confirm\(|window\.confirm|role="dialog"|detail-act/);
+  assert.match(views, /<DetailActionBar/);
+  assert.doesNotMatch(views.slice(views.indexOf('export function JobDetail')), /detail-act|window\.confirm|confirm\(`确定删除/);
+  assert.match(sidepanel, /onDelete=\{\(\) => job && deleteJob\(/);
+  assert.doesNotMatch(sidepanel, /removeSelected|确定删除岗位「/);
+  const collapse = browse.slice(browse.indexOf('.actions-row.is-confirm-delete .act-icon.dislike'), browse.indexOf('.risk, .exclusion'));
+  assert.match(collapse, /\.act-icon\.fav/);
+  assert.match(collapse, /\.detail-open/);
+  assert.match(collapse, /pointer-events:\s*none/);
+  assert.match(browse, /\.detail-sticky \.act-icon \{[^}]*max-width:\s*36px/);
+  assert.match(browse, /\.job-panel \.act-icon:hover/);
 });
 
 test('删除确认态文案是再次点击确认删除', () => {
