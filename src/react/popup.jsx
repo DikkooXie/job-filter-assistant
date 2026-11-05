@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MSG, MODE } from '../common/constants.js';
+import { isCompleteAnalysis } from './sidepanel/browseModel.js';
 import { send } from '../ui/ui-common.js';
 export default function Popup() {
   const [settings, setSettings] = useState(null);
@@ -35,8 +36,8 @@ export default function Popup() {
     } catch { setError('无法打开侧边栏，请点击工具栏图标后重试'); }
   }
 
-  const scored = jobs.filter((job) => job.match).length;
-  const strong = jobs.filter((job) => ['strong', 'good'].includes(job.match?.verdict)).length;
+  const scored = jobs.filter(isCompleteAnalysis).length;
+  const strong = jobs.filter((job) => isCompleteAnalysis(job) && ['strong', 'good'].includes(job.match?.verdict)).length;
   return <main className="w-[340px] max-w-full p-4 flex flex-col gap-4">
     <header className="popup-header flex items-center gap-2.5">
       <img className="popup-logo block h-7 w-7 shrink-0 object-contain" src={markUrl} alt="" width={28} height={28} />

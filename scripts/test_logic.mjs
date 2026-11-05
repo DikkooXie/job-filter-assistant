@@ -15,8 +15,9 @@ import {
   ENSURE_DESC_GAP_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, ensureGapWait, filterCapturedJobs,
   hasJobDescription, jobNeedsDescription, runEnsureDescription, shouldReuseMatchCache,
   decideOpenOriginal, acceptDetailScrape, patchExistingDescription, jobKeyFromUid, cleanDetailText, DETAIL_TEXT_MIN,
+  scoreGate, missingDescriptionMatch,
 } from '../src/common/ensureDescription.js';
-import { mergeJobs } from '../src/common/jobsStore.js';
+import { loadJobs, mergeJobs, setJobMatch } from '../src/common/jobsStore.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import { pickActiveProvider, profileFingerprint, withProfileFp } from '../src/common/profileFingerprint.js';
 import {
@@ -24,7 +25,7 @@ import {
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
+  analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, descriptionGap, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, jobDescriptionText, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import {
@@ -262,6 +263,23 @@ test('详情页上另一条非数字 id 仍信响应体，查询参数仍优先�
   assert.equal(jobKeyFromPageUrl('https://www.zhipin.com/job_detail/PAGE_KEY.html'), 'PAGE_KEY');
   assert.equal(preferDetailJobKey('', 'PAGE_KEY', '99'), 'PAGE_KEY');
   assert.equal(preferDetailJobKey('URL_KEY', 'PAGE_KEY', '99'), 'URL_KEY');
+  assert.equal(preferDetailJobKey('', '', '12345', 'ENCRYPT_CLICK'), 'ENCRYPT_CLICK');
+  assert.equal(preferDetailJobKey('', 'PAGE_KEY', '12345', 'ENCRYPT_CLICK'), 'PAGE_KEY');
+  assert.equal(preferDetailJobKey('', '', 'OTHER_ENCRYPT', 'ENCRYPT_CLICK'), 'OTHER_ENCRYPT');
+  assert.equal(preferDetailJobKey('', '', '12345', 'https://evil.example/job'), '12345');
+});
+test('列表抽屉只有数字 id 时，点卡 hint 把 JD 写回原 uid', () => {
+  const pageUrl = 'https://www.zhipin.com/web/geek/job?city=101280600';
+  const url = 'https://www.zhipin.com/wapi/zpgeek/job/card.json?securityId=SEC';
+  const payload = {
+    code: 0,
+    zpData: { jobCard: { jobId: '12345', jobName: '前端', postDescription: '岗位职责：抽屉里的描述足够长' } },
+  };
+  const missed = normalizeResponse('boss', payload, { url, pageUrl })[0];
+  assert.equal(missed.uid, 'boss:12345');
+  const aligned = normalizeResponse('boss', payload, { url, pageUrl, hintJobId: 'ENCRYPT_CLICK' })[0];
+  assert.equal(aligned.uid, 'boss:ENCRYPT_CLICK');
+  assert.ok(aligned.description.includes('抽屉里的描述'));
 });
 
 // ---------- BOSS 列表抽屉 job/card ----------
@@ -2256,15 +2274,17 @@ test('新收录只记会话基线之后出现的岗位 id', () => {
 });
 
 test('智能分析只把未分析岗位交给默认项，强制项覆盖已选', () => {
+  const jd = '岗位职责：已有正文';
   const jobs = [
-    { uid: 'a', match: { score: 90 } },
+    { uid: 'a', description: jd, match: { score: 90 } },
     { uid: 'b', match: null },
     { uid: 'c' },
+    { uid: 'empty', description: '', match: { score: 88, verdict: 'strong' } },
     { title: '没有标识' },
   ];
-  assert.deepEqual(analysisTargets(jobs, 'unscored').map((job) => job.uid), ['b', 'c']);
-  assert.deepEqual(analysisTargets(jobs, 'force').map((job) => job.uid), ['a', 'b', 'c']);
-  assert.deepEqual(analysisTargets(jobs, 'fingerprint', 'fp-now').map((job) => job.uid), ['a', 'b', 'c']);
+  assert.deepEqual(analysisTargets(jobs, 'unscored').map((job) => job.uid), ['b', 'c', 'empty']);
+  assert.deepEqual(analysisTargets(jobs, 'force').map((job) => job.uid), ['a', 'b', 'c', 'empty']);
+  assert.deepEqual(analysisTargets(jobs, 'fingerprint', 'fp-now').map((job) => job.uid), ['a', 'b', 'c', 'empty']);
   assert.deepEqual(analysisTargets(null, 'force'), []);
   assert.equal(analysisUsesForce('unscored'), false);
   assert.equal(analysisUsesForce('force'), true);
@@ -2311,16 +2331,17 @@ test('画像指纹变化后，旧匹配结果进入当前画像下未分析', ()
   withProfileFp(untouched, fp);
   assert.equal(untouched.profileFp, undefined);
 
+  const jd = '岗位职责：已有正文';
   const jobs = [
-    { uid: 'fresh', match: null },
-    { uid: 'legacy', match: { score: 70 } },
-    { uid: 'blank', match: { score: 50, profileFp: '' } },
-    { uid: 'current', match: current },
-    { uid: 'stale', match: withProfileFp({ score: 40 }, moved) },
-    { title: '没有标识', match: { profileFp: 'nope' } },
+    { uid: 'fresh', description: jd, match: null },
+    { uid: 'legacy', description: jd, match: { score: 70 } },
+    { uid: 'blank', description: jd, match: { score: 50, profileFp: '' } },
+    { uid: 'current', description: jd, match: current },
+    { uid: 'stale', description: jd, match: withProfileFp({ score: 40 }, moved) },
+    { title: '没有标识', description: jd, match: { profileFp: 'nope' } },
   ];
   assert.deepEqual(analysisTargets(jobs, 'fingerprint', fp).map((job) => job.uid), ['fresh', 'legacy', 'blank', 'stale']);
-  assert.deepEqual(analysisTargets([{ uid: 'current', match: current }], 'fingerprint', fp), []);
+  assert.deepEqual(analysisTargets([{ uid: 'current', description: jd, match: current }], 'fingerprint', fp), []);
   assert.deepEqual(analysisTargets(jobs, 'fingerprint', moved).map((job) => job.uid), ['fresh', 'legacy', 'blank', 'current']);
   assert.equal(pickActiveProvider([{ id: 'a', model: 'm1' }, { id: 'b', model: 'm2' }], 'b').model, 'm2');
   assert.equal(pickActiveProvider([{ id: 'a', model: 'm1' }], 'missing').id, 'a');
@@ -2409,6 +2430,7 @@ test('岗位摘要不造假分，有分析时才给警示计数', () => {
   assert.deepEqual(analysisSummary(null), { grade: null, summary: '', warnLabel: '' });
   assert.deepEqual(analysisSummary({ match: null, _filter: { risks: ['驻场'] } }), { grade: null, summary: '', warnLabel: '' });
   const graded = analysisSummary({
+    description: '岗位职责：已有正文',
     match: { score: 42, summary: '有工具经验，城市不足。', risks: ['城市不在目标范围'] },
     _filter: { risks: ['驻场'] },
   });
@@ -2711,6 +2733,7 @@ test('已有描述或没有定位信息的岗位不补抓，间隔不小于现�
   assert.equal(filterCapturedJobs([{ uid: 'boss:2' }], [], true).length, 1);
   assert.equal(shouldReuseMatchCache({ force: false, cached: { score: 1 }, hadDescription: false, hasDescription: true }), false);
   assert.equal(shouldReuseMatchCache({ force: false, cached: { score: 1 }, hadDescription: true, hasDescription: true }), true);
+  assert.equal(shouldReuseMatchCache({ force: false, cached: { score: 1 }, hadDescription: false, hasDescription: false }), false);
   assert.equal(shouldReuseMatchCache({ force: true, cached: { score: 1 }, hadDescription: true, hasDescription: true }), false);
 });
 await testAsync('补抓优先点卡片，点不到才短开；失败或超时仍把原岗位交回去', async () => {
@@ -2753,6 +2776,25 @@ await testAsync('补抓优先点卡片，点不到才短开；失败或超时仍
   }, { lastAt: 0 });
   assert.equal(failed.action, 'failed');
   assert.equal(failed.job, empty);
+
+  const scrapeCalls = [];
+  let stored = '';
+  const scraped = await runEnsureDescription(empty, {
+    now: () => 1000,
+    sleep: async () => {},
+    clickCard: async () => false,
+    openUrl: async () => ({ tabId: 4, close: false }),
+    closeTab: async () => { scrapeCalls.push('close'); },
+    waitForDescription: async () => (stored ? { ...empty, description: stored } : empty),
+    scrapeDetail: async (tabId) => {
+      scrapeCalls.push(`scrape:${tabId}`);
+      stored = '岗位职责：详情页可见正文足够长';
+      return stored;
+    },
+  }, { lastAt: 0 });
+  assert.equal(scraped.action, 'open');
+  assert.ok(scraped.job.description.includes('详情页可见正文'));
+  assert.deepEqual(scrapeCalls, ['scrape:4']);
 });
 await testAsync('多次补抓串行，不会同时点开两张卡', async () => {
   let release = () => {};
@@ -2780,8 +2822,17 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   const scoreStart = background.indexOf('async function scoreOne');
   const promptAt = background.indexOf('buildMatchPrompt(profile, job', scoreStart);
   const ensureAt = background.indexOf('queueEnsure(job)', scoreStart);
-  assert.ok(scoreStart > 0 && ensureAt > scoreStart && ensureAt < promptAt);
+  const gateAt = background.indexOf('scoreGate(job)', scoreStart);
+  assert.ok(scoreStart > 0 && ensureAt > scoreStart && gateAt > ensureAt && gateAt < promptAt);
   assert.match(background, /shouldReuseMatchCache\(/);
+  assert.match(background, /missingDescriptionMatch\(/);
+  assert.match(background, /scrapeDetail: scrapeEnsuredDetail/);
+  assert.match(background, /close: false/);
+  assert.match(background, /hintJobId: msg\.hintJobId/);
+  assert.doesNotMatch(background.slice(scoreStart, promptAt), /补抓失败仍用现有岗位打分|超时仍打分/);
+  const collector = fs.readFileSync(path.join(root, 'src/content/collector.js'), 'utf8');
+  assert.match(collector, /hintJobId/);
+  assert.match(collector, /pendingClick = \{ jobId, at: Date\.now\(\) \}/);
   assert.match(background, /pageUrl: msg\.pageUrl/);
   assert.match(background, /filterCapturedJobs\(/);
   assert.match(background, /await sleep\(400\)/);
@@ -2791,6 +2842,80 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   assert.match(sidepanel, /changes\[STORAGE_KEYS\.jobs\]/);
   assert.match(sidepanel, /await sleep\(500\)/);
   assert.match(legacy, /changes\[STORAGE_KEYS\.jobs\]/);
+});
+
+test('空 JD 不能标成已分析：库内有描述就显示，没有描述则降级', () => {
+  const empty = { uid: 'boss:1', description: '', match: { score: 86, verdict: 'strong', summary: '只看了标题' } };
+  const filled = { uid: 'boss:1', description: '岗位职责：负责数据采集与清洗，并输出可检索的岗位说明。', match: { score: 86, verdict: 'strong', summary: 'JD 吻合' } };
+  assert.equal(scoreGate(empty), 'degraded');
+  assert.equal(scoreGate({ description: '   ' }), 'degraded');
+  assert.equal(scoreGate(filled), 'score');
+  const degraded = missingDescriptionMatch('2026-11-05T00:00:00.000Z');
+  assert.equal(degraded.score, null);
+  assert.equal(degraded.incomplete, 'missing-description');
+  assert.equal(analysisGrade(degraded), null);
+  assert.ok(analysisGrade(empty.match), '旧的 fail-open 分数本身仍能算出档');
+  assert.equal(isCompleteAnalysis(empty), false);
+  assert.equal(isCompleteAnalysis(filled), true);
+  assert.equal(descriptionGap(empty).label, '缺描述');
+  assert.equal(descriptionGap(filled), null);
+  assert.equal(descriptionGap({ description: '', match: null }), null);
+  assert.equal(analysisSummary(empty).grade, null);
+  assert.equal(analysisSummary(filled).grade.label, '匹配');
+  assert.match(jobDescriptionText(filled), /^岗位职责：负责数据采集/);
+  assert.match(jobDescriptionText(empty), /没有读到岗位描述/);
+  assert.match(jobDescriptionText({ description: '', match: null }), /暂无岗位描述/);
+  const listed = filterVisibleJobs([empty, filled], { verdict: 'strong', platform: 'all', sort: 'recent' });
+  assert.deepEqual(listed.map((job) => job.uid), ['boss:1']);
+  assert.equal(listed[0].description, filled.description);
+  const unscored = filterVisibleJobs([empty, filled], { verdict: 'unscored', platform: 'all', sort: 'score' });
+  assert.equal(unscored.length, 1);
+  assert.equal(unscored[0].description, '');
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  assert.match(views, /jobDescriptionText\(job\)/);
+  assert.match(views, /descriptionGap\(job\)/);
+  assert.doesNotMatch(views, /job\.description \|\| '暂无岗位描述/);
+});
+
+await testAsync('岗位库写入串行，后写入的描述不会被打分覆盖掉', async () => {
+  const previous = globalThis.chrome;
+  const chrome = memoryChrome();
+  globalThis.chrome = chrome;
+  const originalGet = chrome.storage.local.get.bind(chrome.storage.local);
+  let arm = false;
+  let reads = 0;
+  let release = () => {};
+  const paused = new Promise((resolve) => { release = resolve; });
+  chrome.storage.local.get = (key) => {
+    const result = originalGet(key);
+    if (!arm) return result;
+    reads += 1;
+    if (reads === 1) return result.then((data) => paused.then(() => data));
+    return result;
+  };
+  let scoring;
+  let filling;
+  try {
+    await mergeJobs([{ uid: 'boss:lock', title: '前端', description: '', url: 'https://www.zhipin.com/job_detail/lock.html' }]);
+    arm = true;
+    scoring = setJobMatch('boss:lock', { score: 80, verdict: 'good', summary: '旧分' });
+    await Promise.resolve();
+    filling = mergeJobs([{ uid: 'boss:lock', description: '岗位职责：锁里补上的正文' }]);
+    await Promise.resolve();
+    assert.equal(reads, 1);
+    release();
+    await Promise.all([scoring, filling]);
+    const saved = await loadJobs();
+    const job = saved.find((item) => item.uid === 'boss:lock');
+    assert.equal(job.match.score, 80);
+    assert.ok(job.description.includes('锁里补上'));
+  } finally {
+    release();
+    await Promise.all([scoring, filling].filter(Boolean)).catch(() => {});
+    if (previous === undefined) delete globalThis.chrome;
+    else globalThis.chrome = previous;
+  }
 });
 
 section('打开原岗位：空描述等待并超时刮详情');
@@ -2861,7 +2986,9 @@ test('打开原岗位的接线：空描述走等待，超时才刮；已有描�
   assert.doesNotMatch(openBody, /tabs\.remove|closeTab/);
   assert.match(activateBody, /active: true/);
   assert.match(background, /active: false/);
-  assert.match(background, /patchExistingDescription\(/);
+  assert.match(background, /patchJobDescription\(/);
+  const jobsStore = fs.readFileSync(path.join(root, 'src/common/jobsStore.js'), 'utf8');
+  assert.match(jobsStore, /patchExistingDescription\(/);
   assert.match(background, /MSG\.SCRAPE_JOB_DETAIL/);
   assert.doesNotMatch(background, /wapi\/zpgeek/);
   assert.match(collector, /SCRAPE_JOB_DETAIL/);

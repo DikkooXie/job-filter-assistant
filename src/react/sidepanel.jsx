@@ -7,7 +7,7 @@ import { applyFilters, evaluateJob } from '../common/filters.js';
 import { VERDICT_LABELS, normalizeGreetings, replyEchoesInstruction } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
-import { analysisEmptyMessage, analysisTargets, analysisUsesForce, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
+import { analysisEmptyMessage, analysisTargets, analysisUsesForce, descriptionGap, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
 import { sanitizeComm } from './sidepanel/commTab.js';
 import { cardCopy, cancelRemaining, emptyBatch, enqueueBatch, finishPhase, hydrateTitles, isPending, markRunning, retryFailed, settle, stripModel, SUCCESS_HOLD_MS, takeNext } from './sidepanel/batchQueue.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './sidepanel/librarySource.js';
@@ -43,8 +43,8 @@ const verdictNames = { strong: '强匹配', good: '较匹配', fair: '一般', w
 function buildDetailedCsv(items, progress) {
   const cols = [
     ['平台', (job) => job.platform === 'boss' ? 'BOSS直聘' : '前程无忧51job'],
-    ['匹配档次', (job) => job.match ? VERDICT_LABELS[job.match.verdict] || job.match.verdict : '未分析'],
-    ['匹配分', (job) => job.match?.score ?? ''], ['是否收藏', (job) => job.star ? '★' : ''],
+    ['匹配档次', (job) => descriptionGap(job)?.label || (isCompleteAnalysis(job) ? VERDICT_LABELS[job.match.verdict] || job.match.verdict : '未分析')],
+    ['匹配分', (job) => isCompleteAnalysis(job) ? (job.match?.score ?? '') : ''], ['是否收藏', (job) => job.star ? '★' : ''],
     ['处理状态', (job) => csvProgressLabels[progress.get(job.uid)?.status] || '未处理'],
     ['状态更新时间', (job) => fmtTime(progress.get(job.uid)?.at)],
     ['岗位名称', (job) => job.title], ['薪资', (job) => job.salaryText],
@@ -53,10 +53,10 @@ function buildDetailedCsv(items, progress) {
     ['学历要求', (job) => job.degree], ['技能', (job) => joinList(job.skills)], ['岗位标签', (job) => joinList(job.tags)],
     ['福利', (job) => joinList(job.welfare)], ['公司名称', (job) => job.company], ['所属行业', (job) => job.companyIndustry],
     ['公司规模', (job) => job.companyScale], ['公司性质', (job) => job.companyType], ['融资阶段', (job) => job.companyStage],
-    ['HR', (job) => job.hrName], ['HR职位', (job) => job.hrTitle], ['一句话总评', (job) => job.match?.summary],
-    ['契合点', (job) => joinList(job.match?.reasons)], ['差距/需补齐', (job) => joinList(job.match?.gaps)],
-    ['风险提示', (job) => joinList(job.match?.risks)],
-    ['招呼语(标准版)', (job) => job.greetingDraft || (job.match ? normalizeGreetings(job.match).standard : '')],
+    ['HR', (job) => job.hrName], ['HR职位', (job) => job.hrTitle], ['一句话总评', (job) => descriptionGap(job)?.detail || (isCompleteAnalysis(job) ? job.match?.summary : '')],
+    ['契合点', (job) => isCompleteAnalysis(job) ? joinList(job.match?.reasons) : ''], ['差距/需补齐', (job) => isCompleteAnalysis(job) ? joinList(job.match?.gaps) : ''],
+    ['风险提示', (job) => isCompleteAnalysis(job) ? joinList(job.match?.risks) : ''],
+    ['招呼语(标准版)', (job) => job.greetingDraft || (isCompleteAnalysis(job) ? normalizeGreetings(job.match).standard : '')],
     ['岗位描述', (job) => job.description], ['收录时间', (job) => fmtTime(job.savedAt)],
     ['最近出现', (job) => fmtTime(job.lastSeenAt)], ['岗位链接', (job) => job.url],
   ];
@@ -207,7 +207,7 @@ export default function Sidepanel() {
     const save = () => { s.saveTimers.delete(uid); send(MSG.GREETING_SAVE, { uid, text }).catch(() => {}); };
     if (delayed) s.saveTimers.set(uid, setTimeout(save, 500)); else save();
   };
-  const greetingValue = (job) => s.greetings.has(job.uid) ? s.greetings.get(job.uid) : job.greetingDraft || normalizeGreetings(job.match || {})[s.view.greetLevel] || '';
+  const greetingValue = (job) => s.greetings.has(job.uid) ? s.greetings.get(job.uid) : job.greetingDraft || (isCompleteAnalysis(job) ? normalizeGreetings(job.match || {})[s.view.greetLevel] : '') || '';
   const setProgress = async (uid, status) => {
     const value = { status, at: new Date().toISOString() };
     await chrome.storage.local.set({ [progressKey(uid)]: value });
@@ -232,7 +232,7 @@ export default function Sidepanel() {
     if (!requireProviders()) return false;
     s.scoring.add(job.uid); update();
     try { await send(MSG.AI_MATCH_SCORE, { uid: job.uid, job, force }); s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST)); notify('分析完成'); return true; }
-    catch (error) { notify(error.message, true); return false; }
+    catch (error) { s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs)); notify(error.message, true); return false; }
     finally { s.scoring.delete(job.uid); update(); }
   };
   const regenerate = async (job) => {
@@ -307,6 +307,7 @@ export default function Sidepanel() {
           s.batch = hydrateTitles(settle(s.batch, next.uid, { ok: true }), s.jobs);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          s.jobs = jobsForLibrary(await send(MSG.JOB_LIST_REQUEST).catch(() => s.jobs));
           s.batch = settle(s.batch, next.uid, { ok: false, error: message });
         } finally {
           s.scoring.delete(next.uid);

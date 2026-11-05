@@ -3,7 +3,7 @@ import { MSG, PLATFORM_META } from '../common/constants.js';
 import { normalizeResponse, platformOfHost } from '../common/platforms.js';
 import {
   loadJobs, mergeJobs, deleteJob, clearJobs, toggleStar, setJobMatch, setJobGreeting,
-  getMatchCache, setMatchCache, clearMatchCache, saveJobs,
+  getMatchCache, setMatchCache, clearMatchCache, patchJobDescription,
 } from '../common/jobsStore.js';
 import {
   loadSettings, saveSettings, loadProviders, saveProviders, getActiveProvider,
@@ -19,7 +19,8 @@ import { optionsUrlHash } from '../common/optionsLink.js';
 import {
   ENSURE_DESC_POLL_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, filterCapturedJobs,
   hasJobDescription, jobCardId, jobUrl, runEnsureDescription, shouldReuseMatchCache,
-  decideOpenOriginal, acceptDetailScrape, patchExistingDescription, jobKeyFromUid,
+  decideOpenOriginal, acceptDetailScrape, jobKeyFromUid,
+  scoreGate, missingDescriptionMatch,
 } from '../common/ensureDescription.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
@@ -176,7 +177,11 @@ async function openOptions(page) {
 // —— 岗位收录 ——
 async function onJobsCaptured(msg, sender) {
   const settings = await loadSettings();
-  const normalized = normalizeResponse(msg.platform, msg.payload, { url: msg.url, pageUrl: msg.pageUrl });
+  const normalized = normalizeResponse(msg.platform, msg.payload, {
+    url: msg.url,
+    pageUrl: msg.pageUrl,
+    hintJobId: msg.hintJobId,
+  });
   if (!normalized.length) return { added: 0, updated: 0 };
   // 关闭自动收录时不新增岗位，但打开原岗位后仍把 JD 补进已经收录的那一条。
   const existing = settings.autoCapture ? [] : await loadJobs();
@@ -421,13 +426,26 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   const hadDescription = hasJobDescription(job);
   if (!hadDescription) {
     try {
-      await queueEnsure(job);
+      const ensured = await queueEnsure(job);
+      if (ensured?.job && hasJobDescription(ensured.job)) {
+        job = { ...job, description: ensured.job.description };
+      }
     } catch {
-      // 补抓失败仍用现有岗位打分
+      // 补抓中断时按空描述处理，不把空 JD 当成分析成功
     }
     const fresh = (await loadJobs()).find((item) => item.uid === job.uid);
-    if (fresh) job = fresh;
+    if (fresh) job = hasJobDescription(fresh) ? fresh : { ...fresh, description: job.description };
   }
+
+  if (scoreGate(job) !== 'score') {
+    const degraded = missingDescriptionMatch();
+    await setJobMatch(job.uid, degraded);
+    broadcast(MSG.JOBS_UPDATED, { uid: job.uid, scored: false, degraded: true });
+    throw new Error(degraded.summary);
+  }
+
+  const stored = (await loadJobs()).find((item) => item.uid === job.uid);
+  if (stored && !hasJobDescription(stored)) await patchJobDescription(job.uid, job.description);
 
   const fp = profileFingerprint(profile, provider);
   const cache = await getMatchCache();
@@ -539,7 +557,8 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// 空 JD：先点已打开列表里的对应卡片，点不到再短开原岗位，等被动嗅探写回正文。超时仍打分。
+// 空 JD：先点已打开列表里的对应卡片，点不到再短开原岗位，等被动嗅探写回正文。
+// 嗅探超时后只刮这次打开的详情页。仍然没有正文就降级，不再当成完整分析。
 const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, {
   now: () => Date.now(),
   sleep,
@@ -547,7 +566,15 @@ const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, 
   openUrl: openJobPage,
   closeTab: (tabId) => chrome.tabs.remove(tabId),
   waitForDescription: waitForJobDescription,
+  scrapeDetail: scrapeEnsuredDetail,
 }, state));
+
+async function scrapeEnsuredDetail(tabId, job) {
+  const raw = await requestDetailScrape(tabId, jobKeyFromUid(job && job.uid));
+  if (!raw) return '';
+  await writeDetailDescription(job.uid, raw);
+  return raw;
+}
 
 async function clickJobCard(job) {
   const jobId = jobCardId(job);
@@ -578,9 +605,10 @@ async function openJobPage(job) {
   if (!url) return null;
   let tabs = [];
   try { tabs = await chrome.tabs.query({}); } catch { tabs = []; }
-  if (tabs.some((tab) => sameJobPage(tab.url, url))) return 'existing';
+  const existing = tabs.find((tab) => tab && tab.id != null && sameJobPage(tab.url, url));
+  if (existing) return { tabId: existing.id, close: false };
   const tab = await chrome.tabs.create({ url, active: false });
-  return tab && tab.id != null ? tab.id : null;
+  return tab && tab.id != null ? { tabId: tab.id, close: true } : null;
 }
 
 async function waitForJobDescription(uid) {
@@ -656,10 +684,8 @@ async function requestDetailScrape(tabId, jobKey) {
 }
 
 async function writeDetailDescription(uid, description) {
-  const jobs = await loadJobs();
-  const result = patchExistingDescription(jobs, uid, description);
+  const result = await patchJobDescription(uid, description);
   if (!result.patched) return false;
-  await saveJobs(result.jobs);
   broadcast(MSG.JOBS_UPDATED, { count: result.jobs.length, updated: 1 });
   return true;
 }

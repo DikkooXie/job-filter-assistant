@@ -82,15 +82,19 @@ export function jobKeyFromPageUrl(pageUrl) {
 
 // 查询参数优先（请求明确指向的岗位）。没有查询参数时，详情页路径上的 id 优先于响应体里的纯数字 id，
 // 避免 job/detail 只回了内部 jobId、却和列表里的 encryptJobId 合成两个 uid。
+// 列表抽屉不改 URL。点卡时 collector 带上的 hint 只在响应体没有另一条非数字 id 时使用。
 // 响应体已有另一条非数字 id 时信响应体，免得详情页上的推荐请求被写进当前岗位。
-export function preferDetailJobKey(queryKey, pageKey, bodyKey) {
+export function preferDetailJobKey(queryKey, pageKey, bodyKey, hintKey) {
   const query = str(queryKey);
   const page = str(pageKey);
   const body = str(bodyKey);
+  const hint = str(hintKey);
+  const safeHint = hint && hint.length <= 80 && !/[/?#\s]/.test(hint) ? hint : '';
   if (query) return query;
   if (page && (!body || page === body)) return page;
   if (page && body && /^\d+$/.test(body) && !/^\d+$/.test(page)) return page;
-  return body || page || '';
+  if (safeHint && (!body || body === safeHint || /^\d+$/.test(body))) return safeHint;
+  return body || page || safeHint || '';
 }
 
 // ============ BOSS 直聘 ============
@@ -162,7 +166,7 @@ function bossDetailJob(zp, opts = {}) {
   const boss = zp.bossInfo || {};
   // uid 必须与「当前岗位」和列表里的 encryptJobId 一致，否则打开原岗位后描述写进另一条记录，侧栏仍是空的。
   const bodyKey = str(info.encryptId) || str(info.encryptJobId) || str(info.jobId);
-  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey);
+  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey, opts.hintJobId);
   if (!jobId) return null;
   const salaryText = str(info.salaryDesc);
   const [minK, maxK] = parseSalary(salaryText);
@@ -223,7 +227,7 @@ function pruneEmpty(obj, keep = []) {
 function bossCardJob(card, opts = {}) {
   if (!isObj(card)) return null;
   const bodyKey = str(card.encryptJobId) || str(card.encryptId) || str(card.jobId);
-  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey);
+  const jobId = preferDetailJobKey(jobKeyFromUrl(opts.url), jobKeyFromPageUrl(opts.pageUrl), bodyKey, opts.hintJobId);
   if (!jobId) return null;
   const salaryText = str(card.salaryDesc);
   const [minK, maxK] = parseSalary(salaryText);

@@ -45,11 +45,26 @@ export function filterCapturedJobs(incoming, existing, autoCapture = true) {
   return list.filter((job) => known.has(job.uid));
 }
 
-// 刚补到正文时，不用空 JD 打出来的缓存分。
+// 刚补到正文时，不用空 JD 打出来的缓存分。没有正文也不复用旧分。
 export function shouldReuseMatchCache({ force = false, cached = null, hadDescription = false, hasDescription = false } = {}) {
-  if (force || !cached) return false;
+  if (force || !cached || !hasDescription) return false;
+  if (cached.incomplete === 'missing-description') return false;
   if (!hadDescription && hasDescription) return false;
   return true;
+}
+
+// 空描述不能进入完整打分。#74 允许超时后仍 scoreOne，这里改成降级。
+export function scoreGate(job) {
+  return hasJobDescription(job) ? 'score' : 'degraded';
+}
+
+export function missingDescriptionMatch(at = new Date().toISOString()) {
+  return {
+    incomplete: 'missing-description',
+    score: null,
+    summary: '没有岗位描述，这次没有完成分析',
+    at,
+  };
 }
 
 // 全局串行：批量打分、单条打分和自动打分共用一条链，避免同时点开多张卡。
@@ -63,8 +78,18 @@ export function createEnsureQueue(run) {
   };
 }
 
+// 短开返回数字 id（关掉）或 { tabId, close }。'existing' 只等待、不关、也不知道刮哪一页。
+function openedTab(opened) {
+  if (typeof opened === 'number') return { tabId: opened, close: true };
+  if (opened && typeof opened === 'object' && opened.tabId != null) {
+    return { tabId: opened.tabId, close: opened.close !== false };
+  }
+  return null;
+}
+
 // deps：now / sleep / clickCard / openUrl / closeTab / waitForDescription。
-// openUrl 返回新标签 id、'existing'（已有原岗位页，不关闭）或 null（开不了）。
+// scrapeDetail 可选：嗅探超时后，只刮这次短开或已经打开的详情页。
+// openUrl 返回新标签 id、{ tabId, close }、'existing'（已有原岗位页，不关闭）或 null（开不了）。
 export async function runEnsureDescription(job, deps, state) {
   const current = state || { lastAt: 0 };
   if (!jobNeedsDescription(job)) return { job, action: 'skip' };
@@ -85,17 +110,29 @@ export async function runEnsureDescription(job, deps, state) {
         opened = null;
       }
     }
+    const tab = openedTab(opened);
     if (!clicked && opened == null) return { job, action: 'failed' };
     current.lastAt = deps.now();
-    const filled = await deps.waitForDescription(job.uid);
-    const next = filled || job;
+    let next = (await deps.waitForDescription(job.uid)) || job;
+    if (!hasJobDescription(next) && tab && typeof deps.scrapeDetail === 'function') {
+      try {
+        const text = await deps.scrapeDetail(tab.tabId, job);
+        if (text) {
+          const again = await deps.waitForDescription(job.uid);
+          next = again && hasJobDescription(again) ? again : { ...next, description: String(text) };
+        }
+      } catch {
+        // 刮取失败保持空描述，交给打分门禁标成未完成
+      }
+    }
     if (hasJobDescription(next)) return { job: next, action: clicked ? 'click' : 'open' };
     return { job: next, action: 'timeout' };
   } catch {
     return { job, action: 'failed' };
   } finally {
-    if (typeof opened === 'number') {
-      try { await deps.closeTab(opened); } catch { /* 标签可能已经关掉 */ }
+    const tab = openedTab(opened);
+    if (tab?.close) {
+      try { await deps.closeTab(tab.tabId); } catch { /* 标签可能已经关掉 */ }
     }
   }
 }
