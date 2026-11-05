@@ -12,7 +12,7 @@ import { loadProfile, saveProfile, clearProfile, sanitizeProfile } from '../comm
 import { profileFingerprint, withProfileFp } from '../common/profileFingerprint.js';
 import { sanitizeProvider } from '../common/ai/providers.js';
 import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js';
-import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor } from '../common/ai/prompts.js';
+import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor, buildSuggestReplyPrompt, sanitizeSuggestReply, replyEchoesInstruction } from '../common/ai/prompts.js';
 import { redactText } from '../common/ai/privacy.js';
 import { autoScoreUids } from '../common/filters.js';
 import { optionsUrlHash } from '../common/optionsLink.js';
@@ -139,6 +139,8 @@ async function handle(msg, sender) {
       return scoreBatch(msg.uids, { force: msg.force });
     case MSG.AI_TAILOR_RESUME:
       return tailorResume(msg.uid, msg.job);
+    case MSG.AI_SUGGEST_REPLY:
+      return suggestReply(msg);
 
     // ---------- 面板控制 ----------
     case MSG.OPEN_OPTIONS:
@@ -468,6 +470,32 @@ async function tailorResume(uid, jobArg) {
   });
   const raw = await chatJson(provider, prompt, { json: true, maxTokens: 1536 });
   return sanitizeTailor(raw);
+}
+
+// —— 沟通建议改写（不落库，失败不回退到本地模板或用户原文） ——
+async function suggestReply(msg = {}) {
+  const provider = await getActiveProvider();
+  if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
+  const ask = String(msg.instruction || '').trim();
+  if (!ask) throw new Error('请先说明怎么改这条建议');
+  const [profile, settings, jobs] = await Promise.all([loadProfile(), loadSettings(), loadJobs()]);
+  const job = msg.job || jobs.find((item) => item.uid === msg.uid);
+  if (!job) throw new Error('岗位不存在');
+  const prompt = buildSuggestReplyPrompt({
+    profile,
+    job,
+    stage: msg.stage,
+    current: msg.current,
+    instruction: ask,
+    messages: msg.messages,
+    includeCompany: settings.privacy.sendCompanyName,
+  });
+  const raw = await chatJson(provider, prompt, { json: true, maxTokens: 512 });
+  const result = sanitizeSuggestReply(raw);
+  if (!result.text || replyEchoesInstruction(result.text, ask)) {
+    throw new Error('模型没有返回可用的建议');
+  }
+  return result;
 }
 
 // —— 匹配打分（批量，串行限速） ——

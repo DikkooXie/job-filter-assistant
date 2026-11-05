@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
 
-import { defaultFilters, defaultSettings, STORAGE_KEYS } from '../src/common/constants.js';
+import { defaultFilters, defaultSettings, MSG, STORAGE_KEYS } from '../src/common/constants.js';
 import { isDevBuild, toDevManifest } from '../src/common/build.js';
 import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
@@ -28,7 +28,7 @@ import {
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import {
-  canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, ignorePending, isGreetGateOpen, nextChip,
+  canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, groupChatDays, ignorePending, isGreetGateOpen, nextChip,
   railSteps, sanitizeComm, suggestionFromChip, suggestionFromDemand, syncLabel,
 } from '../src/react/sidepanel/commTab.js';
 import {
@@ -38,7 +38,7 @@ import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsabl
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
 } from '../src/react/settings/aiState.js';
-import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt } from '../src/common/ai/prompts.js';
+import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt, buildSuggestReplyPrompt, sanitizeSuggestReply, replyEchoesInstruction } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 import {
   parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
@@ -2994,7 +2994,7 @@ test('沟通 Tab：未招呼门禁、节点数和待确认不造假步骤', () =
   assert.equal(ignorePending(history).nodes.length, 2);
 });
 
-test('沟通 Tab：芯片单选改写，再点回基线；胶囊发送只吃自填', () => {
+test('沟通 Tab：建议标签单选改写，再点回基线；发送只吃自填说明', () => {
   const stage = { label: '一面', sub: '周五' };
   const baseline = defaultBaseline(stage);
   assert.equal(baseline, '好的，周五下午都可以。一面是视频还是现场？');
@@ -3023,32 +3023,103 @@ test('沟通 Tab：芯片单选改写，再点回基线；胶囊发送只吃自�
   assert.equal(syncLabel(null), '');
 });
 
-test('沟通 Tab 结构按 v3.3 锁稿，建议框不吸底', () => {
+test('沟通 Tab 按 LOCK-v2：气泡在滚动区，建议条贴底，底色共用详情令牌', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
   const comm = fs.readFileSync(path.join(root, 'src/react/sidepanel/CommTab.jsx'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
   assert.match(views, /\['flow', '沟通'\]/);
   assert.doesNotMatch(views, /\['flow', '流程'\]/);
   assert.doesNotMatch(comm, /回 HR|该问|摘录|精简版|标准版|详细版|标记已发送/);
-  assert.match(comm, /输入沟通需求，或点芯片改上方建议/);
+  assert.match(comm, /说说怎么改这条建议/);
+  assert.doesNotMatch(comm, /输入沟通需求|单节点 · 不可展|模型建议|答\/问均可|建议回复|芯片|胶囊/);
   assert.match(comm, /aria-label="复制建议"/);
-  assert.match(comm, /aria-label="发送自填需求"/);
+  assert.match(comm, /aria-label="按说明改写建议"/);
+  assert.match(comm, /aria-label="建议标签"/);
   assert.match(comm, /打开沟通/);
   assert.match(comm, /isGreetGateOpen/);
   assert.match(comm, /canExpandNodes/);
+  assert.match(comm, /onSuggest/);
+  assert.doesNotMatch(comm, /suggestionFromChip|suggestionFromDemand/);
   assert.doesNotMatch(comm, /pill-plus/);
   assert.doesNotMatch(comm, />\s*\+\s*</);
-  const suggest = css.match(/\.suggest-zone \{[^}]*\}/)?.[0] || '';
-  const sticky = css.match(/\.sticky-comm \{[^}]*\}/)?.[0] || '';
-  assert.doesNotMatch(suggest, /position:\s*sticky/);
-  assert.doesNotMatch(sticky, /position:\s*sticky/);
-  assert.match(sticky, /background:\s*#0f1419/);
-  assert.match(css, /\.comm-drawer \{[^}]*background:\s*#151a21/);
-  assert.match(css, /\.job-panel \.comm-pill \{[^}]*background:\s*#1a222c/);
-  assert.match(css, /\.job-panel \.comm-send \{[^}]*background:\s*#2dd4bf/);
-  assert.match(css, /\.comm-badge\.pending \{[^}]*color:\s*#f0b429/);
+  const scrollAt = comm.indexOf('className="comm-scroll"');
+  const stickyAt = comm.indexOf('className="sticky-comm"');
+  assert.ok(scrollAt >= 0 && stickyAt > scrollAt);
+  assert.doesNotMatch(comm.slice(scrollAt, stickyAt), /className="suggest|className=\{`suggest/);
+  assert.match(comm.slice(stickyAt), /className=\{`suggest/);
+  assert.match(comm.slice(scrollAt, stickyAt), /ChatThread/);
+  assert.match(comm, /className="comm-chat"/);
+  const commCss = css.slice(css.indexOf('/* 沟通 Tab'));
+  assert.doesNotMatch(commCss, /#0f1419|#151a21|#1a222c/);
+  assert.match(commCss, /\.comm-body \{[^}]*background:\s*var\(--jp-surface\)/);
+  assert.match(commCss, /\.comm-drawer \{[^}]*background:\s*var\(--jp-surface-2\)/);
+  assert.match(commCss, /\.suggest \{[^}]*background:\s*var\(--jp-field\)/);
+  assert.match(commCss, /\.sticky-comm \{[^}]*background:\s*var\(--jp-surface\)/);
+  const focus = commCss.match(/\.job-panel \.comm-pill:focus-within \{[^}]*\}/)?.[0] || '';
+  assert.match(focus, /outline:\s*none/);
+  assert.match(focus, /box-shadow:\s*none/);
+  assert.match(focus, /border-color:\s*rgba\(45,\s*212,\s*191,\s*0?\.38\)/);
+  assert.match(commCss, /\.job-panel \.comm-pill input \{[^}]*outline:\s*none/);
+  assert.match(commCss, /\.job-panel \.comm-pill input \{[^}]*caret-color:\s*#2dd4bf/);
+  assert.doesNotMatch(commCss, /outline:\s*2px|box-shadow:\s*0 0 0 2px/);
   assert.match(css, /\.job-panel \.sg-copy \{[^}]*border:\s*0/);
+  assert.equal(MSG.AI_SUGGEST_REPLY, 'AI_SUGGEST_REPLY');
+  assert.match(background, /case MSG\.AI_SUGGEST_REPLY/);
+  assert.match(background, /buildSuggestReplyPrompt/);
+  assert.match(background, /sanitizeSuggestReply/);
+  assert.match(background, /replyEchoesInstruction/);
+  assert.doesNotMatch(background, /suggestionFromChip|suggestionFromDemand/);
+});
+
+test('沟通记录保留已识别对话，并按天分组', () => {
+  const morning = new Date(2026, 10, 5, 9, 0, 0).toISOString();
+  const later = new Date(2026, 10, 5, 9, 5, 0).toISOString();
+  const older = new Date(2026, 10, 4, 18, 0, 0).toISOString();
+  const clean = sanitizeComm({
+    messages: [
+      { role: 'hr', text: '  你好 ', at: morning },
+      { role: 'me', text: '在的', at: later },
+      { role: 'hr', text: '' },
+      { content: '昨天的安排', at: older, role: 'them' },
+    ],
+  });
+  assert.equal(clean.messages.length, 3);
+  assert.equal(clean.messages[0].role, 'hr');
+  assert.equal(clean.messages[0].text, '你好');
+  assert.equal(clean.messages[1].role, 'me');
+  assert.equal(clean.messages[2].role, 'hr');
+  const groups = groupChatDays(clean.messages, new Date(2026, 10, 5, 18, 0, 0));
+  assert.equal(groups[0].label, '今天');
+  assert.equal(groups[0].messages.length, 2);
+  assert.equal(groups[1].label, '昨天');
+  assert.equal(sanitizeComm({}).messages.length, 0);
+});
+
+test('建议改写提示词把说明当指令，不把原文当成功回复', () => {
+  const messages = buildSuggestReplyPrompt({
+    profile: emptyProfile(),
+    job: { title: '前端', company: '甲公司', description: '负责页面' },
+    stage: { label: '初聊', sub: '' },
+    current: '好的，收到。',
+    instruction: '想确定一下是不是外包',
+    messages: [{ role: 'hr', text: '方便聊聊吗' }, { role: 'me', text: '方便的' }],
+    includeCompany: false,
+  });
+  assert.match(messages[0].content, /改写指令/);
+  assert.match(messages[0].content, /禁止原样输出/);
+  assert.match(messages[1].content, /【改写指令】/);
+  assert.match(messages[1].content, /想确定一下是不是外包/);
+  assert.match(messages[1].content, /好的，收到/);
+  assert.match(messages[1].content, /方便聊聊吗/);
+  assert.match(messages[1].content, /公司名已隐藏/);
+  const clean = sanitizeSuggestReply({ text: '  您好，想确认岗位是正式编制还是外包？  ' });
+  assert.match(clean.text, /正式编制还是外包/);
+  assert.equal(sanitizeSuggestReply({}).text, '');
+  assert.equal(sanitizeSuggestReply('想确定一下是不是外包').text, '');
+  assert.equal(replyEchoesInstruction('想确定一下是不是外包。', '想确定一下是不是外包'), true);
+  assert.equal(replyEchoesInstruction('您好，想确认这个岗位是正式编制还是外包？', '想确定一下是不是外包'), false);
 });
 
 // ---------- 汇总 ----------

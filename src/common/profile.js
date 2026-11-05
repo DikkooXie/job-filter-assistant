@@ -66,7 +66,7 @@ export function appendPreferenceNote(notes, sentence) {
 }
 
 // 把「不喜欢」的整句写进雷点。不进 notes：备注只表示可以接受，匹配提示要求据此不降分。
-// 整句保持一条，不按顿号拆开，避免把自然语言拆成芯片。
+// 整句保持一条，不按顿号拆开，避免把自然语言拆成多条标签。
 export function appendDealbreaker(preference = {}, sentence) {
   const source = preference && typeof preference === 'object' ? preference : {};
   const base = {

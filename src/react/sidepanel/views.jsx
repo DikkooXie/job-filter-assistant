@@ -717,7 +717,7 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
 export function JobDetail({
   mode, job, sub, followLive, progressStatus, greeting, advice, scoring, tailoring,
   hasProfile, dev, comm, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onCopy,
-  onSend, onOpenChat, onComm, onNotice, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
+  onSend, onOpenChat, onComm, onNotice, onSuggest, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
 }) {
   const titleRef = useRef(null);
   const [accepting, setAccepting] = useState(null);
@@ -868,6 +868,7 @@ export function JobDetail({
                 onOpenChat={onOpenChat}
                 onComm={onComm}
                 onNotice={onNotice}
+                onSuggest={(payload) => onSuggest?.(job, payload)}
               />
             )}
             {sub !== 'flow' && <footer className="detail-sticky">

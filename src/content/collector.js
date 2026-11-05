@@ -170,7 +170,7 @@
     obs.observe(document, { subtree: true, childList: true });
   } catch {}
 
-  // —— 极简状态角标（Apple 风：胶囊、毛玻璃） ——
+  // —— 极简状态角标（圆角、毛玻璃） ——
   // 受设置项 showBadge 控制。内容脚本不打包，不能 import constants.js，
   // 这里的键名必须与 STORAGE_KEYS.settings 保持一致。
   const SETTINGS_KEY = 'jobHelperSettingsV1';

@@ -82,6 +82,7 @@ export const MSG = {
   AI_MATCH_SCORE: 'AI_MATCH_SCORE', // 单岗位匹配打分
   AI_MATCH_BATCH: 'AI_MATCH_BATCH', // 批量匹配
   AI_TAILOR_RESUME: 'AI_TAILOR_RESUME', // 按岗位 JD 生成简历定制建议（不落库，会话内使用）
+  AI_SUGGEST_REPLY: 'AI_SUGGEST_REPLY', // 按改写指令重写一条可发给 HR 的建议（不落库）
 
   // 面板控制
   OPEN_OPTIONS: 'OPEN_OPTIONS',
