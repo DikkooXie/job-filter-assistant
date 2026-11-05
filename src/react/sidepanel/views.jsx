@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import markUrl from '../../../icons/128.png';
 import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, CircleCheck, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { DIM_LABELS } from '../../common/ai/prompts.js';
-import { analysisGrade, analysisSummary, exclusionReasons, flowEntryLabel, flowStatusLabel, platformLabel, riskLines, warningZone } from './browseModel.js';
+import { analysisGrade, analysisSummary, descriptionGap, exclusionReasons, flowEntryLabel, flowStatusLabel, jobDescriptionText, platformLabel, riskLines, warningZone } from './browseModel.js';
 import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
 import { CommTab } from './CommTab.jsx';
 
@@ -43,17 +43,19 @@ function GradeMarks({ grade }) {
 }
 
 function JobSummaryCard({ job, onOpenAnalysis }) {
+  const gap = descriptionGap(job);
   const summary = analysisSummary(job);
-  if (!summary.grade) {
+  if (gap || !summary.grade) {
     return (
       <section className="detail-summary">
         <h3>分析摘要</h3>
         <div className="analysis bare detail-sum">
           <div className="analysis-top">
-            <span className="grade muted">尚未分析</span>
+            <span className={gap ? 'grade gap' : 'grade muted'}>{gap ? gap.label : '尚未分析'}</span>
           </div>
+          {gap && <p className="detail-sum-copy">{gap.detail}</p>}
           <div className="sum-foot">
-            <button type="button" className="detail-jump" onClick={onOpenAnalysis}>去分析<ChevronRight aria-hidden="true" /></button>
+            <button type="button" className="detail-jump" onClick={onOpenAnalysis}>{gap ? '重试分析' : '去分析'}<ChevronRight aria-hidden="true" /></button>
           </div>
         </div>
       </section>
@@ -87,6 +89,7 @@ function JobSummaryCard({ job, onOpenAnalysis }) {
 }
 
 function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
+  const gap = descriptionGap(job);
   const summary = analysisSummary(job);
   const risks = riskLines(job);
   const match = job.match;
@@ -95,7 +98,9 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
     .filter(([, value]) => value != null);
   return (
     <>
-      {summary.grade ? (
+      {gap ? (
+        <p className="analysis-empty">{gap.detail}</p>
+      ) : summary.grade ? (
         <>
           <div className="score-card">
             <div className="a-top">
@@ -145,7 +150,7 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
       ) : (
         <p className="analysis-empty">尚未分析</p>
       )}
-      {risks.length > 0 && (
+      {!gap && risks.length > 0 && (
         <section className="detail-sec">
           <h3>风险提示</h3>
           <div className="detail-warn">
@@ -161,7 +166,7 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
       )}
       <button type="button" className="reanalyze" disabled={scoring} onClick={onAnalyze}>
         <RefreshCw aria-hidden="true" />
-        {scoring ? '分析中…' : summary.grade ? '重新分析' : '分析'}
+        {scoring ? '分析中…' : summary.grade ? '重新分析' : gap ? '重试分析' : '分析'}
       </button>
     </>
   );
@@ -388,7 +393,8 @@ function AnalysisWarnings({ job }) {
 }
 
 export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }) {
-  const grade = analysisGrade(job.match);
+  const gap = descriptionGap(job);
+  const grade = gap ? null : analysisGrade(job.match);
   const summary = grade ? (job.match?.summary || '') : '';
   const [confirming, setConfirming] = useState(null);
   const armedAt = useRef(0);
@@ -461,7 +467,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
             <button
               type="button"
               className="analysis-main"
-              aria-label={queueCard ? `${job.company || '该岗位'}，${queueCard.label}` : grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，尚未分析`}
+              aria-label={queueCard ? `${job.company || '该岗位'}，${queueCard.label}` : grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，${gap ? gap.label : '尚未分析'}`}
               onClick={() => onOpen(job.uid, 'match')}
             >
               {queueCard ? (
@@ -469,6 +475,8 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
                   {queueCard.kind === 'running' && <i className="batch-spin" aria-hidden="true" />}
                   <span className="grade">{queueCard.label}</span>
                 </span>
+              ) : gap ? (
+                <span className="grade gap">{gap.label}</span>
               ) : grade ? (
                 <>
                   <span className="segs" aria-hidden="true">
@@ -796,7 +804,7 @@ export function JobDetail({
                   {(job.skills?.length || job.tags?.length) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags).slice(0, 20)} /></>}
                   {job.welfare?.length > 0 && <><h3>福利</h3><Tags values={job.welfare.slice(0, 20)} /></>}
                   <h3>岗位描述</h3>
-                  <p className="pre desc-box">{job.description || '暂无岗位描述，可打开原岗位查看完整 JD。'}</p>
+                  <p className="pre desc-box">{jobDescriptionText(job)}</p>
                   {exclusionReasons(job).length > 0 && (
                     <div className="exclusion"><Filter aria-hidden="true" /><div><strong>开启过滤后将隐藏</strong><span>{exclusionReasons(job).join('；')}</span></div></div>
                   )}

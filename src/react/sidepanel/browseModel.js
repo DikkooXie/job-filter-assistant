@@ -1,4 +1,5 @@
 // 岗位浏览的纯展示规则。不读写存储，也不发起分析或流程推进。
+import { hasJobDescription } from '../../common/ensureDescription.js';
 
 export const FLOW_STATUS_LABELS = {
   prepared: '招呼语已准备',
@@ -57,10 +58,13 @@ export function filterVisibleJobs(jobs, view) {
       .includes(query));
   }
   if (verdict !== 'all') {
-    list = list.filter((job) => (verdict === 'unscored' ? !job.match : job.match?.verdict === verdict));
+    list = list.filter((job) => (
+      verdict === 'unscored' ? !isCompleteAnalysis(job) : isCompleteAnalysis(job) && job.match?.verdict === verdict
+    ));
   }
   const recent = (a, b) => String(b.lastSeenAt || b.savedAt || '').localeCompare(String(a.lastSeenAt || a.savedAt || ''));
-  const score = (a, b) => (b.match?.score ?? -1) - (a.match?.score ?? -1);
+  const scoreOf = (job) => (isCompleteAnalysis(job) ? job.match?.score : null);
+  const score = (a, b) => (scoreOf(b) ?? -1) - (scoreOf(a) ?? -1);
   const salary = (a, b) => (b.salaryMaxK ?? b.salaryMinK ?? 0) - (a.salaryMaxK ?? a.salaryMinK ?? 0);
   return list.sort(sort === 'score' ? score : sort === 'salary' ? salary : recent);
 }
@@ -100,6 +104,27 @@ export function platformLabel(platform) {
   return platform === 'boss' ? 'BOSS' : '51job';
 }
 
+// 空描述上的分数不是完整分析。有 match 只说明跑过打分，不代表用了 JD。
+export function descriptionGap(job) {
+  if (hasJobDescription(job) || !job?.match) return null;
+  return {
+    label: '缺描述',
+    detail: '没有岗位描述，这次没有完成分析',
+  };
+}
+
+export function jobDescriptionText(job) {
+  if (hasJobDescription(job)) return job.description.trim();
+  if (descriptionGap(job)) return '没有读到岗位描述，这次没有按 JD 完成分析。打开原岗位后再试一次。';
+  return '暂无岗位描述，可打开原岗位查看完整 JD。';
+}
+
+export function isCompleteAnalysis(job) {
+  if (!hasJobDescription(job)) return false;
+  if (job?.match?.incomplete === 'missing-description') return false;
+  return analysisGrade(job?.match) != null;
+}
+
 // 列表方案 E 的分级展示。只读已有 match.score，不另存档位。
 // ≤20 一格、≤40 两格为「偏低」；≤60 三格「一般」；≤80 四格「沟通确认」；高于 80 五格「匹配」。
 export function analysisGrade(match) {
@@ -116,6 +141,7 @@ export function analysisGrade(match) {
 
 // 岗位 Tab 摘要卡。没有分数时不造分级、不造警示计数。
 export function analysisSummary(job) {
+  if (descriptionGap(job)) return { grade: null, summary: '', warnLabel: '' };
   const grade = analysisGrade(job?.match);
   if (!grade) return { grade: null, summary: '', warnLabel: '' };
   const count = riskLines(job).length;
@@ -169,10 +195,10 @@ export function noteCapturedJobs(session, jobs) {
 export function analysisTargets(jobs, mode, fingerprint) {
   const list = (jobs || []).filter((job) => job?.uid);
   if (mode === 'force') return list.slice();
-  if (mode === 'unscored') return list.filter((job) => !job.match);
+  if (mode === 'unscored') return list.filter((job) => !isCompleteAnalysis(job));
   if (mode === 'fingerprint') {
     const fp = String(fingerprint ?? '');
-    return list.filter((job) => !job.match || String(job.match.profileFp ?? '') !== fp);
+    return list.filter((job) => !isCompleteAnalysis(job) || String(job.match.profileFp ?? '') !== fp);
   }
   return [];
 }

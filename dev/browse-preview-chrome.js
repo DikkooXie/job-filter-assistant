@@ -44,7 +44,9 @@ const store = {
 const listeners = [];
 const scoreDelay = Number(params.get('scoreDelay') || 0);
 const state = {
-  jobs: scenario === 'empty' ? [] : jobs.map((job) => ({ ...job })),
+  jobs: scenario === 'empty' ? [] : jobs.map((job) => (
+    scenario === 'missing-jd' && job.uid === 'boss:s2' ? { ...job, description: '' } : { ...job }
+  )),
   failReads: scenario === 'error',
   hangReads: scenario === 'loading',
   settings: {
@@ -98,6 +100,12 @@ function respond(msg) {
     case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
     case 'AI_MATCH_SCORE': {
       if (state.failUids.has(msg.uid)) throw new Error('超时');
+      const current = state.jobs.find((job) => job.uid === msg.uid);
+      if (current && !String(current.description || '').trim()) {
+        const blocked = { incomplete: 'missing-description', score: null, summary: '没有岗位描述，这次没有完成分析', at: '2026-11-04T00:00:00.000Z' };
+        state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match: blocked } : job);
+        throw new Error(blocked.summary);
+      }
       const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z', profileFp: previewFingerprint() };
       state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match } : job);
       return match;

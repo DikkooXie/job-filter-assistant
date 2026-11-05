@@ -1,8 +1,18 @@
 // 岗位库：storage.local 读写、去重合并、容量淘汰、匹配分缓存。
 import { STORAGE_KEYS } from './constants.js';
+import { patchExistingDescription } from './ensureDescription.js';
 
 const JOBS_KEY = STORAGE_KEYS.jobs;
 const CACHE_KEY = STORAGE_KEYS.matchCache;
+
+// 收录和打分都会读改写岗位库。不串行时，后完成的 save 会盖掉先写上的描述或分数。
+let jobsWrite = Promise.resolve();
+
+function withJobsWrite(task) {
+  const run = jobsWrite.then(task, task);
+  jobsWrite = run.then(() => {}, () => {});
+  return run;
+}
 
 export async function loadJobs() {
   const got = await chrome.storage.local.get(JOBS_KEY);
@@ -16,7 +26,11 @@ export async function saveJobs(list) {
 
 // 合并新抓取的岗位到库中。dedupe=true 时按 uid 去重（更新已存在的字段）。
 // 返回 { jobs, added, updated }
-export async function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {}) {
+export function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {}) {
+  return withJobsWrite(() => mergeJobsBody(incoming, { dedupe, maxJobs }));
+}
+
+async function mergeJobsBody(incoming, { dedupe = true, maxJobs = 800 } = {}) {
   const now = new Date().toISOString();
   const existing = await loadJobs();
   const byUid = new Map(existing.map((j) => [j.uid, j]));
@@ -60,40 +74,60 @@ export async function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {})
   return { jobs: list, added, updated, addedUids };
 }
 
-export async function deleteJob(uid) {
-  const list = await loadJobs();
-  const next = list.filter((j) => j.uid !== uid);
-  await saveJobs(next);
-  return next;
+export function deleteJob(uid) {
+  return withJobsWrite(async () => {
+    const list = await loadJobs();
+    const next = list.filter((j) => j.uid !== uid);
+    await saveJobs(next);
+    return next;
+  });
 }
 
-export async function clearJobs() {
-  await chrome.storage.local.set({ [JOBS_KEY]: [] });
-  return [];
+export function clearJobs() {
+  return withJobsWrite(async () => {
+    await chrome.storage.local.set({ [JOBS_KEY]: [] });
+    return [];
+  });
 }
 
-export async function toggleStar(uid) {
-  const list = await loadJobs();
-  const next = list.map((j) => (j.uid === uid ? { ...j, star: !j.star } : j));
-  await saveJobs(next);
-  return next;
+export function toggleStar(uid) {
+  return withJobsWrite(async () => {
+    const list = await loadJobs();
+    const next = list.map((j) => (j.uid === uid ? { ...j, star: !j.star } : j));
+    await saveJobs(next);
+    return next;
+  });
 }
 
 // 写回单个岗位的匹配分。profileFp 由打分路径盖上，这里原样保存，不另算指纹。
-export async function setJobMatch(uid, match) {
-  const list = await loadJobs();
-  const next = list.map((j) => (j.uid === uid ? { ...j, match } : j));
-  await saveJobs(next);
-  return next;
+export function setJobMatch(uid, match) {
+  return withJobsWrite(async () => {
+    const list = await loadJobs();
+    const next = list.map((j) => (j.uid === uid ? { ...j, match } : j));
+    await saveJobs(next);
+    return next;
+  });
+}
+
+// 只补已有岗位的描述。已有正文保持不动。
+export function patchJobDescription(uid, description) {
+  return withJobsWrite(async () => {
+    const jobs = await loadJobs();
+    const result = patchExistingDescription(jobs, uid, description);
+    if (result.patched) await saveJobs(result.jobs);
+    return result;
+  });
 }
 
 // 保存用户编辑后的招呼语草稿（发送前的最终文案，独立于 AI 生成的 match.greetings）
-export async function setJobGreeting(uid, text) {
-  const list = await loadJobs();
-  const draft = String(text == null ? '' : text).slice(0, 800);
-  const next = list.map((j) => (j.uid === uid ? { ...j, greetingDraft: draft } : j));
-  await saveJobs(next);
-  return next;
+export function setJobGreeting(uid, text) {
+  return withJobsWrite(async () => {
+    const list = await loadJobs();
+    const draft = String(text == null ? '' : text).slice(0, 800);
+    const next = list.map((j) => (j.uid === uid ? { ...j, greetingDraft: draft } : j));
+    await saveJobs(next);
+    return next;
+  });
 }
 
 // —— 匹配分缓存：key = uid + profile 指纹，避免画像没变时重复调用 AI ——

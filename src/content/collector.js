@@ -82,6 +82,14 @@
   }
 
   let captured = 0;
+  // 点列表卡片后的短时间里，详情包若只带回数字 id，用这次点击的 encrypt id 对齐岗位库。
+  let pendingClick = null;
+  function takeDetailHint() {
+    if (!pendingClick) return '';
+    const hint = Date.now() - pendingClick.at > 8000 ? '' : pendingClick.jobId;
+    pendingClick = null;
+    return hint;
+  }
   // 打开详情页时，同一次响应可能先被当场收到，又被 replay 再投递一次。短时间内同一 URL 只处理一遍。
   const handledUrlAt = new Map();
   function duplicateCapture(d) {
@@ -111,8 +119,10 @@
       // 点开某个岗位：上报「当前岗位」，让面板实时切换
       const jobKey = jobKeyFromDetail(d.url, d.payload);
       if (jobKey) send(MSG.CURRENT_JOB, { platform: d.platform, jobKey });
-      // 详情响应同样丢给归一化：命中列表结构则收录，否则被安全忽略
-      send(MSG.JOBS_CAPTURED, capturedMsg);
+      // 详情响应同样丢给归一化：命中列表结构则收录，否则被安全忽略。
+      // 列表抽屉不改 URL，数字 id 靠刚才点的卡片对齐，不另发站点请求。
+      const hintJobId = takeDetailHint();
+      send(MSG.JOBS_CAPTURED, hintJobId ? { ...capturedMsg, hintJobId } : capturedMsg);
       return;
     }
     if (d.platform === 'boss') recordBossOnline(d.payload); // 记录每个岗位的 HR 在线状态
@@ -418,7 +428,9 @@
     }
     // 字面量与 MSG.FETCH_JOB_CARD 一致。先应答再点，避免点卡片触发导航时把响应掐掉。
     if (msg.type === 'FETCH_JOB_CARD') {
-      const link = findJobCardLink(msg.jobId);
+      const jobId = String(msg.jobId || '').trim();
+      const link = findJobCardLink(jobId);
+      if (link && jobId) pendingClick = { jobId, at: Date.now() };
       sendResponse({ ok: !!link, clicked: !!link });
       if (link) setTimeout(() => { try { link.click(); } catch {} }, 80);
       return true;

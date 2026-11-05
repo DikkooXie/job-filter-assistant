@@ -606,6 +606,7 @@
 .grade.mid { color: var(--jp-grade-mid); }
 .grade.high { color: var(--jp-seg-high); }
 .grade.muted { color: var(--jp-muted); font-weight: 550; }
+.grade.gap { color: var(--jp-warn); font-weight: 650; }
 .job-panel .score-num {
   font-family: "Space Grotesk", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 20px;
@@ -641,6 +642,7 @@
 .score-num:hover:not(:disabled),
 .analysis-sub:hover:not(:disabled) { color: var(--jp-accent); }
 .analysis-main:hover:not(:disabled) .grade { color: var(--jp-accent); }
+.analysis-main:hover:not(:disabled) .grade.gap { color: var(--jp-warn); }
 
 /* 警示区方案 A：chip 在摘要下，条目留在分析框内，悬停卡片或分析框再展开。不改操作行。 */
 .warn-chips {
