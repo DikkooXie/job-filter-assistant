@@ -3348,10 +3348,12 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   assert.doesNotMatch(markBody, /OPEN_JOB_CHAT|SEND_GREETING|clipboard/);
   assert.doesNotMatch(comm, /单一稿|无分档|<em>/);
   const greet = comm.slice(comm.indexOf('function GreetWork'), comm.indexOf('export function CommTab'));
-  const waitAt = greet.indexOf('className="comm-wait"');
+  const toolsAt = greet.indexOf('className="comm-tools"');
   const sentAt = greet.indexOf('className="comm-sent"');
-  assert.ok(waitAt >= 0 && sentAt > waitAt);
+  assert.ok(toolsAt >= 0 && sentAt > toolsAt);
   assert.match(greet, />我已发出招呼</);
+  assert.doesNotMatch(greet, /等 HR|完成招呼后解锁|comm-wait/);
+  assert.doesNotMatch(browse, /\.comm-wait/);
   const sentRule = browse.slice(browse.indexOf('.job-panel .comm-sent {'), browse.indexOf('.job-panel .comm-sent:hover'));
   assert.match(sentRule, /width:\s*100%/);
   assert.match(sentRule, /border:\s*1px solid var\(--jp-line\)/);

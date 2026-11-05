@@ -2007,8 +2007,6 @@
 .job-panel .comm-open svg,
 .job-panel .sg-copy svg,
 .job-panel .comm-send svg { width: 13px; height: 13px; }
-.comm-wait { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 11px; color: var(--jp-grade-mid); }
-.comm-wait-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--jp-grade-mid); box-shadow: 0 0 0 3px color-mix(in srgb, var(--jp-grade-mid) 16%, transparent); }
 .job-panel .comm-sent {
   width: 100%;
   align-self: stretch;
