@@ -107,7 +107,19 @@ export default function Options() {
   });
   const editProfile = (group, key, value) => updateProfile(group ? { ...profileRef.current, [group]: { ...profileRef.current[group], [key]: value } } : { ...profileRef.current, [key]: value });
   const requestClearProfile = () => setConfirm({ title: '清除个人画像？', body: '将清空全部画像字段，并使已生成的岗位匹配分缓存失效。此操作不可撤销。', run: async () => { await flush('profile'); const p = await send(MSG.PROFILE_CLEAR); profileRef.current = p; setProfile(p); report('画像已清除'); } });
-  const exportData = (format) => action(async () => { const res = await send(MSG.JOB_EXPORT_REQUEST, { format }); const url = URL.createObjectURL(new Blob([res.content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' })); try { await chrome.downloads.download({ url, filename: `岗位收录-${new Date().toISOString().slice(0, 10)}.${format}`, saveAs: true }); report(`已导出 ${res.count} 个岗位`); } finally { setTimeout(() => URL.revokeObjectURL(url), 60000); } });
+  const exportData = (format) => action(async () => {
+    const res = await send(MSG.JOB_EXPORT_REQUEST, { format });
+    const log = format === 'capture-log';
+    const ext = format === 'csv' ? 'csv' : 'json';
+    const filename = log ? `补抓日志-${new Date().toISOString().slice(0, 10)}.json` : `岗位收录-${new Date().toISOString().slice(0, 10)}.${ext}`;
+    const url = URL.createObjectURL(new Blob([res.content], { type: format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json' }));
+    try {
+      await chrome.downloads.download({ url, filename, saveAs: true });
+      report(log ? `已导出 ${res.count} 条补抓记录` : `已导出 ${res.count} 个岗位`);
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+  });
 
   if (!settings || !profile) {
     return <div className="settings-loading" role={notice?.error ? 'alert' : 'status'}>{notice?.message || '正在加载设置…'}</div>;

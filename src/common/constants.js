@@ -7,7 +7,7 @@ export const STORAGE_KEYS = {
   jobs: 'jobHelperJobsV1',
   aiProviders: 'jobHelperAiProvidersV1',
   matchCache: 'jobHelperMatchCacheV1',
-  lastReport: 'jobHelperLastCaptureReportV1',
+  lastReport: 'jobHelperLastCaptureReportV1', // 补抓/嗅探失败原因。不改键名；条目里不放 JD 正文
 };
 
 // 平台标识
