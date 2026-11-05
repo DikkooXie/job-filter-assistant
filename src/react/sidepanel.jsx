@@ -4,7 +4,7 @@ import { decideOpenOriginal } from '../common/ensureDescription.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
 import { pickActiveProvider, profileFingerprint } from '../common/profileFingerprint.js';
 import { applyFilters, evaluateJob } from '../common/filters.js';
-import { VERDICT_LABELS, normalizeGreetings } from '../common/ai/prompts.js';
+import { VERDICT_LABELS, normalizeGreetings, replyEchoesInstruction } from '../common/ai/prompts.js';
 import { send } from '../ui/ui-common.js';
 import { runningDevBuild } from '../common/build.js';
 import { analysisEmptyMessage, analysisTargets, analysisUsesForce, filterVisibleJobs, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, librarySurface, noteCapturedJobs, returnFocusTarget, viewConditionsChanged } from './sidepanel/browseModel.js';
@@ -247,6 +247,13 @@ export default function Sidepanel() {
     finally { s.tailoring.delete(job.uid); update(); }
   };
   const copyText = async (text) => { try { await navigator.clipboard.writeText(text); notify('已复制'); } catch { notify('复制失败', true); } };
+  const suggestReply = async (job, payload) => {
+    if (!requireProviders()) return null;
+    const result = await send(MSG.AI_SUGGEST_REPLY, { uid: job.uid, job, ...payload });
+    const text = String(result?.text || '').trim();
+    if (!text || replyEchoesInstruction(text, payload?.instruction)) throw new Error('模型没有返回可用的建议');
+    return { text };
+  };
   const openCommunication = async (job, text, { saveAsGreeting = false } = {}) => {
     const content = String(text || '').trim();
     if (!content) { notify(saveAsGreeting ? '招呼语为空' : '没有可复制的内容', true); return; }
@@ -608,6 +615,7 @@ export default function Sidepanel() {
           onCopy={copyText}
           onSend={() => job && sendGreeting(job)}
           onOpenChat={(text) => job && openCommunication(job, text)}
+          onSuggest={suggestReply}
           onComm={async (record) => {
             if (!job) return;
             await saveComm(job.uid, record);

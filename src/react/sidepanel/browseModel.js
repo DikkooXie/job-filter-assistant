@@ -126,9 +126,9 @@ export function analysisSummary(job) {
   };
 }
 
-// 新收录胶囊展开后自动收回的时间。点击胶囊或滚动列表会提前收回。
+// 新收录提示展开后自动收回的时间。点击提示或滚动列表会提前收回。
 export const FRESH_CAPSULE_MS = 8000;
-// 胶囊收回后，新岗位行在列表里连续可见这么久，就清掉这一条 NEW。
+// 提示收回后，新岗位行在列表里连续可见这么久，就清掉这一条 NEW。
 export const FRESH_MARK_VISIBLE_MS = 2000;
 
 function idSet(value) {

@@ -1,6 +1,6 @@
 // AI 提示词构造：简历抽取、单岗位匹配打分。
 // 均要求模型返回严格 JSON，配合 client.chatJson 使用。
-import { redactProfileForAi, redactJobForAi } from './privacy.js';
+import { redactProfileForAi, redactJobForAi, redactText } from './privacy.js';
 import { jobText } from '../filters.js';
 import { getDealbreakers } from '../profile.js';
 
@@ -244,6 +244,62 @@ export function sanitizeTailor(obj) {
     note: String(o.note || '').trim().slice(0, 200),
     at: new Date().toISOString(),
   };
+}
+
+// —— 按改写指令重写一条可发给 HR 的建议 ——
+// instruction 是「怎么改」，不是要原样发出去的正文。
+export function buildSuggestReplyPrompt({
+  profile, job, stage, current, instruction, messages, includeCompany = true,
+} = {}) {
+  const p = redactProfileForAi(profile, { includeName: false });
+  const j = redactJobForAi(job, { includeCompany });
+  const draft = redactText(String(current || '')).trim().slice(0, 600);
+  const ask = redactText(String(instruction || '')).trim().slice(0, 300);
+  const chat = (Array.isArray(messages) ? messages : []).slice(-12).map((item) => {
+    const who = item?.role === 'me' ? '我' : 'HR';
+    const text = redactText(String(item?.text || '')).trim().slice(0, 300);
+    return text ? `${who}：${text}` : '';
+  }).filter(Boolean).join('\n');
+  const stageText = [stage?.label, stage?.sub].filter(Boolean).join(' · ');
+  const system =
+    '你是求职沟通助手。根据候选人的改写指令，写一条可以直接发给 HR 的完整、委婉、口语化短消息。' +
+    '只输出 JSON，不要解释或 Markdown 围栏。\n' +
+    '铁律：\n' +
+    '1) 用户给出的是改写指令，不是要发给 HR 的原文。禁止原样输出指令，禁止只把指令加标点。\n' +
+    '2) 在「当前建议」基础上改写；当前建议为空时，写一条新的完整回复。\n' +
+    '3) 只使用岗位、画像、进展和已有对话里的事实。不要编造经历、数字、到岗时间或对方没说过的承诺。\n' +
+    '4) 语气像求职者本人发的短消息，礼貌、具体、可直接发送。';
+  const schema = `{
+  "text": "可直接发给 HR 的完整回复，80字内，不要复述改写指令本身"
+}`;
+  const user = [
+    `【当前进展】\n${stageText || '未知'}`,
+    `【当前建议】\n${draft || '（空）'}`,
+    chat ? `【已有对话】\n${chat}` : '',
+    `【岗位】\n${JSON.stringify(j)}`,
+    `【画像】\n${JSON.stringify(p)}`,
+    `【改写指令】\n${ask || '（空）'}`,
+    `请按此 JSON 输出改写后的回复：\n${schema}`,
+  ].filter(Boolean).join('\n\n');
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+}
+
+export function sanitizeSuggestReply(obj) {
+  const source = typeof obj === 'object' && obj ? obj : {};
+  const text = String(source.text || '').trim().replace(/\s+/g, ' ').slice(0, 600);
+  return { text, at: new Date().toISOString() };
+}
+
+// 模型若把改写指令原样交回来，不能当成成功的建议正文。
+export function replyEchoesInstruction(text, instruction) {
+  const norm = (value) => String(value || '').trim().replace(/[\s。！？!?，,、.；;：:]+/gu, '');
+  const reply = norm(text);
+  const ask = norm(instruction);
+  if (!reply || !ask) return true;
+  return reply === ask;
 }
 
 // 取非空字符串数组（画像里的偏好列表）

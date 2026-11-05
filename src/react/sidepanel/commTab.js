@@ -63,8 +63,55 @@ export function sanitizeComm(raw) {
     nodes,
     pending,
     baseline: clean(source.baseline, 600),
+    messages: sanitizeMessages(source.messages),
     sync,
   };
+}
+
+function sanitizeMessages(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const messages = [];
+  const used = new Set();
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const text = clean(item.text ?? item.content, 500);
+    if (!text) continue;
+    const roleRaw = clean(item.role ?? item.from, 16).toLowerCase();
+    const role = /^(me|self|user|mine|candidate|我)$/u.test(roleRaw) ? 'me' : 'hr';
+    let id = clean(item.id, 40) || `msg-${messages.length + 1}`;
+    if (used.has(id)) id = `${id}-${messages.length + 1}`;
+    used.add(id);
+    messages.push({ id, role, text, at: clean(item.at, 40) });
+    if (messages.length >= 40) break;
+  }
+  return messages;
+}
+
+function chatDayLabel(at, now) {
+  if (!at) return '';
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return '';
+  const same = (left, right) => left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+  if (same(date, now)) return '今天';
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (same(date, yesterday)) return '昨天';
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+export function groupChatDays(messages, now = new Date()) {
+  const groups = [];
+  (messages || []).forEach((message, index) => {
+    const label = chatDayLabel(message?.at, now);
+    const last = groups[groups.length - 1];
+    if (!last || last.label !== label) {
+      groups.push({ key: `${label || 'undated'}-${message?.id || index}`, label, messages: [message] });
+    } else {
+      last.messages.push(message);
+    }
+  });
+  return groups;
 }
 
 export function confirmedNodes({ progressStatus, record }) {
@@ -80,7 +127,7 @@ export function confirmedNodes({ progressStatus, record }) {
   }];
 }
 
-// 未完成打招呼时不展示建议框、芯片和胶囊。已发送，或已有招呼之后的确认节点，才开门。
+// 未完成打招呼时不展示建议和输入条。已发送，或已有招呼之后的确认节点，才开门。
 export function isGreetGateOpen({ progressStatus, record }) {
   if (progressStatus === 'sent') return true;
   return sanitizeComm(record).nodes.some((node) => node.id !== 'greet');
@@ -199,7 +246,7 @@ export function suggestionFromChip(baseline, chipId, stage) {
   return { text: `${lead(stage)}想确认下薪资结构：${emphasis}`, emphasis, source: 'chip', chipId };
 }
 
-// 胶囊发送只吃自填文本，不读取芯片。
+// 自填发送只吃输入条里的改写说明，不读取当前选中的建议标签。
 export function suggestionFromDemand(demand, stage) {
   const raw = String(demand || '').trim();
   if (!raw) return null;

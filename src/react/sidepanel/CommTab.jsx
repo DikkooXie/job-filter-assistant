@@ -1,22 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, Image, RefreshCw, Send } from 'lucide-react';
 import {
-  COMM_CHIPS, canExpandNodes, chipLabel, confirmPending, confirmedNodes, defaultBaseline, headlineBadge,
-  ignorePending, isGreetGateOpen, nextChip, railSteps, sanitizeComm, stageFrom, suggestionFromChip,
-  suggestionFromDemand, syncLabel,
+  COMM_CHIPS, canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, groupChatDays,
+  headlineBadge, ignorePending, isGreetGateOpen, nextChip, railSteps, sanitizeComm, stageFrom,
 } from './commTab.js';
-
-function SuggestionText({ text, emphasis }) {
-  if (!emphasis || !text.includes(emphasis)) return text;
-  const index = text.indexOf(emphasis);
-  return (
-    <>
-      {text.slice(0, index)}
-      <em>{emphasis}</em>
-      {text.slice(index + emphasis.length)}
-    </>
-  );
-}
 
 function Drawer({
   nodes, pending, expanded, onToggle, onConfirm, onIgnore,
@@ -35,13 +22,11 @@ function Drawer({
         {stage.sub && <span className="sub">{stage.sub}</span>}
         <span className={`comm-badge ${badge}`}>{badgeText}</span>
       </span>
-      {expandable ? (
+      {expandable && (
         <span className="comm-chev" aria-hidden="true">
           {expanded && <span className="comm-chev-hint">收起</span>}
           {expanded ? '▾' : '▸'}
         </span>
-      ) : (
-        <span className="comm-no-expand">单节点 · 不可展</span>
       )}
     </>
   );
@@ -84,6 +69,27 @@ function Drawer({
   );
 }
 
+function ChatThread({ messages }) {
+  const groups = groupChatDays(messages);
+  return (
+    <div className="comm-chat" aria-label="对话">
+      {groups.map((group) => (
+        <div key={group.key} className="comm-day-group">
+          {group.label && <div className="comm-day">{group.label}</div>}
+          {group.messages.map((message) => (
+            <div key={message.id} className={`comm-row ${message.role === 'me' ? 'me' : 'them'}`}>
+              <div className="comm-bubble">
+                <span className="comm-who">{message.role === 'me' ? '我' : 'HR'}</span>
+                {message.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function GreetWork({
   greeting, scoring, onGreeting, onCopy, onAnalyze, onRegenerate, onSendGreeting, onMarkSent, onNotice,
 }) {
@@ -121,21 +127,27 @@ function GreetWork({
 
 export function CommTab({
   job, progressStatus, record, greeting, scoring,
-  onGreeting, onCopy, onAnalyze, onRegenerate, onSendGreeting, onMarkSent, onOpenChat, onComm, onNotice,
+  onGreeting, onCopy, onAnalyze, onRegenerate, onSendGreeting, onMarkSent, onOpenChat, onComm, onNotice, onSuggest,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [chipId, setChipId] = useState(null);
-  const [rewritten, setRewritten] = useState(false);
   const [demand, setDemand] = useState('');
-  const [demandSuggestion, setDemandSuggestion] = useState(null);
+  const [anchor, setAnchor] = useState('');
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const generation = useRef(0);
+  const inflight = useRef(false);
   const uid = job?.uid;
 
   useEffect(() => {
+    generation.current += 1;
+    inflight.current = false;
     setExpanded(false);
     setChipId(null);
-    setRewritten(false);
     setDemand('');
-    setDemandSuggestion(null);
+    setAnchor('');
+    setDraft('');
+    setBusy(false);
   }, [uid]);
 
   const clean = sanitizeComm(record);
@@ -144,60 +156,68 @@ export function CommTab({
   const pending = open ? clean.pending : null;
   const stage = stageFrom(nodes, pending);
   const baseline = clean.baseline || defaultBaseline(stage);
-  const chipSuggestion = suggestionFromChip(baseline, chipId, stage);
-  const model = demandSuggestion || chipSuggestion;
-  const fromLabel = model.source === 'demand'
-    ? '自填'
-    : model.source === 'chip'
-      ? (rewritten ? '刚按芯片改写' : `单选 · ${chipLabel(model.chipId)}`)
-      : '';
-  const synced = syncLabel(clean.sync);
+  const suggestion = draft || anchor || baseline;
 
-  const pickChip = (id) => {
-    setDemandSuggestion(null);
-    setChipId((current) => {
-      const next = nextChip(current, id);
-      setRewritten(Boolean(current) && next != null);
-      return next;
-    });
+  const rewrite = async (instruction, { chip = null, current } = {}) => {
+    const ask = String(instruction || '').trim();
+    if (!ask || inflight.current) return;
+    const ticket = generation.current;
+    inflight.current = true;
+    setBusy(true);
+    try {
+      const result = await onSuggest?.({
+        instruction: ask,
+        current,
+        stage,
+        messages: clean.messages,
+      });
+      if (ticket !== generation.current) return;
+      const text = String(result?.text || '').trim();
+      if (!text) return;
+      if (chip) {
+        setChipId(chip);
+        setDraft(text);
+      } else {
+        setChipId(null);
+        setAnchor(text);
+        setDraft(text);
+        setDemand('');
+      }
+    } catch (error) {
+      if (ticket !== generation.current) return;
+      onNotice?.(error?.message || '改写失败', true);
+    } finally {
+      if (ticket === generation.current) {
+        inflight.current = false;
+        setBusy(false);
+      }
+    }
   };
 
-  const sendDemand = () => {
-    const next = suggestionFromDemand(demand, stage);
-    if (!next) return;
-    setDemandSuggestion(next);
-    setDemand('');
+  const pickChip = (id) => {
+    const next = nextChip(chipId, id);
+    if (!next) {
+      setChipId(null);
+      setDraft(anchor);
+      return;
+    }
+    const chip = COMM_CHIPS.find((item) => item.id === next);
+    if (!chip || busy) return;
+    rewrite(chip.label, { chip: next, current: anchor || baseline });
   };
 
   return (
     <div className="comm-body" role="tabpanel" aria-label="沟通">
+      <Drawer
+        nodes={nodes}
+        pending={pending}
+        expanded={expanded && canExpandNodes(nodes)}
+        onToggle={() => setExpanded((value) => !value)}
+        onConfirm={() => onComm(confirmPending(clean, progressStatus))}
+        onIgnore={() => onComm(ignorePending(clean))}
+      />
       <div className="comm-scroll">
-        <Drawer
-          nodes={nodes}
-          pending={pending}
-          expanded={expanded && canExpandNodes(nodes)}
-          onToggle={() => setExpanded((value) => !value)}
-          onConfirm={() => onComm(confirmPending(clean, progressStatus))}
-          onIgnore={() => onComm(ignorePending(clean))}
-        />
-        {open ? (
-          <section className="suggest-zone" aria-label="建议回复">
-            <div className="comm-k">
-              <span>建议回复</span>
-              {synced && <span className="comm-sync">{synced}</span>}
-            </div>
-            <div className={`suggest${model.source === 'chip' ? ' hi' : ''}`}>
-              <button type="button" className="sg-copy" aria-label="复制建议" onClick={() => onCopy(model.text)}>
-                <Copy aria-hidden="true" />
-              </button>
-              <div className="sg-top">
-                <span className="sg-lab">模型建议<span>答/问均可</span></span>
-                {fromLabel && <span className={`sg-from${model.source === 'chip' ? ' amber' : ''}`}>{fromLabel}</span>}
-              </div>
-              <div className="sg-body"><SuggestionText text={model.text} emphasis={model.emphasis} /></div>
-            </div>
-          </section>
-        ) : (
+        {open ? <ChatThread messages={clean.messages} /> : (
           <GreetWork
             greeting={greeting}
             scoring={scoring}
@@ -213,27 +233,33 @@ export function CommTab({
       </div>
       {open && (
         <div className="sticky-comm">
-          <div className="comm-chips" role="group" aria-label="建议芯片">
+          <div className={`suggest${busy ? ' is-busy' : ''}`} aria-busy={busy}>
+            <button type="button" className="sg-copy" aria-label="复制建议" disabled={!suggestion} onClick={() => onCopy(suggestion)}>
+              <Copy aria-hidden="true" />
+            </button>
+            <div className="sg-body">{busy ? '正在改写…' : suggestion}</div>
+          </div>
+          <div className="comm-chips" role="group" aria-label="建议标签">
             {COMM_CHIPS.map((chip) => (
-              <button type="button" key={chip.id} className={chipId === chip.id ? 'on' : ''} aria-pressed={chipId === chip.id} onClick={() => pickChip(chip.id)}>
+              <button type="button" key={chip.id} className={chipId === chip.id ? 'on' : ''} aria-pressed={chipId === chip.id} disabled={busy} onClick={() => pickChip(chip.id)}>
                 {chip.label}
               </button>
             ))}
           </div>
-          <form className="comm-pill" onSubmit={(event) => { event.preventDefault(); sendDemand(); }}>
+          <form className="comm-pill" onSubmit={(event) => { event.preventDefault(); rewrite(demand, { current: suggestion }); }}>
             <input
               value={demand}
               onChange={(event) => setDemand(event.target.value)}
-              placeholder="输入沟通需求，或点芯片改上方建议"
-              aria-label="沟通需求"
+              placeholder="说说怎么改这条建议"
+              aria-label="怎么改这条建议"
+              disabled={busy}
             />
-            <button type="submit" className="comm-send" aria-label="发送自填需求">
+            <button type="submit" className="comm-send" aria-label="按说明改写建议" disabled={busy || !demand.trim()}>
               <Send aria-hidden="true" />
             </button>
           </form>
           <div className="comm-foot">
-            <p>芯片单选 · 点选即改写 · 胶囊发送仅自填</p>
-            <button type="button" className="comm-open" onClick={() => onOpenChat(model.text)}>
+            <button type="button" className="comm-open" onClick={() => onOpenChat(suggestion)}>
               <ExternalLink aria-hidden="true" />打开沟通
             </button>
           </div>

@@ -30,6 +30,11 @@ const store = {
     pending: { id: 'onsite', label: '一面', sub: '周五', hint: '摘自对话' },
     baseline: '',
     sync: { at: '2026-11-04T06:22:00.000Z', count: 12 },
+    messages: [
+      { id: 's8-1', role: 'hr', text: '你好，看了你的简历，方便聊聊吗？', at: '2026-11-05T06:00:00.000Z' },
+      { id: 's8-2', role: 'me', text: '你好，方便的，请问岗位还在招吗？', at: '2026-11-05T06:05:00.000Z' },
+      { id: 's8-3', role: 'hr', text: '在招的。你这边什么时候有空面试？周五下午可以吗？', at: '2026-11-05T06:12:00.000Z' },
+    ],
   },
   'job-comm-v1:boss%3As2': {
     nodes: [
@@ -39,6 +44,13 @@ const store = {
     pending: null,
     baseline: '',
     sync: { at: '2026-11-04T03:08:00.000Z', count: 5 },
+    messages: [
+      { id: 's2-1', role: 'hr', text: '你好，看了你的简历，方便聊聊吗？', at: '2026-11-05T02:40:00.000Z' },
+      { id: 's2-2', role: 'me', text: '你好，方便的，请问岗位还在招吗？', at: '2026-11-05T02:48:00.000Z' },
+      { id: 's2-3', role: 'hr', text: '在招的。你这边什么时候有空面试？周五下午可以吗？', at: '2026-11-05T02:55:00.000Z' },
+      { id: 's2-4', role: 'me', text: '周五可以，想先确认下工作内容和编制情况。', at: '2026-11-05T03:02:00.000Z' },
+      { id: 's2-5', role: 'hr', text: '好的，收到。', at: '2026-11-05T03:08:00.000Z' },
+    ],
   },
 };
 const listeners = [];
@@ -103,6 +115,16 @@ function respond(msg) {
       return match;
     }
     case 'AI_TAILOR_RESUME': return { matchedSkills: ['Vue'], missingSkills: [], keywordsToAlign: ['组件'], summaryDraft: '虚构的自我评价草稿。', bulletSuggestions: ['把项目放前'], tips: ['核对真实经历'], note: '' };
+    case 'AI_SUGGEST_REPLY': {
+      const ask = String(msg.instruction || '');
+      if (!ask.trim()) throw new Error('请先说明怎么改这条建议');
+      if (/外包/.test(ask)) return { text: '您好，感谢回复。想再确认一下这个岗位是公司正式编制，还是外包或派遣？方便的话麻烦说明一下。' };
+      if (/加班/.test(ask)) return { text: '您好，感谢回复。想了解一下咱们团队平时的加班情况，周末是否需要到岗？' };
+      if (/工作内容|模块/.test(ask)) return { text: '您好，感谢回复。方便介绍一下这个岗位日常主要负责哪些工作吗？' };
+      if (/面试|视频|现场/.test(ask)) return { text: '您好，感谢回复。想确认一下面试是视频还是现场，需要提前准备什么吗？' };
+      if (/薪资|工资|待遇/.test(ask)) return { text: '您好，感谢回复。想再了解一下薪资结构，底薪、绩效和年终大概如何组成？' };
+      return { text: '您好，感谢回复。我想再礼貌地确认一下刚才提到的安排，方便的话请帮忙说明一下。' };
+    }
     case 'OPEN_OPTIONS': return { ok: true };
     case 'OPEN_JOB_CHAT': return { ok: true, mode: 'opened', tabId: 1 };
     default: return { ok: true };
