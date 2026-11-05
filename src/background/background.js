@@ -1,6 +1,6 @@
 // Service Worker：消息路由 + 岗位收录 + AI 调用编排 + 上下文追踪。
 import { MSG, PLATFORM_META } from '../common/constants.js';
-import { normalizeResponse, platformOfHost } from '../common/platforms.js';
+import { normalizeResponse, platformOfHost, acceptedHintJobId, captureKeyNotes } from '../common/platforms.js';
 import {
   loadJobs, mergeJobs, deleteJob, clearJobs, toggleStar, setJobMatch, setJobGreeting,
   getMatchCache, setMatchCache, clearMatchCache, patchJobDescription,
@@ -20,8 +20,11 @@ import {
   ENSURE_DESC_POLL_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, filterCapturedJobs,
   hasJobDescription, jobCardId, jobUrl, runEnsureDescription, shouldReuseMatchCache,
   decideOpenOriginal, acceptDetailScrape, jobKeyFromUid,
-  scoreGate, missingDescriptionMatch,
+  scoreGate, missingDescriptionError, isolateCall,
 } from '../common/ensureDescription.js';
+import {
+  appendCaptureLog, captureApiKind, captureLogJson, classifyBossDrop, ensureLogEntry, loadCaptureLog,
+} from '../common/captureLog.js';
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
 const tabContext = new Map();
@@ -176,12 +179,42 @@ async function openOptions(page) {
 
 // —— 岗位收录 ——
 async function onJobsCaptured(msg, sender) {
+  if (msg && msg.sniffDrop === 'non-json') {
+    await appendCaptureLog({ kind: 'sniff-drop', reason: 'non-json', api: captureApiKind(msg.url) });
+    return { added: 0, logged: true };
+  }
+  const drop = classifyBossDrop(msg.platform, msg.payload);
+  if (drop) {
+    await appendCaptureLog({
+      kind: 'sniff-drop',
+      reason: drop.reason,
+      code: drop.code || '',
+      api: captureApiKind(msg.url),
+    });
+    return { added: 0, logged: true };
+  }
+  if (msg && msg.hintRejected) {
+    await appendCaptureLog({
+      kind: 'uid-mismatch',
+      reason: 'uid-mismatch',
+      hint: msg.hintRejected,
+      api: captureApiKind(msg.url),
+    });
+  }
   const settings = await loadSettings();
+  // 入库只合并已经嗅到的岗位。缺 JD 不在这里补抓；补抓只发生在之后的分析。
+  const hintJobId = acceptedHintJobId(msg.hintJobId, msg.hintRejected);
   const normalized = normalizeResponse(msg.platform, msg.payload, {
     url: msg.url,
     pageUrl: msg.pageUrl,
-    hintJobId: msg.hintJobId,
+    hintJobId,
   });
+  const notes = captureKeyNotes(msg.platform, msg.payload, {
+    url: msg.url,
+    pageUrl: msg.pageUrl,
+    hintJobId,
+  });
+  for (const note of notes) await appendCaptureLog(note);
   if (!normalized.length) return { added: 0, updated: 0 };
   // 关闭自动收录时不新增岗位，但打开原岗位后仍把 JD 补进已经收录的那一条。
   const existing = settings.autoCapture ? [] : await loadJobs();
@@ -438,10 +471,10 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   }
 
   if (scoreGate(job) !== 'score') {
-    const degraded = missingDescriptionMatch();
-    await setJobMatch(job.uid, degraded);
+    const error = missingDescriptionError();
+    await setJobMatch(job.uid, error.match);
     broadcast(MSG.JOBS_UPDATED, { uid: job.uid, scored: false, degraded: true });
-    throw new Error(degraded.summary);
+    throw error;
   }
 
   const stored = (await loadJobs()).find((item) => item.uid === job.uid);
@@ -525,12 +558,10 @@ async function scoreBatch(uids, { force = false } = {}) {
   for (const uid of list) {
     const job = map.get(uid);
     if (!job) continue;
-    try {
-      const m = await scoreOne(uid, job, { force });
-      results.push({ uid, ok: true, score: m.score });
-    } catch (e) {
-      results.push({ uid, ok: false, error: e instanceof Error ? e.message : String(e) });
-    }
+    // 单个岗位补不到 JD 或打分失败只记在这一条上，后面的岗位继续。
+    const item = await isolateCall(() => scoreOne(uid, job, { force }));
+    if (item.ok) results.push({ uid, ok: true, score: item.value.score });
+    else results.push({ uid, ok: false, error: item.error, ...(item.incomplete ? { incomplete: item.incomplete } : {}) });
     await sleep(400); // 轻限速，避免供应商 429
   }
   broadcast(MSG.JOBS_UPDATED, { batchScored: true });
@@ -538,6 +569,10 @@ async function scoreBatch(uids, { force = false } = {}) {
 }
 
 async function exportJobs(format) {
+  if (format === 'capture-log') {
+    const log = await loadCaptureLog();
+    return { format: 'json', content: captureLogJson(log), count: log.entries.length };
+  }
   const jobs = await loadJobs();
   if (format === 'csv') {
     const cols = ['platform', 'title', 'company', 'salaryText', 'city', 'district', 'experience', 'degree', 'companyIndustry', 'companyScale', 'url'];
@@ -557,8 +592,9 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// 空 JD：先点已打开列表里的对应卡片，点不到再短开原岗位，等被动嗅探写回正文。
-// 嗅探超时后只刮这次打开的详情页。仍然没有正文就降级，不再当成完整分析。
+// 空 JD：分析时才补。先点已打开列表里的卡片，等嗅探；仍空就刮当前页。
+// 抽屉没有岗位标识则拒绝这次正文。还是没有，再短开原岗位，串行，下一条至少隔 ENSURE_DESC_GAP_MS。
+// 点卡等待和短开各最多 ENSURE_DESC_TIMEOUT_MS；刮取最多 DETAIL_SCRAPE_ATTEMPTS 次。一条失败不抛到整批。
 const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, {
   now: () => Date.now(),
   sleep,
@@ -567,13 +603,26 @@ const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, 
   closeTab: (tabId) => chrome.tabs.remove(tabId),
   waitForDescription: waitForJobDescription,
   scrapeDetail: scrapeEnsuredDetail,
+  log: (result) => appendCaptureLog(ensureLogEntry(job.uid, result)),
 }, state));
 
 async function scrapeEnsuredDetail(tabId, job) {
-  const raw = await requestDetailScrape(tabId, jobKeyFromUid(job && job.uid));
-  if (!raw) return '';
-  await writeDetailDescription(job.uid, raw);
-  return raw;
+  const outcome = await requestDetailScrape(tabId, jobKeyFromUid(job && job.uid));
+  const text = outcome && outcome.text ? outcome.text : '';
+  const reason = outcome && outcome.reason ? outcome.reason : '';
+  if (text) {
+    await writeDetailDescription(job.uid, text);
+    return { text, reason: '' };
+  }
+  if (reason) {
+    await appendCaptureLog({
+      kind: 'scrape',
+      uid: job && job.uid,
+      reason,
+      scrape: 'rejected',
+    });
+  }
+  return { text: '', reason: reason || 'empty-or-mismatch' };
 }
 
 async function clickJobCard(job) {
@@ -592,7 +641,7 @@ async function clickJobCard(job) {
     if (sameJobPage(tab.url, job.url)) continue;
     try {
       const res = await chrome.tabs.sendMessage(tab.id, { type: MSG.FETCH_JOB_CARD, jobId });
-      if (res && res.clicked) return true;
+      if (res && res.clicked) return { clicked: true, tabId: tab.id };
     } catch {
       // 这个标签没有内容脚本，试下一个
     }
@@ -639,12 +688,22 @@ async function openOriginalJob(msg) {
   try {
     const filled = await waitForJobDescription(uid);
     if (filled && hasJobDescription(filled)) {
+      await appendCaptureLog({ kind: 'ensure', uid, action: 'open-original', scrape: 'skipped', reason: 'sniffer' }).catch(() => {});
       return { opened: true, waited: true, source: 'sniffer', tabId };
     }
-    const raw = await requestDetailScrape(tabId, jobKeyFromUid(uid));
+    const outcome = await requestDetailScrape(tabId, jobKeyFromUid(uid));
+    const raw = outcome && outcome.text ? outcome.text : '';
     const patched = raw ? await writeDetailDescription(uid, raw) : false;
+    await appendCaptureLog({
+      kind: 'ensure',
+      uid,
+      action: 'open-original',
+      scrape: patched ? 'accepted' : 'rejected',
+      reason: patched ? '' : (outcome && outcome.reason) || 'timeout',
+    }).catch(() => {});
     return { opened: true, waited: true, source: patched ? 'dom' : 'timeout', tabId };
   } catch {
+    await appendCaptureLog({ kind: 'ensure', uid, action: 'open-original', scrape: 'rejected', reason: 'failed' }).catch(() => {});
     return { opened: true, waited: true, source: 'timeout', tabId };
   }
 }
@@ -664,23 +723,25 @@ async function activateOriginalJobTab(url) {
 }
 
 async function requestDetailScrape(tabId, jobKey) {
-  if (tabId == null || !jobKey) return '';
+  if (tabId == null || !jobKey) return { text: '', reason: 'no-tab' };
+  let reason = 'empty';
   for (let attempt = 0; attempt < DETAIL_SCRAPE_ATTEMPTS; attempt++) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { type: MSG.SCRAPE_JOB_DETAIL, jobKey });
-      if (res && res.mismatch) return '';
+      if (res && res.mismatch) return { text: '', reason: res.reason || 'uid-mismatch' };
       const text = acceptDetailScrape({
         expectedKey: jobKey,
         pageKey: res && res.jobKey,
         description: res && res.description,
       });
-      if (text) return text;
+      if (text) return { text, reason: '' };
+      if (res && res.reason) reason = String(res.reason);
     } catch {
-      // 详情页内容脚本可能还没挂上
+      reason = 'content-script';
     }
     if (attempt + 1 < DETAIL_SCRAPE_ATTEMPTS) await sleep(ENSURE_DESC_POLL_MS);
   }
-  return '';
+  return { text: '', reason };
 }
 
 async function writeDetailDescription(uid, description) {

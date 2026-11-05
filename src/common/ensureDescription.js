@@ -87,48 +87,164 @@ function openedTab(opened) {
   return null;
 }
 
+export function missingDescriptionError(at) {
+  const match = missingDescriptionMatch(at);
+  const error = new Error(match.summary);
+  error.incomplete = match.incomplete;
+  error.match = match;
+  return error;
+}
+
+// 批量里一个岗位补不到或打分失败时，记下来并继续下一个。
+export async function isolateCall(run) {
+  try {
+    const value = await run();
+    return {
+      ok: true,
+      value,
+      error: '',
+      incomplete: value && value.incomplete ? String(value.incomplete) : '',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      value: null,
+      error: error instanceof Error ? error.message : String(error || 'failed'),
+      incomplete: error && error.incomplete ? String(error.incomplete) : '',
+    };
+  }
+}
+
+export async function runIsolatedBatch(items, run, { sleep = async () => {}, gap = 0 } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const results = [];
+  for (let index = 0; index < list.length; index++) {
+    const item = await isolateCall(() => run(list[index], index));
+    results.push({ ...item, index });
+    if (gap && index < list.length - 1) await sleep(gap);
+  }
+  return results;
+}
+
+export function readScrapeResult(raw) {
+  if (raw && typeof raw === 'object') {
+    return { text: String(raw.text || ''), reason: String(raw.reason || '') };
+  }
+  const text = raw ? String(raw) : '';
+  return { text, reason: text ? '' : 'empty-or-mismatch' };
+}
+
+function clickOutcome(result) {
+  if (result && typeof result === 'object') {
+    return { clicked: !!result.clicked, tabId: result.tabId == null ? null : result.tabId };
+  }
+  return { clicked: !!result, tabId: null };
+}
+
+async function tryOpen(deps, job) {
+  try {
+    return await deps.openUrl(job);
+  } catch {
+    return null;
+  }
+}
+
+// 点卡成功但页面没有岗位标识时，scrape 记为 rejected，不能把看见的正文算到这个 uid。
+async function applyScrape(deps, tabId, job, trace) {
+  if (typeof deps.scrapeDetail !== 'function') {
+    if (!trace.reason) trace.reason = 'no-scrape';
+    return null;
+  }
+  if (tabId == null) {
+    if (trace.scrape === 'skipped' && !trace.reason) trace.reason = 'no-tab';
+    return null;
+  }
+  trace.scrape = 'attempted';
+  try {
+    const parsed = readScrapeResult(await deps.scrapeDetail(tabId, job));
+    if (!parsed.text) {
+      trace.scrape = 'rejected';
+      trace.reason = parsed.reason || 'empty-or-mismatch';
+      return null;
+    }
+    const again = typeof deps.waitForDescription === 'function' ? await deps.waitForDescription(job.uid) : null;
+    trace.scrape = 'accepted';
+    trace.reason = '';
+    if (again && hasJobDescription(again)) return again;
+    return { ...job, description: parsed.text };
+  } catch {
+    trace.scrape = 'rejected';
+    trace.reason = 'scrape-error';
+    return null;
+  }
+}
+
+async function finishEnsure(deps, result) {
+  if (result.action !== 'skip' && typeof deps.log === 'function') {
+    try { await deps.log(result); } catch { /* 日志失败不影响补抓结果 */ }
+  }
+  return result;
+}
+
 // deps：now / sleep / clickCard / openUrl / closeTab / waitForDescription。
-// scrapeDetail 可选：嗅探超时后，只刮这次短开或已经打开的详情页。
-// openUrl 返回新标签 id、{ tabId, close }、'existing'（已有原岗位页，不关闭）或 null（开不了）。
+// clickCard 可以返回 true，或 { clicked, tabId }。点中后若正文仍空，先刮这一页；
+// 抽屉没有岗位标识时刮取会被拒绝。仍然没有正文，再短开原岗位，一次只处理一条。
+// 浏览列表入库不走这里。openUrl 返回新标签 id、{ tabId, close } 或 null。
 export async function runEnsureDescription(job, deps, state) {
   const current = state || { lastAt: 0 };
-  if (!jobNeedsDescription(job)) return { job, action: 'skip' };
+  const trace = { scrape: 'skipped', reason: '' };
+  if (!jobNeedsDescription(job)) return { job, action: 'skip', scrape: trace.scrape, reason: trace.reason };
   const waitMs = ensureGapWait(current.lastAt, deps.now());
   if (waitMs) await deps.sleep(waitMs);
   let opened = null;
   let clicked = false;
+  let clickTabId = null;
   try {
     try {
-      clicked = !!(await deps.clickCard(job));
+      const click = clickOutcome(await deps.clickCard(job));
+      clicked = click.clicked;
+      clickTabId = click.tabId;
     } catch {
       clicked = false;
     }
-    if (!clicked) {
-      try {
-        opened = await deps.openUrl(job);
-      } catch {
-        opened = null;
-      }
+    if (!clicked) opened = await tryOpen(deps, job);
+    const firstTab = openedTab(opened);
+    if (!clicked && opened == null) {
+      return finishEnsure(deps, { job, action: 'failed', scrape: 'skipped', reason: 'no-page' });
     }
-    const tab = openedTab(opened);
-    if (!clicked && opened == null) return { job, action: 'failed' };
     current.lastAt = deps.now();
     let next = (await deps.waitForDescription(job.uid)) || job;
-    if (!hasJobDescription(next) && tab && typeof deps.scrapeDetail === 'function') {
-      try {
-        const text = await deps.scrapeDetail(tab.tabId, job);
-        if (text) {
-          const again = await deps.waitForDescription(job.uid);
-          next = again && hasJobDescription(again) ? again : { ...next, description: String(text) };
+    if (!hasJobDescription(next) && clicked) {
+      const scraped = await applyScrape(deps, clickTabId, job, trace);
+      if (scraped) next = scraped;
+      if (!hasJobDescription(next)) {
+        opened = await tryOpen(deps, job);
+        const second = openedTab(opened);
+        if (second) {
+          current.lastAt = deps.now();
+          next = (await deps.waitForDescription(job.uid)) || next;
+          if (!hasJobDescription(next)) {
+            const fromPage = await applyScrape(deps, second.tabId, job, trace);
+            if (fromPage) next = fromPage;
+          }
         }
-      } catch {
-        // 刮取失败保持空描述，交给打分门禁标成未完成
       }
+    } else if (!hasJobDescription(next) && firstTab) {
+      const scraped = await applyScrape(deps, firstTab.tabId, job, trace);
+      if (scraped) next = scraped;
     }
-    if (hasJobDescription(next)) return { job: next, action: clicked ? 'click' : 'open' };
-    return { job: next, action: 'timeout' };
+    const filled = hasJobDescription(next);
+    // 已经有正文时，不再把中途的「没刮到」当成最终原因。没正文才保留拒绝原因。
+    if (filled) trace.reason = '';
+    else if (!trace.reason) trace.reason = 'timeout';
+    return finishEnsure(deps, {
+      job: next,
+      action: filled ? (opened ? 'open' : 'click') : 'timeout',
+      scrape: trace.scrape,
+      reason: trace.reason,
+    });
   } catch {
-    return { job, action: 'failed' };
+    return finishEnsure(deps, { job, action: 'failed', scrape: trace.scrape, reason: trace.reason || 'failed' });
   } finally {
     const tab = openedTab(opened);
     if (tab?.close) {

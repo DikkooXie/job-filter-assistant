@@ -88,13 +88,76 @@ export function preferDetailJobKey(queryKey, pageKey, bodyKey, hintKey) {
   const query = str(queryKey);
   const page = str(pageKey);
   const body = str(bodyKey);
-  const hint = str(hintKey);
-  const safeHint = hint && hint.length <= 80 && !/[/?#\s]/.test(hint) ? hint : '';
+  const safeHint = safeDetailHint(hintKey);
   if (query) return query;
   if (page && (!body || page === body)) return page;
   if (page && body && /^\d+$/.test(body) && !/^\d+$/.test(page)) return page;
   if (safeHint && (!body || body === safeHint || /^\d+$/.test(body))) return safeHint;
   return body || page || safeHint || '';
+}
+
+function safeDetailHint(hintKey) {
+  const hint = str(hintKey);
+  return hint && hint.length <= 80 && !/[/?#\s]/.test(hint) ? hint : '';
+}
+
+// 点卡 hint 只在响应体没有另一条非数字 id 时对齐。错配时拒绝把 JD 写到点卡 uid，仍返回响应体自己的 id。
+export function detailUidDecision({ queryKey, pageKey, bodyKey, hintKey } = {}) {
+  const jobId = preferDetailJobKey(queryKey, pageKey, bodyKey, hintKey);
+  const hint = safeDetailHint(hintKey);
+  const body = str(bodyKey);
+  const rejected = !!(hint && body && !/^\d+$/.test(body) && body !== hint && jobId !== hint);
+  const hintApplied = !!(hint && jobId === hint && body !== hint);
+  return {
+    jobId,
+    hintApplied,
+    rejected,
+    reason: rejected ? 'uid-mismatch' : hintApplied ? 'uid-hint' : '',
+    hint,
+    bodyKey: body,
+  };
+}
+
+// 内容脚本拒绝错配时不把 hint 交给归一化，避免数字 id 规则把别岗写进点卡 uid。
+export function acceptedHintJobId(hintJobId, hintRejected) {
+  if (str(hintRejected)) return '';
+  return str(hintJobId);
+}
+
+// 只报告 hint 被采用或被拒绝。不读 JD 字段，也不改岗位对象。
+export function captureKeyNotes(platform, payload, opts = {}) {
+  if (platform !== PLATFORM.boss || !isObj(payload)) return [];
+  if (payload.code !== 0 && payload.code !== '0') return [];
+  const zp = isObj(payload.zpData) ? payload.zpData : {};
+  const notes = [];
+  if (isObj(zp.jobInfo)) {
+    const note = noteForBossInfo(zp.jobInfo, opts);
+    if (note) notes.push(note);
+  }
+  const card = bossCardPayload(zp);
+  if (card && card !== zp.jobInfo) {
+    const note = noteForBossInfo(card, opts);
+    if (note) notes.push(note);
+  }
+  return notes;
+}
+
+function noteForBossInfo(info, opts) {
+  const bodyKey = str(info.encryptId) || str(info.encryptJobId) || str(info.jobId);
+  const decision = detailUidDecision({
+    queryKey: jobKeyFromUrl(opts.url),
+    pageKey: jobKeyFromPageUrl(opts.pageUrl),
+    bodyKey,
+    hintKey: opts.hintJobId,
+  });
+  if (!decision.rejected && !decision.hintApplied) return null;
+  return {
+    kind: decision.rejected ? 'uid-mismatch' : 'uid-hint',
+    reason: decision.reason,
+    uid: decision.jobId ? `${PLATFORM.boss}:${decision.jobId}` : '',
+    hint: decision.hint,
+    bodyKey: decision.bodyKey,
+  };
 }
 
 // ============ BOSS 直聘 ============

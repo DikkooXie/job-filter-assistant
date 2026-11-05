@@ -84,11 +84,32 @@
   let captured = 0;
   // 点列表卡片后的短时间里，详情包若只带回数字 id，用这次点击的 encrypt id 对齐岗位库。
   let pendingClick = null;
-  function takeDetailHint() {
-    if (!pendingClick) return '';
-    const hint = Date.now() - pendingClick.at > 8000 ? '' : pendingClick.jobId;
+  function bodyKeyFromPayload(payload) {
+    try {
+      const zp = payload && (payload.zpData || payload.resultbody || payload.resultBody);
+      const detailObj = zp && zp.jobDetail && typeof zp.jobDetail === 'object' ? zp.jobDetail : null;
+      const info = zp && (zp.jobInfo || zp.jobCard || detailObj || (zp.job && zp.job.item) || zp);
+      if (!info || typeof info !== 'object') return '';
+      const key = info.encryptId || info.encryptJobId || info.jobId || info.jobid;
+      return key ? String(key) : '';
+    } catch {
+      return '';
+    }
+  }
+  // 另一条非数字 id 不消耗点卡 hint，也不把 hint 贴到那条响应上。
+  function takeDetailHint(payload) {
+    if (!pendingClick) return { hintJobId: '', hintRejected: '' };
+    if (Date.now() - pendingClick.at > 8000) {
+      pendingClick = null;
+      return { hintJobId: '', hintRejected: '' };
+    }
+    const hint = pendingClick.jobId;
+    const body = bodyKeyFromPayload(payload);
+    if (body && body !== hint && !/^\d+$/.test(body)) {
+      return { hintJobId: '', hintRejected: hint };
+    }
     pendingClick = null;
-    return hint;
+    return { hintJobId: hint, hintRejected: '' };
   }
   // 打开详情页时，同一次响应可能先被当场收到，又被 replay 再投递一次。短时间内同一 URL 只处理一遍。
   const handledUrlAt = new Map();
@@ -110,6 +131,12 @@
     if (ev.source !== window) return;
     const d = ev.data;
     if (!d || d.source !== CHANNEL || d.type === 'replay-request') return;
+    if (d.type === 'sniff-drop') {
+      if (d.reason === 'non-json' && d.platform) {
+        send(MSG.JOBS_CAPTURED, { platform: d.platform, url: d.url || '', pageUrl: location.href, sniffDrop: 'non-json' });
+      }
+      return;
+    }
     if (!d.platform || d.payload == null) return;
     // 当场收到的照常处理。重放只补「当时还没人听」的那次，避免同一响应入库两遍。
     const seen = duplicateCapture(d);
@@ -121,8 +148,11 @@
       if (jobKey) send(MSG.CURRENT_JOB, { platform: d.platform, jobKey });
       // 详情响应同样丢给归一化：命中列表结构则收录，否则被安全忽略。
       // 列表抽屉不改 URL，数字 id 靠刚才点的卡片对齐，不另发站点请求。
-      const hintJobId = takeDetailHint();
-      send(MSG.JOBS_CAPTURED, hintJobId ? { ...capturedMsg, hintJobId } : capturedMsg);
+      const hint = takeDetailHint(d.payload);
+      const captured = { ...capturedMsg };
+      if (hint.hintJobId) captured.hintJobId = hint.hintJobId;
+      if (hint.hintRejected) captured.hintRejected = hint.hintRejected;
+      send(MSG.JOBS_CAPTURED, captured);
       return;
     }
     if (d.platform === 'boss') recordBossOnline(d.payload); // 记录每个岗位的 HR 在线状态
@@ -418,8 +448,13 @@
     if (msg.type === MSG.SCRAPE_JOB_DETAIL) {
       const jobKey = detectJobKey();
       const expected = String(msg.jobKey || '');
+      // 列表抽屉不改 URL。没有页面岗位标识时不读正文，避免把上一张卡的 JD 串过来。
+      if (expected && !jobKey) {
+        sendResponse({ ok: false, description: '', jobKey: '', mismatch: true, reason: 'page-key-missing' });
+        return true;
+      }
       if (expected && jobKey && expected !== jobKey) {
-        sendResponse({ ok: false, description: '', jobKey, mismatch: true });
+        sendResponse({ ok: false, description: '', jobKey, mismatch: true, reason: 'uid-mismatch' });
         return true;
       }
       const description = scrapeVisibleJobDetail();

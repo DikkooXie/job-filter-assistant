@@ -56,6 +56,11 @@
     deliver(message);
   }
 
+  // 非 JSON 不进重放队列，也不带响应正文。网络失败不是「非 JSON」，不记。
+  function postDrop(platform, url) {
+    deliver({ source: CHANNEL, type: 'sniff-drop', platform, url, reason: 'non-json' });
+  }
+
   // —— fetch ——
   const origFetch = window.fetch ? window.fetch.bind(window) : null;
   if (origFetch) {
@@ -66,7 +71,7 @@
         const platform = matchApi(url);
         if (platform) {
           promise
-            .then((res) => res.clone().json().then((data) => post(platform, url, data)))
+            .then((res) => res.clone().json().then((data) => post(platform, url, data)).catch(() => postDrop(platform, url)))
             .catch(() => {});
         }
       } catch {}
@@ -90,7 +95,9 @@
         try {
           const data = JSON.parse(String(this.responseText));
           post(platform, url, data);
-        } catch {}
+        } catch {
+          postDrop(platform, url);
+        }
       });
     }
     return origSend.apply(this, args);

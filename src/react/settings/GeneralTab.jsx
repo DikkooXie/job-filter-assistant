@@ -112,6 +112,7 @@ export default function GeneralTab({ settings, updateSettings, exportData, setCo
         <div className="gen-actions">
           <button type="button" className="gen-btn" onClick={() => exportData('json')}>JSON</button>
           <button type="button" className="gen-btn" onClick={() => exportData('csv')}>CSV</button>
+          <button type="button" className="gen-btn" onClick={() => exportData('capture-log')}>补抓日志</button>
         </div>
       </div>
       <div className="gen-line">
