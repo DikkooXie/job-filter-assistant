@@ -119,7 +119,6 @@ function GreetWork({
           <RefreshCw aria-hidden="true" />{scoring ? '生成中…' : '重新生成'}
         </button>
       </div>
-      <p className="comm-wait"><span className="comm-wait-dot" aria-hidden="true" />等 HR 回复 · 完成招呼后解锁建议区</p>
       <button type="button" className="comm-sent" onClick={onMarkSent}>我已发出招呼</button>
     </section>
   );
