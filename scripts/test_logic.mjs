@@ -25,7 +25,7 @@ import {
 } from '../src/common/profileImport.js';
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
-  analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, descriptionGap, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, jobDescriptionText, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, warningZone,
+  analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, descriptionGap, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, jobDescriptionText, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, shouldReturnToListAfterDelete, warningZone,
 } from '../src/react/sidepanel/browseModel.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
 import {
@@ -2144,6 +2144,33 @@ test('返回列表时焦点落在刚看过的岗位，岗位没了就回到仍�
   assert.deepEqual(returnFocusTarget([], 'missing'), { kind: 'search' });
 });
 
+test('详情删除成功后回到列表，列表不再包含该岗位', () => {
+  const jobs = [{ uid: 'a', title: '甲' }, { uid: 'b', title: '乙' }];
+  const next = jobs.filter((job) => job.uid !== 'a');
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'a', deletedUid: 'a', jobs: next,
+  }), true);
+  assert.deepEqual(next.map((job) => job.uid), ['b']);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'a', deletedUid: 'a', jobs,
+  }), false);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'list', selectedUid: null, deletedUid: 'b', jobs: jobs.filter((job) => job.uid !== 'b'),
+  }), false);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'b', deletedUid: 'a', jobs: next,
+  }), false);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'a', deletedUid: 'a', screenNow: 'list', selectedUidNow: 'a', jobs: next,
+  }), false);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'a', deletedUid: 'a', screenNow: 'detail', selectedUidNow: 'b', jobs: next,
+  }), false);
+  assert.equal(shouldReturnToListAfterDelete({
+    screen: 'detail', selectedUid: 'a', deletedUid: 'a', screenNow: 'detail', selectedUidNow: null, jobs: next,
+  }), true);
+});
+
 test('流程文案只读取已有进度，不发明新状态', () => {
   assert.equal(flowStatusLabel(undefined), '待打招呼');
   assert.equal(flowStatusLabel('prepared'), '招呼语已准备');
@@ -2544,6 +2571,22 @@ test('智能分析抽屉按 4pt 终锁留白', () => {
   assert.match(browse, /\.analyze-actions \{[^}]*margin-top:\s*12px/);
   assert.match(browse, /\.analyze-actions \{[^}]*gap:\s*8px/);
   assert.match(browse, /\.sheet-content \{[^}]*padding:\s*8px 16px 22px/);
+});
+
+test('详情删除成功才回到列表，批量删除不改去向', () => {
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const deleteFn = sidepanel.slice(sidepanel.indexOf('async function deleteJob'), sidepanel.indexOf('function dislikeJob'));
+  const deleteChecked = sidepanel.slice(sidepanel.indexOf('const deleteChecked'), sidepanel.indexOf('const startAnalysis'));
+  const detailDelete = sidepanel.match(/onDelete=\{\(\) => job && deleteJob\([^}]*\)\}/)?.[0] || '';
+  const listDelete = sidepanel.match(/onDelete=\{\(\) => deleteJob\(item[^}]*\)\}/)?.[0] || '';
+  assert.match(deleteFn, /shouldReturnToListAfterDelete/);
+  assert.match(deleteFn, /backToList\(\)/);
+  assert.match(detailDelete, /backToList/);
+  assert.doesNotMatch(listDelete, /backToList/);
+  assert.match(deleteChecked, /askConfirm/);
+  assert.match(deleteChecked, /JOB_DELETE/);
+  assert.doesNotMatch(deleteChecked, /backToList|shouldReturnToListAfterDelete/);
 });
 
 test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
