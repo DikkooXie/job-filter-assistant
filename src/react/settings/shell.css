@@ -431,6 +431,120 @@
   background: color-mix(in srgb, var(--s-ink-3) 80%, var(--s-page));
 }
 
+.settings-tl-features {
+  margin-bottom: 4px;
+}
+
+.settings-tl-note {
+  margin: 0;
+  color: var(--s-ink-3);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-tl-sec {
+  margin-top: 4px;
+}
+
+.settings-tl-sec + .settings-tl-sec {
+  margin-top: 2px;
+}
+
+.settings-tl-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px 6px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--s-ink-3);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-tl-sec-head:hover {
+  background: var(--s-surface-2);
+  color: var(--s-ink-2);
+}
+
+.settings-tl-sec-head[aria-expanded="true"] {
+  color: var(--s-ink-1);
+}
+
+.settings-tl-sec-head:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+}
+
+.settings-tl-chev {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+
+.settings-tl-sec-head[aria-expanded="true"] .settings-tl-chev {
+  transform: rotate(90deg);
+}
+
+.settings-tl-sec-title {
+  flex: 1;
+  font-weight: 550;
+}
+
+.settings-tl-sec-count {
+  flex: none;
+  padding-right: 2px;
+  color: var(--s-ink-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.settings-tl-sec-body {
+  padding: 2px 0 6px 20px;
+}
+
+.settings-tl-sec-body[hidden] {
+  display: none;
+}
+
+.settings-log-empty {
+  padding: 108px 0 24px;
+}
+
+.settings-log-empty p {
+  margin: 0;
+  color: var(--s-ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-log-empty a {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--s-ink-3);
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--s-ink-3) 35%, transparent);
+}
+
+.settings-log-empty a:hover {
+  color: var(--s-ink-2);
+}
+
 .settings-main {
   min-width: 0;
   padding: 48px 48px 96px;
