@@ -121,6 +121,7 @@ export async function fetchLatestRelease(channel = 'stable') {
 /**
  * 当前通道的更新日志。请求地址与预览检查相同（最近 20 条 Release），
  * 稳定通道再去掉预发布。404 视为空列表。
+ * 每条的 sections 按 Release 正文的 `## 新增` / `## UI 优化` / `## 缺陷修复` 拆开。
  */
 export async function fetchReleaseNotes(channel = 'stable') {
   const url = releaseRequest('preview').url;

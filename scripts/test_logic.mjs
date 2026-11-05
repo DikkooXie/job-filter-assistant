@@ -44,7 +44,7 @@ import {
   parseVersion, compareVersions, parseRelease, extensionIdFromKey, packageManifestError, isSameInstall, safeEntryPath, planWrites, unzipGuard, toHex, staleAssets,
   RELEASE_API, RELEASES_API, NO_PREVIEW_MESSAGE, AHEAD_OF_STABLE_MESSAGE,
   normalizeUpdateChannel, releaseRequest, selectPreviewRelease, resolvePreviewCheck, assessUpdate,
-  changelogTitle, changelogSummary, changelogBullets, formatChangelogWhen, isCurrentChangelogVersion, changelogEntries, RELEASES_PAGE,
+  changelogTitle, changelogSummary, changelogBullets, changelogSections, formatChangelogWhen, isCurrentChangelogVersion, changelogEntries, RELEASES_PAGE,
 } from '../src/common/update.js';
 
 let pass = 0;
@@ -1258,6 +1258,7 @@ test('更新日志按通道过滤正式版和预发布，版本号标题不重�
   assert.equal(withPreview[0].title, '');
   assert.equal(withPreview[0].summary, '预览：列表抽屉');
   assert.deepEqual(withPreview[0].bullets, ['列表抽屉']);
+  assert.deepEqual(withPreview[0].sections, { added: [], ui: [], fixed: [] });
   assert.equal(withPreview[0].prerelease, true);
   assert.equal(withPreview[0].publishedAt, '2026-11-04T07:26:09Z');
   assert.throws(() => changelogEntries({ message: 'nope' }), /格式不正确/);
@@ -1332,6 +1333,59 @@ test('更新日志条目去掉预览前缀、issue 号和方案代号，时间�
   assert.match(formatChangelogWhen(iso), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   assert.equal(formatChangelogWhen(''), '');
   assert.equal(formatChangelogWhen('nope'), '');
+});
+test('更新日志按 Release 的三个二级标题分区，旧正文不塞进新增', () => {
+  const empty = { added: [], ui: [], fixed: [] };
+  assert.deepEqual(changelogSections(''), empty);
+  assert.deepEqual(changelogSections('简化更新流程：首次点「立即更新」时直接弹出文件夹选择窗口。'), empty);
+  assert.deepEqual(changelogSections('本版暂无整理好的更新说明'), empty);
+  assert.deepEqual(changelogSections('## 新增功能\n不该算新增'), empty);
+  assert.deepEqual(changelogSections('### 新增\n三级标题不算'), empty);
+  assert.deepEqual(changelogSections('##新增\n没有空格不算'), empty);
+  assert.deepEqual(
+    changelogSections('前言不归类\n## 其他\n也不归类\n## 新增\n\n'),
+    empty,
+  );
+  assert.deepEqual(
+    changelogSections('## 新增\n智能分析支持按当前画像补充跑分析（#64）'),
+    { added: ['智能分析支持按当前画像补充跑分析'], ui: [], fixed: [] },
+  );
+  assert.deepEqual(
+    changelogSections('## 新增\n第一句。第二句仍是同一条\n- 列表项（#2）\n· 圆点项\n* 星号项'),
+    { added: ['第一句。第二句仍是同一条', '列表项', '圆点项', '星号项'], ui: [], fixed: [] },
+  );
+  assert.deepEqual(
+    changelogSections([
+      '## UI 优化',
+      '列表警示区改为摘要两行，悬停可展开条目',
+      '删除确认改为再次点击确认删除',
+      '',
+      '## 缺陷修复',
+      '修复列表删除与「不喜欢」交界处的界面抖动',
+    ].join('\n')),
+    {
+      added: [],
+      ui: ['列表警示区改为摘要两行，悬停可展开条目', '删除确认改为再次点击确认删除'],
+      fixed: ['修复列表删除与「不喜欢」交界处的界面抖动'],
+    },
+  );
+  assert.deepEqual(
+    changelogSections('## 缺陷修复\n先写的修复\n## 新增\n后写的新增\n## UI 优化\n- 方案 A 的间距'),
+    { added: ['后写的新增'], ui: ['的间距'], fixed: ['先写的修复'] },
+  );
+  assert.deepEqual(
+    changelogSections('## 新增\n可见\n```\n## UI 优化\n代码块里的标题\n```\n仍算新增'),
+    { added: ['可见', '仍算新增'], ui: [], fixed: [] },
+  );
+  const listed = changelogEntries([
+    release({
+      tag_name: 'v1.0.3.6', name: 'v1.0.3.6', prerelease: true,
+      published_at: '2026-11-04T06:16:10Z',
+      body: '## UI 优化\n列表更清晰\n',
+    }),
+  ], 'preview');
+  assert.deepEqual(listed[0].sections, { added: [], ui: ['列表更清晰'], fixed: [] });
+  assert.deepEqual(listed[0].sections.added, []);
   assert.equal(isCurrentChangelogVersion('1.0.3.9', '1.0.3.9'), true);
   assert.equal(isCurrentChangelogVersion('v1.0.3.9', '1.0.3.9'), true);
   assert.equal(isCurrentChangelogVersion('1.0.3.8', '1.0.3.9'), false);
@@ -2017,6 +2071,15 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(logPage, /formatChangelogWhen/);
   assert.match(logPage, /当前/);
   assert.match(logPage, /返回设置/);
+  assert.match(logPage, /CHANGELOG_SECTION_ORDER/);
+  assert.match(logPage, /aria-expanded/);
+  assert.match(logPage, /暂时还没有整理好的版本说明/);
+  assert.match(logPage, /在 GitHub 查看/);
+  assert.match(logPage, /本版暂无整理好的更新说明/);
+  assert.doesNotMatch(logPage, /还没有发布/);
+  assert.doesNotMatch(logPage, /还没有正式版/);
+  assert.doesNotMatch(logPage, /本版无新功能/);
+  assert.doesNotMatch(logPage, /item\.bullets/);
   assert.doesNotMatch(logPage, /示意条目/);
   assert.doesNotMatch(logPage, /CHANGELOG\.md/);
   assert.doesNotMatch(logPage, /预览通道/);
@@ -2036,6 +2099,10 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(shellCss, /gap:\s*8px 12px/);
   assert.match(shellCss, /margin-bottom:\s*8px/);
   assert.match(shellCss, /gap:\s*5px/);
+  assert.match(shellCss, /settings-tl-sec-head/);
+  assert.match(shellCss, /rotate\(90deg\)/);
+  assert.match(shellCss, /settings-tl-sec-body\[hidden\]/);
+  assert.match(shellCss, /settings-tl-features/);
   assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
   assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);

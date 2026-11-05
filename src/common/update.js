@@ -150,6 +150,7 @@ function plainBullet(text) {
  * Release 正文 → 面向用户的条目。展示层清洗，不改发版说明本身。
  * 去掉重复的「预览：/稳定：」、issue 号和「方案 X」代号；按行、分号或句号拆开。
  * 没有可显示内容时返回空数组，调用方只留版本和时间。
+ * 更新日志页不再平铺这份结果，版内三分区见 changelogSections。
  */
 export function changelogBullets(notes) {
   const raw = String(notes || '').replace(/\r\n/g, '\n').trim();
@@ -209,6 +210,50 @@ export function isCurrentChangelogVersion(version, installed) {
   return !!current && current === release;
 }
 
+/** 版内三分区。标题字面与 GitHub Release 一致，顺序固定。 */
+export const CHANGELOG_SECTION_ORDER = [
+  { key: 'added', title: '新增' },
+  { key: 'ui', title: 'UI 优化' },
+  { key: 'fixed', title: '缺陷修复' },
+];
+
+const CHANGELOG_SECTION_KEYS = new Map(CHANGELOG_SECTION_ORDER.map((section) => [section.title, section.key]));
+
+function stripListMarker(line) {
+  return String(line || '')
+    .replace(/^(?:[-*]|[•·∙●])\s+/, '')
+    .replace(/^\d+[.)．]\s+/, '');
+}
+
+/**
+ * 按 `## 新增` / `## UI 优化` / `## 缺陷修复` 拆 Release 正文。
+ * 每条非空行是一件事，去掉列表标记和 issue / 方案代号，不按句号再拆。
+ * 没有这三节标题的旧正文不归入「新增」；三类都空时调用方显示未分类说明。
+ */
+export function changelogSections(notes) {
+  const sections = { added: [], ui: [], fixed: [] };
+  const raw = String(notes || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let current = null;
+  let fence = false;
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim();
+    if (/^```/.test(trimmed)) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    const heading = trimmed.match(/^##\s+(.+)$/);
+    if (heading) {
+      current = CHANGELOG_SECTION_KEYS.get(heading[1].trim()) || null;
+      continue;
+    }
+    if (!current || !trimmed || /^#{1,6}(?:\s|$)/.test(trimmed) || /^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) continue;
+    const text = plainBullet(stripListMarker(trimmed));
+    if (text) sections[current].push(text);
+  }
+  return sections;
+}
+
 /** 把 Release 正文收成一行摘要：去掉常见标记，超长截断。 */
 export function changelogSummary(notes, limit = 80) {
   const plain = String(notes || '')
@@ -229,6 +274,7 @@ export function changelogSummary(notes, limit = 80) {
  * 最近发布列表 → 更新日志条目。数据仍是 GitHub Releases，不另建一份日志。
  * 稳定通道只留正式版；预览通道保留预发布（草稿始终丢掉）。没有安装包也可以出现在日志里。
  * 返回前按发布时间降序；时间戳缺失、非法或相同时按版本号降序。
+ * sections 是版内三分区；没有对应标题时三个数组都为空，不把旧正文塞进「新增」。
  */
 export function changelogEntries(list, channel = 'stable') {
   if (!Array.isArray(list)) throw new Error('发布列表格式不正确');
@@ -246,6 +292,7 @@ export function changelogEntries(list, channel = 'stable') {
       title: changelogTitle(json.name, version, tag),
       summary: changelogSummary(json.body),
       bullets: changelogBullets(json.body),
+      sections: changelogSections(json.body),
       publishedAt: json.published_at || '',
       pageUrl: json.html_url || '',
       prerelease: json.prerelease === true,
