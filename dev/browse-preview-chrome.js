@@ -175,7 +175,6 @@ window.chrome = {
 window.__previewCapture = (partial = {}) => {
   const uid = partial.uid || `boss:new-${Date.now()}`;
   const job = {
-    uid,
     platform: 'boss',
     jobId: uid,
     title: '海外投放专员',

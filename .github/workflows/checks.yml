@@ -3,7 +3,10 @@ name: Checks
 on:
   push:
     branches:
+      - main
+      - dev
       - feat/vite-ui-roadmap
+      - 'refactor/**'
       - 'agent/**'
   pull_request:
 
@@ -25,5 +28,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build

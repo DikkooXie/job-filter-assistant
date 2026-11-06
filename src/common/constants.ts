@@ -1,5 +1,6 @@
 // 全局常量：存储键、消息类型、平台定义。
 // 被 background 与各 UI 页以 ES module 方式引入；content-script 侧有独立副本（见 src/content）。
+import type { JobFilters, Mode, Settings } from './types.js';
 
 export const STORAGE_KEYS = {
   settings: 'jobHelperSettingsV1',
@@ -13,7 +14,7 @@ export const STORAGE_KEYS = {
 // 平台标识。目前只支持 BOSS；51job 支持已移除（见 docs/refactor-plan.md P2）。
 export const PLATFORM = {
   boss: 'boss',
-};
+} as const;
 
 export const PLATFORM_META = {
   [PLATFORM.boss]: {
@@ -31,7 +32,7 @@ export const PLATFORM_META = {
 export const MODE = {
   auto: 'auto',
   boss: PLATFORM.boss,
-};
+} as const satisfies Record<string, Mode>;
 
 // 消息协议（background <-> content <-> UI）
 export const MSG = {
@@ -90,7 +91,7 @@ export const MSG = {
 export const SNIFFER_CHANNEL = 'job-helper:sniffer';
 
 // 默认设置
-export function defaultSettings() {
+export function defaultSettings(): Settings {
   return {
     mode: MODE.auto,
     autoCapture: true, // 浏览时自动收录嗅探到的岗位
@@ -110,7 +111,7 @@ export function defaultSettings() {
 }
 
 // 本地筛选规则（不消耗 AI，先过一遍）
-export function defaultFilters() {
+export function defaultFilters(): JobFilters {
   return {
     enabled: false,
     keywordsInclude: [], // 命中任一即保留（岗位名/JD/标签）

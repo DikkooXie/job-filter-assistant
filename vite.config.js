@@ -1,6 +1,7 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { transform } from 'esbuild';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -20,6 +21,30 @@ async function markDevBuild(buildDir) {
   console.log(`已标记为开发构建：${toDevManifest(manifest).name}`);
 }
 
+// 这些目录不参与页面打包，但要保持 dist 里的原路径（manifest 指向它们）。
+// 源文件可以是 .ts，构建时用 esbuild 逐文件转译成同名 .js；其余文件原样复制。
+const COMPILED_DIRS = ['src/background', 'src/content', 'src/common'];
+const COPIED_DIRS = ['icons', 'src/vendor'];
+
+async function compileDir(sourceDir, targetDir) {
+  await mkdir(targetDir, { recursive: true });
+  for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
+    const source = resolve(sourceDir, entry.name);
+    if (entry.isDirectory()) {
+      await compileDir(source, resolve(targetDir, entry.name));
+      continue;
+    }
+    if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
+      const target = resolve(targetDir, entry.name.replace(/\.ts$/, '.js'));
+      // 纯类型文件（如 types.ts）转译后是空模块，不必产出。
+      const { code } = await transform(await readFile(source, 'utf8'), { loader: 'ts', format: 'esm', target: 'es2022' });
+      if (code.trim()) await writeFile(target, code);
+      continue;
+    }
+    await cp(source, resolve(targetDir, entry.name));
+  }
+}
+
 function copyExtensionFiles() {
   let buildDir = outDir;
   return {
@@ -28,10 +53,14 @@ function copyExtensionFiles() {
       buildDir = resolve(config.root, config.build.outDir);
     },
     async writeBundle() {
-      for (const path of ['manifest.json', 'icons', 'src/background', 'src/content', 'src/common', 'src/vendor']) {
-        const destination = resolve(buildDir, path);
-        await mkdir(resolve(destination, '..'), { recursive: true });
-        await cp(resolve(projectDir, path), destination, { recursive: true });
+      const manifestTarget = resolve(buildDir, 'manifest.json');
+      await mkdir(dirname(manifestTarget), { recursive: true });
+      await cp(resolve(projectDir, 'manifest.json'), manifestTarget);
+      for (const path of COPIED_DIRS) {
+        await cp(resolve(projectDir, path), resolve(buildDir, path), { recursive: true });
+      }
+      for (const path of COMPILED_DIRS) {
+        await compileDir(resolve(projectDir, path), resolve(buildDir, path));
       }
       await markDevBuild(buildDir);
     },
@@ -61,7 +90,7 @@ export default defineConfig({
           const ids = chunkInfo.moduleIds || [];
           if (ids.some((id) => id.includes('/components/ui/badge'))) return 'assets/badge.js';
           // 画像和开发标识在同一个共享 chunk。浮窗不再引用 build.js 时，Rollup 会把原 profile.js 改名为 build.js，更新后旧文件会留下。
-          if (ids.some((id) => id.includes('/common/profile.js'))) return 'assets/profile.js';
+          if (ids.some((id) => /\/common\/profile\.(js|ts)$/.test(id))) return 'assets/profile.js';
           return `assets/${chunkInfo.name}.js`;
         },
         assetFileNames: 'assets/[name][extname]',
