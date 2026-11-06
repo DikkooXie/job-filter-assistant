@@ -40,6 +40,8 @@ export interface Job {
   star?: boolean;
   match?: Match | null;
   greeting?: string;
+  /** 用户编辑中的招呼语草稿（发送前的最终文案）。 */
+  greetingDraft?: string;
   comm?: CommRecord;
   raw?: Record<string, unknown>;
   _filter?: FilterResult;
@@ -52,19 +54,29 @@ export interface MatchDims {
   location: number | null;
 }
 
+export interface MatchGreetings {
+  short?: string;
+  standard?: string;
+  detailed?: string;
+  /** 兼容历史字段名（如旧缓存的 enthusiastic / concise）。 */
+  [key: string]: string | undefined;
+}
+
 export interface Match {
-  score: number;
-  verdict: Verdict;
-  eligible: boolean;
-  blockers: string[];
-  dims: MatchDims | null;
-  reasons: string[];
-  gaps: string[];
-  risks: string[];
-  summary: string;
-  greetings: { standard: string; enthusiastic: string; concise: string; [key: string]: string };
-  greeting: string;
-  at: string;
+  /** 缺正文等降级结果带此标记；正常打分不带。 */
+  incomplete?: string;
+  score: number | null;
+  verdict?: Verdict;
+  eligible?: boolean;
+  blockers?: string[];
+  dims?: MatchDims | null;
+  reasons?: string[];
+  gaps?: string[];
+  risks?: string[];
+  summary?: string;
+  greetings?: MatchGreetings;
+  greeting?: string;
+  at?: string;
   profileFp?: string;
 }
 
@@ -157,10 +169,19 @@ export interface AIProvider {
   name: string;
   protocol: Protocol;
   baseUrl: string;
+  /** 可选：完全自定义请求地址，非空则覆盖 baseUrl 拼接。 */
+  requestUrl?: string;
+  /** 可选：自定义模型列表地址。 */
+  modelsUrl?: string;
   model: string;
   apiKey: string;
   anthropicVersion: string;
+  /** 自定义请求头（如网关鉴权）。 */
+  extraHeaders?: Record<string, string>;
+  temperature?: number;
+  maxTokens?: number;
   discoveredModels: string[];
+  updatedAt?: string;
 }
 
 /** 沟通/招呼记录，按岗位存在岗位库里。 */

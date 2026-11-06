@@ -10,18 +10,28 @@
 //   gemini           —— Google Gemini generateContent 格式。
 //
 // 任何未列出的厂商，只要兼容上述任一协议，填自定义 baseUrl 即可接入。
+import type { AIProvider, Protocol } from '../types.js';
 
-export const PROTOCOLS = ['openai-chat', 'openai-responses', 'anthropic', 'gemini'];
+export const PROTOCOLS = ['openai-chat', 'openai-responses', 'anthropic', 'gemini'] as const;
 
-export const PROTOCOL_LABELS = {
+export const PROTOCOL_LABELS: Record<Protocol, string> = {
   'openai-chat': 'OpenAI 兼容 (/chat/completions)',
   'openai-responses': 'OpenAI Responses (/responses)',
   anthropic: 'Anthropic (/v1/messages)',
   gemini: 'Google Gemini',
 };
 
+export interface ProviderPreset {
+  key: string;
+  name: string;
+  protocol: Protocol;
+  baseUrl: string;
+  model: string;
+  hint: string;
+}
+
 // 预设：一键创建常见供应商。baseUrl 为官方地址，用户填 key+model 即用。
-export const PRESETS = [
+export const PRESETS: ProviderPreset[] = [
   {
     key: 'openai',
     name: 'OpenAI',
@@ -104,15 +114,17 @@ export const PRESETS = [
   },
 ];
 
-export function newId() {
-  const rnd = (globalThis.crypto && crypto.randomUUID)
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.floor(Math.random() * 1e9).toString(16)}`;
+export function newId(): string {
+  const rnd =
+    globalThis.crypto && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.floor(Math.random() * 1e9).toString(16)}`;
   return `prov-${rnd}`;
 }
 
-export function providerFromPreset(presetKey) {
+export function providerFromPreset(presetKey: string): AIProvider {
   const p = PRESETS.find((x) => x.key === presetKey) || PRESETS.find((x) => x.key === 'custom');
+  if (!p) throw new Error('缺少自定义供应商预设');
   return sanitizeProvider({
     id: newId(),
     name: p.name,
@@ -126,9 +138,11 @@ export function providerFromPreset(presetKey) {
 }
 
 // 清洗单个供应商配置
-export function sanitizeProvider(input) {
+export function sanitizeProvider(input: unknown): AIProvider {
   const o = isObj(input) ? input : {};
-  const protocol = PROTOCOLS.includes(o.protocol) ? o.protocol : 'openai-chat';
+  const protocol: Protocol = (PROTOCOLS as readonly string[]).includes(String(o.protocol))
+    ? (o.protocol as Protocol)
+    : 'openai-chat';
   return {
     id: s(o.id) || newId(),
     name: s(o.name) || '未命名供应商',
@@ -147,10 +161,10 @@ export function sanitizeProvider(input) {
   };
 }
 
-export function sanitizeProviderList(list) {
+export function sanitizeProviderList(list: unknown): AIProvider[] {
   if (!Array.isArray(list)) return [];
-  const seen = new Set();
-  const out = [];
+  const seen = new Set<string>();
+  const out: AIProvider[] = [];
   for (const item of list) {
     const p = sanitizeProvider(item);
     if (seen.has(p.id)) p.id = newId();
@@ -161,53 +175,60 @@ export function sanitizeProviderList(list) {
 }
 
 // 该配置是否可用于真实请求
-export function isProviderUsable(p) {
+export function isProviderUsable(p: unknown): boolean {
   const prov = sanitizeProvider(p);
   const needsKey = !isLocalUrl(prov.baseUrl);
   return !!(prov.baseUrl && prov.model && (!needsKey || prov.apiKey));
 }
 
 // —— helpers ——
-function isObj(x) {
+function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
-function s(x) {
+
+function s(x: unknown): string {
   return typeof x === 'string' ? x.trim() : x == null ? '' : String(x).trim();
 }
-function numOr(x, d) {
+
+function numOr(x: unknown, d: number): number {
   const n = Number(x);
   return Number.isFinite(n) ? n : d;
 }
-function intOr(x, d) {
-  const n = parseInt(x, 10);
+
+function intOr(x: unknown, d: number): number {
+  const n = parseInt(String(x), 10);
   return Number.isFinite(n) && n > 0 ? n : d;
 }
-export function cleanUrl(x) {
+
+export function cleanUrl(x: unknown): string {
   const v = s(x).replace(/\/+$/, '');
   if (!v) return '';
   return v;
 }
-function cleanModel(x) {
+
+function cleanModel(x: unknown): string {
   const v = s(x);
   if (!v) return '';
   if (v.length > 200) return v.slice(0, 200);
   return v;
 }
-function cleanHeaders(x) {
+
+function cleanHeaders(x: unknown): Record<string, string> {
   if (!isObj(x)) return {};
-  const out = {};
+  const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(x)) {
     const key = s(k);
     if (key) out[key] = s(v);
   }
   return out;
 }
-function cleanModels(x) {
+
+function cleanModels(x: unknown): string[] {
   if (!Array.isArray(x)) return [];
-  const seen = new Set();
-  const out = [];
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const m of x) {
-    const id = typeof m === 'string' ? s(m) : s(m && m.id);
+    const id = typeof m === 'string' ? s(m) : s(isObj(m) ? m.id : '');
     if (id && !seen.has(id)) {
       seen.add(id);
       out.push(id);
@@ -215,7 +236,8 @@ function cleanModels(x) {
   }
   return out.sort();
 }
-export function isLocalUrl(url) {
+
+export function isLocalUrl(url: string): boolean {
   try {
     const u = new URL(url);
     return u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
@@ -225,9 +247,9 @@ export function isLocalUrl(url) {
 }
 
 // URL 合法性校验（用于保存前提示）：https 强制，localhost 放行 http
-export function validateProvider(p) {
+export function validateProvider(p: unknown): { ok: boolean; errors: string[]; provider: AIProvider } {
   const prov = sanitizeProvider(p);
-  const errors = [];
+  const errors: string[] = [];
   if (!prov.name) errors.push('名称不能为空');
   if (!prov.baseUrl) {
     errors.push('Base URL 不能为空');

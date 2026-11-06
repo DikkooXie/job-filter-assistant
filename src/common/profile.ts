@@ -1,10 +1,11 @@
 // 个人画像：schema、默认值、清洗、完整度评分、storage 读写。
 // 通用职业版（不限设计师），供匹配打分与简历抽取共用。
 import { STORAGE_KEYS } from './constants.js';
+import type { Profile, ProfilePreference } from './types.js';
 
 const KEY = STORAGE_KEYS.profile;
 
-export function emptyProfile() {
+export function emptyProfile(): Profile {
   return {
     schemaVersion: 1,
     // 求职目标
@@ -45,8 +46,8 @@ export function emptyProfile() {
 }
 
 // 两个历史字段共同构成用户看到的雷点，忽略大小写去重。
-export function getDealbreakers(preference = {}) {
-  const seen = new Set();
+export function getDealbreakers(preference: Partial<ProfilePreference> = {}): string[] {
+  const seen = new Set<string>();
   return [...(preference.dealbreakers || []), ...(preference.avoidKeywords || [])].filter((item) => {
     const key = item.trim().toLowerCase();
     if (!key || seen.has(key)) return false;
@@ -56,7 +57,7 @@ export function getDealbreakers(preference = {}) {
 }
 
 // 把「可以接受」的说明追加进画像备注。不改字段名；空句和已有的同一句不再追加。
-export function appendPreferenceNote(notes, sentence) {
+export function appendPreferenceNote(notes: unknown, sentence: unknown): string {
   const line = String(sentence ?? '').trim();
   const current = String(notes ?? '').trim();
   if (!line) return current;
@@ -67,12 +68,11 @@ export function appendPreferenceNote(notes, sentence) {
 
 // 把「不喜欢」的整句写进雷点。不进 notes：备注只表示可以接受，匹配提示要求据此不降分。
 // 整句保持一条，不按顿号拆开，避免把自然语言拆成多条标签。
-export function appendDealbreaker(preference = {}, sentence) {
-  const source = preference && typeof preference === 'object' ? preference : {};
-  const base = {
-    ...source,
-    avoidKeywords: Array.isArray(source.avoidKeywords) ? source.avoidKeywords : [],
-    dealbreakers: Array.isArray(source.dealbreakers) ? source.dealbreakers : [],
+export function appendDealbreaker(preference: unknown, sentence: unknown): ProfilePreference {
+  const source = isObj(preference) ? preference : {};
+  const base: ProfilePreference = {
+    avoidKeywords: Array.isArray(source.avoidKeywords) ? (source.avoidKeywords as string[]) : [],
+    dealbreakers: Array.isArray(source.dealbreakers) ? (source.dealbreakers as string[]) : [],
     notes: typeof source.notes === 'string' ? source.notes : '',
   };
   const line = String(sentence ?? '').trim();
@@ -83,7 +83,7 @@ export function appendDealbreaker(preference = {}, sentence) {
 }
 
 // 保留原字段归属；删除时同时删除两处，新雷点写入 dealbreakers。
-export function updateDealbreakers(preference, next) {
+export function updateDealbreakers(preference: ProfilePreference, next: string[]): ProfilePreference {
   const keys = new Set(next.map((item) => item.trim().toLowerCase()));
   const avoidKeywords = preference.avoidKeywords.filter((item) => keys.has(item.trim().toLowerCase()));
   const oldKeys = new Set(getDealbreakers(preference).map((item) => item.trim().toLowerCase()));
@@ -92,8 +92,14 @@ export function updateDealbreakers(preference, next) {
   return { ...preference, avoidKeywords, dealbreakers };
 }
 
+interface ScoreItem {
+  label: string;
+  weight: number;
+  ok: (p: Profile) => boolean;
+}
+
 // 完整度评分项（权重合计 100）
-const SCORE_ITEMS = [
+const SCORE_ITEMS: ScoreItem[] = [
   { label: '目标岗位', weight: 14, ok: (p) => p.target.jobTitles.length > 0 },
   { label: '目标城市', weight: 8, ok: (p) => p.target.cities.length > 0 },
   { label: '期望薪资', weight: 8, ok: (p) => num(p.target.salaryMinK) || num(p.target.salaryMaxK) },
@@ -107,7 +113,14 @@ const SCORE_ITEMS = [
   { label: '项目/成就', weight: 6, ok: (p) => !!p.projectSummary.trim() || p.highlights.length > 0 },
 ];
 
-export function scoreProfile(profile) {
+export interface ProfileScore {
+  score: number;
+  completed: number;
+  total: number;
+  missing: string[];
+}
+
+export function scoreProfile(profile: unknown): ProfileScore {
   const p = sanitizeProfile(profile);
   const done = SCORE_ITEMS.filter((it) => it.ok(p));
   return {
@@ -119,7 +132,7 @@ export function scoreProfile(profile) {
 }
 
 // 深度清洗：任意输入（含 AI 抽取草稿）-> 合法 profile
-export function sanitizeProfile(input) {
+export function sanitizeProfile(input: unknown): Profile {
   const base = emptyProfile();
   if (!isObj(input)) return base;
   const t = isObj(input.target) ? input.target : {};
@@ -162,26 +175,28 @@ export function sanitizeProfile(input) {
 }
 
 // —— storage ——
-export async function loadProfile() {
+export async function loadProfile(): Promise<Profile> {
   const got = await chrome.storage.local.get(KEY);
   return sanitizeProfile(got[KEY]);
 }
-export async function saveProfile(profile) {
+
+export async function saveProfile(profile: unknown): Promise<Profile> {
   const clean = sanitizeProfile(profile);
   clean.updatedAt = new Date().toISOString();
   await chrome.storage.local.set({ [KEY]: clean });
   return clean;
 }
-export async function clearProfile() {
+
+export async function clearProfile(): Promise<Profile> {
   await chrome.storage.local.remove(KEY);
   return emptyProfile();
 }
 
 // 合并 AI 抽取草稿到现有画像（用户确认后调用）：数组去重合并，标量空则填充
-export function mergeDraft(current, draft) {
+export function mergeDraft(current: unknown, draft: unknown): Profile {
   const a = sanitizeProfile(current);
   const d = sanitizeProfile(draft);
-  const mergeArr = (x, y) => arr([...x, ...y]);
+  const mergeArr = (x: string[], y: string[]) => arr([...x, ...y]);
   return sanitizeProfile({
     ...a,
     target: {
@@ -217,21 +232,24 @@ export function mergeDraft(current, draft) {
 }
 
 // —— helpers ——
-function isObj(x) {
+function isObj(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
 }
-function s(x) {
+
+function s(x: unknown): string {
   return typeof x === 'string' ? x.trim() : x == null ? '' : String(x).trim();
 }
-function arr(x) {
-  if (!Array.isArray(x)) {
+
+function arr(x: unknown): string[] {
+  let source = x;
+  if (!Array.isArray(source)) {
     // 容忍 AI 返回逗号分隔字符串
-    if (typeof x === 'string' && x.trim()) x = x.split(/[,，、;；\n]/);
+    if (typeof source === 'string' && source.trim()) source = source.split(/[,，、;；\n]/);
     else return [];
   }
-  const seen = new Set();
-  const out = [];
-  for (const v of x) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of source as unknown[]) {
     const item = s(v);
     const key = item.toLowerCase();
     if (item && !seen.has(key)) {
@@ -241,15 +259,18 @@ function arr(x) {
   }
   return out;
 }
-function posNum(x) {
+
+function posNum(x: unknown): number | null {
   const n = Number(x);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
-function nonNegNum(x) {
+
+function nonNegNum(x: unknown): number | null {
   if (x == null || (typeof x === 'string' && !x.trim())) return null;
   const n = Number(x);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
-function num(x) {
+
+function num(x: unknown): boolean {
   return typeof x === 'number' && Number.isFinite(x) && x > 0;
 }

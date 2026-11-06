@@ -3,9 +3,25 @@
 import { redactProfileForAi, redactJobForAi, redactText } from './privacy.js';
 import { jobText } from '../filters.js';
 import { getDealbreakers } from '../profile.js';
+import type { ChatMessage } from './client.js';
+import type { Job, Match, MatchDims, Verdict } from '../types.js';
+
+export interface PromptOptions {
+  includeCompany?: boolean;
+  includeName?: boolean;
+}
+
+// 用 type 而不是 interface，才能赋给带索引签名的 MatchGreetings。
+export type Greetings = {
+  short: string;
+  standard: string;
+  detailed: string;
+};
+
+export type GreetingKey = keyof Greetings;
 
 // —— 简历文本 -> 画像草稿 ——
-export function buildResumeExtractPrompt(resumeText) {
+export function buildResumeExtractPrompt(resumeText: unknown): ChatMessage[] {
   const system =
     '你是资深招聘与职业规划顾问。请从求职者简历中抽取结构化个人画像，只输出 JSON，不要任何解释或 Markdown 围栏。' +
     '只提取材料明确支持的事实；区分实际经历、实习、计划、推断和待核实内容，计划与假设不能写成已具备的能力或成果。' +
@@ -44,13 +60,13 @@ export function buildResumeExtractPrompt(resumeText) {
 }
 
 // —— 单岗位匹配打分 ——
-export function buildMatchPrompt(profile, job, opts = {}) {
+export function buildMatchPrompt(profile: unknown, job: Job | null | undefined, opts: PromptOptions = {}): ChatMessage[] {
   const includeCompany = opts.includeCompany !== false;
   const includeName = !!opts.includeName;
   const p = redactProfileForAi(profile, { includeName });
   const j = redactJobForAi(job, { includeCompany });
   // 历史字段共同构成雷点，字面命中仅作为语义判断的线索。
-  const pref = (profile && profile.preference) || {};
+  const pref: Record<string, unknown> = isObj(profile) && isObj(profile.preference) ? profile.preference : {};
   const dealbreakers = getDealbreakers({ dealbreakers: strArr(pref.dealbreakers), avoidKeywords: strArr(pref.avoidKeywords) });
   const hits = dealbreakers.filter((k) => jobText(j).includes(k.toLowerCase()));
 
@@ -107,14 +123,13 @@ export function buildMatchPrompt(profile, job, opts = {}) {
 }
 
 // 校验/规整匹配结果
-export function sanitizeMatch(obj) {
-  const o = typeof obj === 'object' && obj ? obj : {};
+export function sanitizeMatch(obj: unknown): Match {
+  const o = isObj(obj) ? obj : {};
   let score = Math.round(Number(o.score));
   if (!Number.isFinite(score)) score = 0;
   score = Math.max(0, Math.min(100, score));
-  const verdicts = ['strong', 'good', 'fair', 'weak'];
-  let verdict = verdicts.includes(o.verdict) ? o.verdict : scoreToVerdict(score);
-  const arr = (x) =>
+  const verdict: Verdict = isVerdict(o.verdict) ? o.verdict : scoreToVerdict(score);
+  const arr = (x: unknown): string[] =>
     Array.isArray(x) ? x.map((v) => String(v).trim()).filter(Boolean).slice(0, 6) : [];
   const greetings = normalizeGreetings(o);
   const blockers = arr(o.blockers);
@@ -137,11 +152,11 @@ export function sanitizeMatch(obj) {
 }
 
 // 归一化四维分项分：每项收敛到 0-100 整数；缺失返回 null（UI 据此决定是否展示分项）
-export function normalizeDims(obj) {
-  const o = typeof obj === 'object' && obj ? obj : {};
-  const one = (v) => {
+export function normalizeDims(obj: unknown): MatchDims | null {
+  const o = isObj(obj) ? obj : {};
+  const one = (v: unknown): number | null => {
     if (v == null || v === '') return null;
-    let n = Math.round(Number(v));
+    const n = Math.round(Number(v));
     if (!Number.isFinite(n)) return null;
     return Math.max(0, Math.min(100, n));
   };
@@ -151,7 +166,7 @@ export function normalizeDims(obj) {
   return dims;
 }
 
-export const DIM_LABELS = {
+export const DIM_LABELS: Record<keyof MatchDims, string> = {
   skill: '技能',
   experience: '经验',
   requirement: '要求命中',
@@ -160,10 +175,10 @@ export const DIM_LABELS = {
 
 // 归一化三档招呼语：接受新结构 {greetings:{short,standard,detailed}} 或旧单字段 {greeting:"..."}。
 // 任一档缺失时用已有的其它档兜底，保证三档都非空。
-export function normalizeGreetings(obj) {
-  const o = typeof obj === 'object' && obj ? obj : {};
-  const g = typeof o.greetings === 'object' && o.greetings ? o.greetings : {};
-  const clean = (v) => String(v == null ? '' : v).trim().slice(0, 600);
+export function normalizeGreetings(obj: unknown): Greetings {
+  const o = isObj(obj) ? obj : {};
+  const g = isObj(o.greetings) ? o.greetings : {};
+  const clean = (v: unknown): string => String(v == null ? '' : v).trim().slice(0, 600);
   let short = clean(g.short);
   let standard = clean(g.standard || o.greeting); // 旧缓存的 greeting 视作标准版
   let detailed = clean(g.detailed);
@@ -175,19 +190,20 @@ export function normalizeGreetings(obj) {
   return { short, standard, detailed };
 }
 
-export const GREETING_LEVELS = [
+export const GREETING_LEVELS: Array<{ key: GreetingKey; label: string }> = [
   { key: 'short', label: '精简版' },
   { key: 'standard', label: '标准版' },
   { key: 'detailed', label: '详细版' },
 ];
 
-export function scoreToVerdict(score) {  if (score >= 80) return 'strong';
+export function scoreToVerdict(score: number): Verdict {
+  if (score >= 80) return 'strong';
   if (score >= 65) return 'good';
   if (score >= 45) return 'fair';
   return 'weak';
 }
 
-export const VERDICT_LABELS = {
+export const VERDICT_LABELS: Record<Verdict, string> = {
   strong: '强匹配',
   good: '较匹配',
   fair: '一般',
@@ -196,7 +212,11 @@ export const VERDICT_LABELS = {
 
 // —— 按岗位 JD 生成简历定制建议 ——
 // 基于求职者画像 + 目标岗位，给出「怎么改简历去投这个岗位」的建议（只建议、不伪造、不落库）。
-export function buildTailorResumePrompt(profile, job, opts = {}) {
+export function buildTailorResumePrompt(
+  profile: unknown,
+  job: Job | null | undefined,
+  opts: PromptOptions = {},
+): ChatMessage[] {
   const includeCompany = opts.includeCompany !== false;
   const includeName = !!opts.includeName;
   const p = redactProfileForAi(profile, { includeName });
@@ -229,10 +249,21 @@ export function buildTailorResumePrompt(profile, job, opts = {}) {
   ];
 }
 
+export interface TailorSuggestion {
+  matchedSkills: string[];
+  missingSkills: string[];
+  keywordsToAlign: string[];
+  summaryDraft: string;
+  bulletSuggestions: string[];
+  tips: string[];
+  note: string;
+  at: string;
+}
+
 // 校验/规整简历定制建议结果
-export function sanitizeTailor(obj) {
-  const o = typeof obj === 'object' && obj ? obj : {};
-  const arr = (x, n = 8) =>
+export function sanitizeTailor(obj: unknown): TailorSuggestion {
+  const o = isObj(obj) ? obj : {};
+  const arr = (x: unknown, n = 8): string[] =>
     Array.isArray(x) ? x.map((v) => String(v).trim()).filter(Boolean).slice(0, n) : [];
   return {
     matchedSkills: arr(o.matchedSkills, 8),
@@ -248,18 +279,38 @@ export function sanitizeTailor(obj) {
 
 // —— 按改写指令重写一条可发给 HR 的建议 ——
 // instruction 是「怎么改」，不是要原样发出去的正文。
+export interface SuggestReplyInput {
+  profile?: unknown;
+  job?: Job | null;
+  stage?: { label?: string; sub?: string } | null;
+  current?: unknown;
+  instruction?: unknown;
+  messages?: Array<{ role?: string; text?: unknown }> | null;
+  includeCompany?: boolean;
+}
+
 export function buildSuggestReplyPrompt({
-  profile, job, stage, current, instruction, messages, includeCompany = true,
-} = {}) {
+  profile,
+  job,
+  stage,
+  current,
+  instruction,
+  messages,
+  includeCompany = true,
+}: SuggestReplyInput = {}): ChatMessage[] {
   const p = redactProfileForAi(profile, { includeName: false });
   const j = redactJobForAi(job, { includeCompany });
   const draft = redactText(String(current || '')).trim().slice(0, 600);
   const ask = redactText(String(instruction || '')).trim().slice(0, 300);
-  const chat = (Array.isArray(messages) ? messages : []).slice(-12).map((item) => {
-    const who = item?.role === 'me' ? '我' : 'HR';
-    const text = redactText(String(item?.text || '')).trim().slice(0, 300);
-    return text ? `${who}：${text}` : '';
-  }).filter(Boolean).join('\n');
+  const chat = (Array.isArray(messages) ? messages : [])
+    .slice(-12)
+    .map((item) => {
+      const who = item?.role === 'me' ? '我' : 'HR';
+      const text = redactText(String(item?.text || '')).trim().slice(0, 300);
+      return text ? `${who}：${text}` : '';
+    })
+    .filter(Boolean)
+    .join('\n');
   const stageText = [stage?.label, stage?.sub].filter(Boolean).join(' · ');
   const system =
     '你是求职沟通助手。根据候选人的改写指令，写一条可以直接发给 HR 的完整、委婉、口语化短消息。' +
@@ -280,22 +331,29 @@ export function buildSuggestReplyPrompt({
     `【画像】\n${JSON.stringify(p)}`,
     `【改写指令】\n${ask || '（空）'}`,
     `请按此 JSON 输出改写后的回复：\n${schema}`,
-  ].filter(Boolean).join('\n\n');
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   return [
     { role: 'system', content: system },
     { role: 'user', content: user },
   ];
 }
 
-export function sanitizeSuggestReply(obj) {
-  const source = typeof obj === 'object' && obj ? obj : {};
+export interface SuggestReply {
+  text: string;
+  at: string;
+}
+
+export function sanitizeSuggestReply(obj: unknown): SuggestReply {
+  const source = isObj(obj) ? obj : {};
   const text = String(source.text || '').trim().replace(/\s+/g, ' ').slice(0, 600);
   return { text, at: new Date().toISOString() };
 }
 
 // 模型若把改写指令原样交回来，不能当成成功的建议正文。
-export function replyEchoesInstruction(text, instruction) {
-  const norm = (value) => String(value || '').trim().replace(/[\s。！？!?，,、.；;：:]+/gu, '');
+export function replyEchoesInstruction(text: unknown, instruction: unknown): boolean {
+  const norm = (value: unknown): string => String(value || '').trim().replace(/[\s。！？!?，,、.；;：:]+/gu, '');
   const reply = norm(text);
   const ask = norm(instruction);
   if (!reply || !ask) return true;
@@ -303,6 +361,14 @@ export function replyEchoesInstruction(text, instruction) {
 }
 
 // 取非空字符串数组（画像里的偏好列表）
-function strArr(x) {
+function strArr(x: unknown): string[] {
   return Array.isArray(x) ? x.map((v) => String(v).trim()).filter(Boolean) : [];
+}
+
+function isObj(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+function isVerdict(value: unknown): value is Verdict {
+  return value === 'strong' || value === 'good' || value === 'fair' || value === 'weak';
 }

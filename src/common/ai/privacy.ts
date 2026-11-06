@@ -1,7 +1,16 @@
 // 发送给第三方 AI 前的隐私脱敏。默认隐去联系方式、个人链接等敏感信息。
 // 岗位公司名一般是公开招聘信息，是否发送由设置控制（默认发送以提升分析质量）。
+import type { Job, Profile } from '../types.js';
 
-export function redactText(text) {
+export interface RedactProfileOptions {
+  includeName?: boolean;
+}
+
+export interface RedactJobOptions {
+  includeCompany?: boolean;
+}
+
+export function redactText(text: unknown): string {
   let s = String(text || '');
   s = s.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu, '[邮箱已隐藏]');
   // 手机号（中国大陆）
@@ -18,9 +27,10 @@ export function redactText(text) {
   return s;
 }
 
-// 对画像做脱敏拷贝：默认剥离本地展示用的姓名
-export function redactProfileForAi(profile, { includeName = false } = {}) {
-  const p = JSON.parse(JSON.stringify(profile || {}));
+// 对画像做脱敏拷贝：默认剥离本地展示用的姓名。
+// 输入允许是任意来源（含残缺对象），JSON 深拷贝后按 Profile 使用；只在拼提示词时调用。
+export function redactProfileForAi(profile: unknown, { includeName = false }: RedactProfileOptions = {}): Profile {
+  const p = JSON.parse(JSON.stringify(profile || {})) as Profile;
   if (!includeName && p.basics) p.basics.name = '';
   if (p.preference && typeof p.preference.notes === 'string') {
     p.preference.notes = redactText(p.preference.notes);
@@ -30,9 +40,9 @@ export function redactProfileForAi(profile, { includeName = false } = {}) {
   return p;
 }
 
-// 对岗位做脱敏拷贝
-export function redactJobForAi(job, { includeCompany = true } = {}) {
-  const j = { ...job };
+// 对岗位做脱敏拷贝。输入缺失时当作空岗位，只用于拼提示词。
+export function redactJobForAi(job: Job | null | undefined, { includeCompany = true }: RedactJobOptions = {}): Job {
+  const j: Job = { ...(job || ({} as Job)) };
   delete j.raw;
   delete j.savedAt;
   j.hrName = '';

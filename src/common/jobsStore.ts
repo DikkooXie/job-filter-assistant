@@ -1,49 +1,71 @@
 // 岗位库：storage.local 读写、去重合并、容量淘汰、匹配分缓存。
 import { STORAGE_KEYS } from './constants.js';
 import { patchExistingDescription } from './ensureDescription.js';
+import type { Job, Match } from './types.js';
 
 const JOBS_KEY = STORAGE_KEYS.jobs;
 const CACHE_KEY = STORAGE_KEYS.matchCache;
 
 // 收录和打分都会读改写岗位库。不串行时，后完成的 save 会盖掉先写上的描述或分数。
-let jobsWrite = Promise.resolve();
+let jobsWrite: Promise<unknown> = Promise.resolve();
 
-function withJobsWrite(task) {
+function withJobsWrite<T>(task: () => Promise<T>): Promise<T> {
   const run = jobsWrite.then(task, task);
-  jobsWrite = run.then(() => {}, () => {});
+  jobsWrite = run.then(
+    () => {},
+    () => {},
+  );
   return run;
 }
 
-export async function loadJobs() {
+export async function loadJobs(): Promise<Job[]> {
   const got = await chrome.storage.local.get(JOBS_KEY);
   const list = got[JOBS_KEY];
-  return Array.isArray(list) ? list : [];
+  return Array.isArray(list) ? (list as Job[]) : [];
 }
 
-export async function saveJobs(list) {
+export async function saveJobs(list: unknown): Promise<void> {
   await chrome.storage.local.set({ [JOBS_KEY]: Array.isArray(list) ? list : [] });
+}
+
+export interface MergeJobsOptions {
+  dedupe?: boolean;
+  maxJobs?: number;
+}
+
+export interface MergeJobsResult {
+  jobs: Job[];
+  added: number;
+  updated: number;
+  addedUids: string[];
 }
 
 // 合并新抓取的岗位到库中。dedupe=true 时按 uid 去重（更新已存在的字段）。
 // 返回 { jobs, added, updated }
-export function mergeJobs(incoming, { dedupe = true, maxJobs = 800 } = {}) {
+export function mergeJobs(
+  incoming: readonly Job[],
+  { dedupe = true, maxJobs = 800 }: MergeJobsOptions = {},
+): Promise<MergeJobsResult> {
   return withJobsWrite(() => mergeJobsBody(incoming, { dedupe, maxJobs }));
 }
 
-async function mergeJobsBody(incoming, { dedupe = true, maxJobs = 800 } = {}) {
+async function mergeJobsBody(
+  incoming: readonly Job[],
+  { dedupe = true, maxJobs = 800 }: MergeJobsOptions,
+): Promise<MergeJobsResult> {
   const now = new Date().toISOString();
   const existing = await loadJobs();
-  const byUid = new Map(existing.map((j) => [j.uid, j]));
+  const byUid = new Map<string, Job>(existing.map((j) => [j.uid, j]));
   let added = 0;
   let updated = 0;
-  const addedUids = [];
+  const addedUids: string[] = [];
 
   for (const raw of incoming) {
     if (!raw || !raw.uid) continue;
-    if (dedupe && byUid.has(raw.uid)) {
-      const prev = byUid.get(raw.uid);
+    const prev = byUid.get(raw.uid);
+    if (dedupe && prev) {
       // 用新数据补全空字段，保留 savedAt / star / match
-      const merged = {
+      const merged: Job = {
         ...prev,
         ...raw,
         description: raw.description || prev.description,
@@ -74,7 +96,7 @@ async function mergeJobsBody(incoming, { dedupe = true, maxJobs = 800 } = {}) {
   return { jobs: list, added, updated, addedUids };
 }
 
-export function deleteJob(uid) {
+export function deleteJob(uid: string): Promise<Job[]> {
   return withJobsWrite(async () => {
     const list = await loadJobs();
     const next = list.filter((j) => j.uid !== uid);
@@ -83,14 +105,14 @@ export function deleteJob(uid) {
   });
 }
 
-export function clearJobs() {
+export function clearJobs(): Promise<Job[]> {
   return withJobsWrite(async () => {
     await chrome.storage.local.set({ [JOBS_KEY]: [] });
     return [];
   });
 }
 
-export function toggleStar(uid) {
+export function toggleStar(uid: string): Promise<Job[]> {
   return withJobsWrite(async () => {
     const list = await loadJobs();
     const next = list.map((j) => (j.uid === uid ? { ...j, star: !j.star } : j));
@@ -100,7 +122,7 @@ export function toggleStar(uid) {
 }
 
 // 写回单个岗位的匹配分。profileFp 由打分路径盖上，这里原样保存，不另算指纹。
-export function setJobMatch(uid, match) {
+export function setJobMatch(uid: string, match: Match | null): Promise<Job[]> {
   return withJobsWrite(async () => {
     const list = await loadJobs();
     const next = list.map((j) => (j.uid === uid ? { ...j, match } : j));
@@ -110,7 +132,7 @@ export function setJobMatch(uid, match) {
 }
 
 // 只补已有岗位的描述。已有正文保持不动。
-export function patchJobDescription(uid, description) {
+export function patchJobDescription(uid: string, description: string) {
   return withJobsWrite(async () => {
     const jobs = await loadJobs();
     const result = patchExistingDescription(jobs, uid, description);
@@ -120,7 +142,7 @@ export function patchJobDescription(uid, description) {
 }
 
 // 保存用户编辑后的招呼语草稿（发送前的最终文案，独立于 AI 生成的 match.greetings）
-export function setJobGreeting(uid, text) {
+export function setJobGreeting(uid: string, text: string | null | undefined): Promise<Job[]> {
   return withJobsWrite(async () => {
     const list = await loadJobs();
     const draft = String(text == null ? '' : text).slice(0, 800);
@@ -131,13 +153,15 @@ export function setJobGreeting(uid, text) {
 }
 
 // —— 匹配分缓存：key = uid + profile 指纹，避免画像没变时重复调用 AI ——
-export async function getMatchCache() {
+export async function getMatchCache(): Promise<Record<string, Match>> {
   const got = await chrome.storage.local.get(CACHE_KEY);
-  return got[CACHE_KEY] && typeof got[CACHE_KEY] === 'object' ? got[CACHE_KEY] : {};
+  return got[CACHE_KEY] && typeof got[CACHE_KEY] === 'object' ? (got[CACHE_KEY] as Record<string, Match>) : {};
 }
-export async function setMatchCache(cache) {
+
+export async function setMatchCache(cache: Record<string, Match>): Promise<void> {
   await chrome.storage.local.set({ [CACHE_KEY]: cache });
 }
-export async function clearMatchCache() {
+
+export async function clearMatchCache(): Promise<void> {
   await chrome.storage.local.remove(CACHE_KEY);
 }

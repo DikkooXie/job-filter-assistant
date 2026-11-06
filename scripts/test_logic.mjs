@@ -8,7 +8,7 @@ import vm from 'node:vm';
 
 import { defaultFilters, defaultSettings, MSG, STORAGE_KEYS } from '../src/common/constants.js';
 import { isDevBuild, toDevManifest } from '../src/common/build.js';
-import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
+import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.ts';
 import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/pages/options/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary, jobKeyFromPageUrl, preferDetailJobKey, detailUidDecision, acceptedHintJobId, captureKeyNotes } from '../src/common/platforms.js';
 import {
@@ -20,7 +20,7 @@ import {
 import {
   appendCaptureEntry, appendCaptureLog, captureApiKind, captureLogJson, classifyBossDrop, emptyCaptureLog, ensureLogEntry, loadCaptureLog, sanitizeCaptureEntry,
 } from '../src/common/captureLog.js';
-import { loadJobs, mergeJobs, setJobMatch } from '../src/common/jobsStore.js';
+import { loadJobs, mergeJobs, setJobMatch } from '../src/common/jobsStore.ts';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile, sanitizeProfile, mergeDraft, getDealbreakers, updateDealbreakers } from '../src/common/profile.js';
 import { pickActiveProvider, profileFingerprint, withProfileFp } from '../src/common/profileFingerprint.js';
 import {
@@ -1088,7 +1088,7 @@ test('列表行展示协议、模型和主机', () => {
 test('AI 接口页保留原字段、自动保存，并且自己计时', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const ui = fs.readFileSync(path.join(root, 'src/pages/options/AiTab.jsx'), 'utf8');
-  const client = fs.readFileSync(path.join(root, 'src/common/ai/client.js'), 'utf8');
+  const client = fs.readFileSync(path.join(root, 'src/common/ai/client.ts'), 'utf8');
   for (const field of ['baseUrl', 'apiKey', 'model', 'anthropicVersion', 'temperature', 'maxTokens', 'requestUrl', 'modelsUrl', 'extraHeaders', 'discoveredModels', 'activeProviderId']) {
     assert.match(ui, new RegExp(field));
   }
@@ -2028,7 +2028,7 @@ test('筛选页不渲染月薪上限，保存仍走字段合并', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const tab = fs.readFileSync(path.join(root, 'src/pages/options/FiltersTab.jsx'), 'utf8');
   const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
-  const store = fs.readFileSync(path.join(root, 'src/common/settingsStore.js'), 'utf8');
+  const store = fs.readFileSync(path.join(root, 'src/common/settingsStore.ts'), 'utf8');
   assert.match(tab, /filterSettingsPatch/);
   assert.match(tab, /包含任一/);
   assert.match(tab, /公司与城市/);
@@ -3218,7 +3218,7 @@ test('打开原岗位的接线：空描述走等待，超时才刮；已有描�
   assert.match(activateBody, /active: true/);
   assert.match(background, /active: false/);
   assert.match(background, /patchJobDescription\(/);
-  const jobsStore = fs.readFileSync(path.join(root, 'src/common/jobsStore.js'), 'utf8');
+  const jobsStore = fs.readFileSync(path.join(root, 'src/common/jobsStore.ts'), 'utf8');
   assert.match(jobsStore, /patchExistingDescription\(/);
   assert.match(background, /MSG\.SCRAPE_JOB_DETAIL/);
   assert.doesNotMatch(background, /wapi\/zpgeek/);
