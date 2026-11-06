@@ -23,4 +23,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  {
+    // shadcn 组件还是 JS 源码，类型声明只能用 any 兜住；这些声明本身不是业务代码。
+    files: ['src/components/ui/*.d.ts'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
+  },
 );

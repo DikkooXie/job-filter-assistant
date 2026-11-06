@@ -1,9 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, KeyboardEvent, ReactNode } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { commitTags, filterSettingsPatch, parseSalaryMinK, removeLastTag } from './filterForm.js';
+import type { Settings } from '../../common/types.js';
+import type { UpdateSettings } from './types.js';
 import './filters.css';
 
-function TagEditor({ label, value = [], onChange, tone, hint }) {
+interface TagEditorProps {
+  label: string;
+  value?: string[];
+  onChange: (next: string[]) => void;
+  tone?: 'risk';
+  hint?: string;
+}
+
+function TagEditor({ label, value = [], onChange, tone, hint }: TagEditorProps) {
   const [input, setInput] = useState('');
   const commit = () => {
     const next = commitTags(value, input);
@@ -23,9 +34,9 @@ function TagEditor({ label, value = [], onChange, tone, hint }) {
           className="filter-tags-input"
           placeholder={value.length ? '' : '回车添加'}
           value={input}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)}
           onBlur={commit}
-          onKeyDown={(event) => {
+          onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
             if (['Enter', ',', '，'].includes(event.key)) {
               event.preventDefault();
               commit();
@@ -40,8 +51,13 @@ function TagEditor({ label, value = [], onChange, tone, hint }) {
   </div>;
 }
 
-function PreferenceFold({ openOnMount, children }) {
-  const ref = useRef(null);
+interface PreferenceFoldProps {
+  openOnMount: boolean;
+  children: ReactNode;
+}
+
+function PreferenceFold({ openOnMount, children }: PreferenceFoldProps) {
+  const ref = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     // 只在进入页面时展开已有偏好，避免之后的保存把用户收起的折叠区重新打开。
     if (ref.current && openOnMount) ref.current.open = true;
@@ -52,9 +68,14 @@ function PreferenceFold({ openOnMount, children }) {
   </details>;
 }
 
-export default function FiltersTab({ settings, updateSettings }) {
+export interface FiltersTabProps {
+  settings: Settings;
+  updateSettings: UpdateSettings;
+}
+
+export default function FiltersTab({ settings, updateSettings }: FiltersTabProps) {
   const filters = settings.filters;
-  const update = (partial) => updateSettings(filterSettingsPatch(partial));
+  const update = (partial: Record<string, unknown>) => updateSettings(filterSettingsPatch(partial));
   const hasPreference = Boolean(filters.experience?.length || filters.degrees?.length);
   return <TabsContent value="filters" className="filter-page">
     <section className="filter-group">

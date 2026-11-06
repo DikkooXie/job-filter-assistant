@@ -1,19 +1,20 @@
 // AI 接口页的纯状态。存储字段仍由 sanitizeProvider 决定，这里只处理界面上的选择、删除和展示。
-
 import { PROTOCOL_LABELS } from '../../common/ai/providers.js';
+import type { AIProvider, Protocol } from '../../common/types.js';
 
-export const PROTOCOL_SHORT_LABELS = {
+export const PROTOCOL_SHORT_LABELS: Record<string, string> = {
   'openai-chat': 'OpenAI 兼容',
   'openai-responses': 'OpenAI Responses',
   anthropic: 'Anthropic',
   gemini: 'Gemini',
 };
 
-export function protocolShortLabel(protocol) {
-  return PROTOCOL_SHORT_LABELS[protocol] || PROTOCOL_LABELS[protocol] || protocol || '未知协议';
+export function protocolShortLabel(protocol: unknown): string {
+  const key = typeof protocol === 'string' ? protocol : '';
+  return PROTOCOL_SHORT_LABELS[key] || PROTOCOL_LABELS[key as Protocol] || key || '未知协议';
 }
 
-export function providerHost(baseUrl) {
+export function providerHost(baseUrl: unknown): string {
   const value = String(baseUrl || '').trim();
   if (!value) return '未填写地址';
   try {
@@ -24,26 +25,46 @@ export function providerHost(baseUrl) {
   }
 }
 
-export function providerMeta(provider) {
+export interface ProviderMeta {
+  protocol: string;
+  model: string;
+  host: string;
+  text: string;
+}
+
+export function providerMeta(provider: Partial<AIProvider> | null | undefined): ProviderMeta {
   const protocol = protocolShortLabel(provider && provider.protocol);
   const model = String((provider && provider.model) || '').trim() || '未填模型';
   const host = providerHost(provider && provider.baseUrl);
   return { protocol, model, host, text: `${protocol} · ${model} · ${host}` };
 }
 
-export function initialSelectedId(providers, activeProviderId, currentId = '') {
-  const list = Array.isArray(providers) ? providers : [];
+export function initialSelectedId(providers: unknown, activeProviderId: unknown, currentId = ''): string {
+  const list = Array.isArray(providers) ? (providers as AIProvider[]) : [];
   if (currentId && list.some((provider) => provider.id === currentId)) return currentId;
-  if (activeProviderId && list.some((provider) => provider.id === activeProviderId)) return activeProviderId;
+  if (activeProviderId && list.some((provider) => provider.id === activeProviderId)) return String(activeProviderId);
   return list[0]?.id || '';
 }
 
+export interface ProviderSelectionState {
+  providers: unknown;
+  activeProviderId: unknown;
+  selectedId: unknown;
+  removedId: unknown;
+}
+
+export interface ProviderState {
+  providers: AIProvider[];
+  activeProviderId: string;
+  selectedId: string;
+}
+
 // 删除一个接口后的列表、正在使用和当前编辑。正在使用被删掉时落到剩余第一个，没有剩余则清空。
-export function removeProviderState({ providers, activeProviderId, selectedId, removedId }) {
-  const list = Array.isArray(providers) ? providers : [];
+export function removeProviderState({ providers, activeProviderId, selectedId, removedId }: ProviderSelectionState): ProviderState {
+  const list = Array.isArray(providers) ? (providers as AIProvider[]) : [];
   const nextProviders = list.filter((provider) => provider && provider.id !== removedId);
-  const nextActive = activeProviderId === removedId ? (nextProviders[0]?.id || '') : (activeProviderId || '');
-  let nextSelected = selectedId || '';
+  const nextActive = activeProviderId === removedId ? (nextProviders[0]?.id || '') : (String(activeProviderId || ''));
+  let nextSelected = String(selectedId || '');
   if (!nextProviders.some((provider) => provider.id === nextSelected)) {
     const activeRemains = nextActive && nextProviders.some((provider) => provider.id === nextActive);
     nextSelected = (activeRemains ? nextActive : nextProviders[0]?.id) || '';
@@ -51,10 +72,14 @@ export function removeProviderState({ providers, activeProviderId, selectedId, r
   return { providers: nextProviders, activeProviderId: nextActive, selectedId: nextSelected };
 }
 
-export function parseExtraHeaders(text) {
+export type ExtraHeadersResult =
+  | { ok: true; headers: Record<string, string> }
+  | { ok: false; error: string };
+
+export function parseExtraHeaders(text: unknown): ExtraHeadersResult {
   const raw = String(text ?? '');
   if (!raw.trim()) return { ok: true, headers: {} };
-  let value;
+  let value: unknown;
   try {
     value = JSON.parse(raw);
   } catch {
@@ -63,8 +88,8 @@ export function parseExtraHeaders(text) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { ok: false, error: '请输入有效的 JSON 对象' };
   }
-  const headers = {};
-  for (const [key, item] of Object.entries(value)) {
+  const headers: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
     const name = String(key).trim();
     if (!name) continue;
     if (item != null && typeof item === 'object') return { ok: false, error: '请输入有效的 JSON 对象' };
@@ -74,7 +99,7 @@ export function parseExtraHeaders(text) {
 }
 
 // 耗时只接受界面自己量到的毫秒，不读取接口响应里的字段。
-export function formatElapsed(ms) {
+export function formatElapsed(ms: unknown): string {
   const n = Number(ms);
   if (!Number.isFinite(n) || n < 0) return '';
   if (n < 100) {
@@ -86,7 +111,20 @@ export function formatElapsed(ms) {
   return `${Math.round(n / 1000)} 秒`;
 }
 
-export function formatConnectionResult({ ok, message, sample, elapsedMs } = {}) {
+export interface ConnectionInput {
+  ok?: unknown;
+  message?: unknown;
+  sample?: unknown;
+  elapsedMs?: unknown;
+}
+
+export interface FormattedResult {
+  ok: boolean;
+  text: string;
+  detail: string;
+}
+
+export function formatConnectionResult({ ok, message, sample, elapsedMs }: ConnectionInput = {}): FormattedResult {
   const time = formatElapsed(elapsedMs);
   const timing = time ? ` · ${time}` : '';
   if (ok) {
@@ -96,7 +134,13 @@ export function formatConnectionResult({ ok, message, sample, elapsedMs } = {}) 
   return { ok: false, text: `连接失败${timing}`, detail: typeof message === 'string' ? message : '' };
 }
 
-export function formatModelsResult({ count, elapsedMs, error } = {}) {
+export interface ModelsInput {
+  count?: unknown;
+  elapsedMs?: unknown;
+  error?: unknown;
+}
+
+export function formatModelsResult({ count, elapsedMs, error }: ModelsInput = {}): FormattedResult {
   const time = formatElapsed(elapsedMs);
   const timing = time ? ` · ${time}` : '';
   if (error) {

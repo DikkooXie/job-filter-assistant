@@ -1,27 +1,39 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { RELEASE_PAGE, normalizeUpdateChannel } from '../../common/update.js';
+import type { UpdateCheck } from '../../common/update.js';
 import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../../extension/update.js';
+import type { FolderState, UpdateProgress } from '../../extension/update.js';
+import type { Settings, UpdateChannel } from '../../common/types.js';
+import type { RequestConfirm } from './types.js';
 import './update-panel.css';
 
-const FOLDER_TEXT = {
+const FOLDER_TEXT: Record<FolderState, string> = {
   none: '未选择',
   granted: '已授权',
   prompt: '需确认',
   denied: '已拒绝',
 };
 
-const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
-function progressText(p) {
+/** 面板自己的进度：installRelease 开始前先显示「选择文件夹」，所以多一个本地阶段。 */
+type PanelProgress = UpdateProgress | { phase: 'folder' };
+
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+function progressText(p: PanelProgress | null): string {
   if (!p) return '';
   if (p.phase === 'folder') return '请在弹出的窗口中选择扩展文件夹…';
-  if (p.phase === 'download') return p.total ? `正在下载 ${mb(p.received)} / ${mb(p.total)}（${Math.round((p.received / p.total) * 100)}%）` : `正在下载 ${mb(p.received)}`;
+  if (p.phase === 'download') {
+    const received = p.received ?? 0;
+    const total = p.total ?? 0;
+    return total ? `正在下载 ${mb(received)} / ${mb(total)}（${Math.round((received / total) * 100)}%）` : `正在下载 ${mb(received)}`;
+  }
   if (p.phase === 'verify') return '正在校验安装包…';
-  if (p.phase === 'write') return `正在写入文件 ${p.done} / ${p.count}`;
+  if (p.phase === 'write') return `正在写入文件 ${p.done ?? 0} / ${p.count ?? 0}`;
   if (p.phase === 'reload') return '更新完成，扩展即将重新加载，设置页会自动重新打开…';
   return '';
 }
 
-function plainNote(text) {
+function plainNote(text: unknown): string {
   return String(text)
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
@@ -29,9 +41,14 @@ function plainNote(text) {
     .replace(/\*([^*]+)\*/g, '$1');
 }
 
-function noteBlocks(text) {
-  const blocks = [];
-  let list = null;
+type NoteBlock =
+  | { type: 'list'; items: string[] }
+  | { type: 'heading'; text: string }
+  | { type: 'text'; text: string };
+
+function noteBlocks(text: unknown): NoteBlock[] {
+  const blocks: NoteBlock[] = [];
+  let list: string[] | null = null;
   const flush = () => {
     if (list?.length) blocks.push({ type: 'list', items: list });
     list = null;
@@ -55,15 +72,16 @@ function noteBlocks(text) {
   return blocks;
 }
 
-function formatReleaseDate(iso) {
+function formatReleaseDate(iso: string | undefined): string {
+  if (!iso) return '';
   const date = new Date(iso);
-  if (!iso || Number.isNaN(date.getTime())) return '';
+  if (Number.isNaN(date.getTime())) return '';
   return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
 }
 
 const openExtensionsPage = () => chrome.tabs.create({ url: extensionsPageUrl() }).catch(() => {});
 
-function ReleaseNotes({ release }) {
+function ReleaseNotes({ release }: { release: UpdateCheck }) {
   const blocks = noteBlocks(release.notes);
   const date = formatReleaseDate(release.publishedAt);
   return <div className="update-notes">
@@ -84,7 +102,13 @@ function ReleaseNotes({ release }) {
   </div>;
 }
 
-function ManualSteps({ pageUrl, open, onToggle }) {
+interface ManualStepsProps {
+  pageUrl?: string;
+  open: boolean;
+  onToggle: Dispatch<SetStateAction<boolean>>;
+}
+
+function ManualSteps({ pageUrl, open, onToggle }: ManualStepsProps) {
   return <details className="update-manual" open={open} onToggle={(event) => {
     const next = event.currentTarget.open;
     onToggle((current) => (current === next ? current : next));
@@ -99,13 +123,20 @@ function ManualSteps({ pageUrl, open, onToggle }) {
   </details>;
 }
 
-export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpdateChannel, checkToken = 0 }) {
+export interface UpdatePanelProps {
+  onConfirm: RequestConfirm;
+  updateChannel?: Settings['updateChannel'];
+  onUpdateChannel?: (channel: UpdateChannel) => void;
+  checkToken?: number;
+}
+
+export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpdateChannel, checkToken = 0 }: UpdatePanelProps) {
   const { version } = chrome.runtime.getManifest();
   const channel = normalizeUpdateChannel(updateChannel);
-  const [folder, setFolder] = useState({ state: 'none', name: '' });
-  const [release, setRelease] = useState(null);
+  const [folder, setFolder] = useState<{ state: FolderState; name: string }>({ state: 'none', name: '' });
+  const [release, setRelease] = useState<UpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
-  const [progress, setProgress] = useState(null);
+  const [progress, setProgress] = useState<PanelProgress | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState(() => (location.hash === '#updated' ? `已更新到 ${version}` : ''));
   const [manualOpen, setManualOpen] = useState(() => !supportsFolderAccess());
@@ -126,11 +157,11 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
     if (showManual) setManualOpen(true);
   }, [showManual]);
 
-  const run = async (fn) => {
+  const run = async (fn: () => Promise<void>) => {
     setError(''); setMessage('');
-    try { await fn(); } catch (e) { setError(e?.message || String(e)); }
+    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
-  const changeChannel = (next) => {
+  const changeChannel = (next: string) => {
     const value = normalizeUpdateChannel(next);
     if (value === channel || installing || checking) return;
     setRelease(null);
@@ -168,8 +199,11 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
     return () => cancelAnimationFrame(frame);
   }, [checkToken]);
   const firstTime = folder.state === 'none';
-  const install = () => onConfirm({
-    title: `更新到 ${release.version}？`,
+  const install = () => {
+    if (!release) return;
+    const target = release;
+    onConfirm({
+    title: `更新到 ${target.version}？`,
     body: firstTime
       ? '接下来会弹出文件夹选择窗口，请选择扩展管理页中本扩展「来源」显示的那个文件夹（就是当初「加载解压缩的扩展」时选的）。之后会下载安装包覆盖其中的文件并自动重新加载，岗位、画像和配置会保留。'
       : '将下载安装包并覆盖扩展文件夹中的文件，完成后扩展自动重新加载。岗位、画像和配置会保留。',
@@ -177,9 +211,9 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
     // 中间再 await 别的异步操作，浏览器会丢掉用户手势，选择窗口就不会弹出。
     run: () => {
       run(async () => {
-        setProgress(firstTime ? { phase: 'folder' } : { phase: 'download', received: 0, total: release.zipSize });
+        setProgress(firstTime ? { phase: 'folder' } : { phase: 'download', received: 0, total: target.zipSize });
         try {
-          const done = await installRelease(release, setProgress);
+          const done = await installRelease(target, (next) => setProgress(next));
           if (!done) { setProgress(null); setMessage('已取消选择文件夹，未做任何改动'); }
         } catch (e) {
           setProgress(null);
@@ -191,11 +225,12 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
         }
       });
     },
-  });
+    });
+  };
 
   const folderState = FOLDER_TEXT[folder.state] ? folder.state : 'none';
-  const downloadPct = progress?.phase === 'download' && progress.total > 0
-    ? Math.min(100, Math.round((progress.received / progress.total) * 100))
+  const downloadPct = progress?.phase === 'download' && (progress.total ?? 0) > 0
+    ? Math.min(100, Math.round(((progress.received ?? 0) / (progress.total ?? 1)) * 100))
     : 0;
   const pageUrl = release?.pageUrl;
 
@@ -206,7 +241,7 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
     <fieldset className="update-channel">
       <legend>更新通道</legend>
       <div className="update-channel-options" role="radiogroup" aria-label="更新通道">
-        {[['stable', '稳定'], ['preview', '预览']].map(([value, label]) => <label key={value} className="update-channel-option">
+        {([['stable', '稳定'], ['preview', '预览']] as const).map(([value, label]) => <label key={value} className="update-channel-option">
           <input type="radio" name="update-channel" value={value} checked={channel === value} disabled={installing || checking} onChange={() => changeChannel(value)} />
           <span className="update-channel-dot" aria-hidden="true" />
           <span>{label}</span>
@@ -238,7 +273,7 @@ export default function UpdatePanel({ onConfirm, updateChannel = 'stable', onUpd
       {checking && <p className="update-status" role="status">正在检查更新…</p>}
       {installing && progress && <div className="update-progress" role="status" aria-live="polite">
         <p>{progressText(progress)}</p>
-        {progress.phase === 'download' && progress.total > 0 && <div className="update-meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={downloadPct} aria-label="下载进度"><span style={{ width: `${downloadPct}%` }} /></div>}
+        {progress.phase === 'download' && (progress.total ?? 0) > 0 && <div className="update-meter" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={downloadPct} aria-label="下载进度"><span style={{ width: `${downloadPct}%` }} /></div>}
       </div>}
       {message && <p className={positive ? 'update-status is-ok' : 'update-status'} role="status">{message}</p>}
       {error && <p className="update-alert" role="alert">{error}</p>}

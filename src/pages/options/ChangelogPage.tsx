@@ -1,6 +1,9 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { RELEASES_PAGE, CHANGELOG_SECTION_ORDER, isCurrentChangelogVersion, formatChangelogWhen } from '../../common/update.js';
+import type { ChangelogEntry } from '../../common/update.js';
 import { fetchReleaseNotes } from '../../extension/update.js';
+import type { Settings } from '../../common/types.js';
 
 const EMPTY_PAGE = '暂时还没有整理好的版本说明';
 const UNCLASSIFIED = '本版暂无整理好的更新说明';
@@ -17,13 +20,26 @@ function Chevron() {
   </svg>;
 }
 
-function BulletList({ items, className, id, hidden }) {
+interface BulletListProps {
+  items: string[];
+  className?: string;
+  id?: string;
+  hidden?: boolean;
+}
+
+function BulletList({ items, className, id, hidden }: BulletListProps) {
   return <ul id={id} className={className} hidden={hidden || undefined}>
     {items.map((text, index) => <li key={index}>{text}</li>)}
   </ul>;
 }
 
-function FoldSection({ title, items, controlsId }) {
+interface FoldSectionProps {
+  title: string;
+  items: string[];
+  controlsId: string;
+}
+
+function FoldSection({ title, items, controlsId }: FoldSectionProps) {
   const [open, setOpen] = useState(false);
   return <div className="settings-tl-sec">
     <button
@@ -41,7 +57,13 @@ function FoldSection({ title, items, controlsId }) {
   </div>;
 }
 
-function ReleaseBlock({ item, index, installed }) {
+interface ReleaseBlockProps {
+  item: ChangelogEntry;
+  index: number;
+  installed: string;
+}
+
+function ReleaseBlock({ item, index, installed }: ReleaseBlockProps) {
   const baseId = useId();
   const sections = item.sections || { added: [], ui: [], fixed: [] };
   const current = isCurrentChangelogVersion(item.version, installed);
@@ -67,18 +89,31 @@ function ReleaseBlock({ item, index, installed }) {
   </article>;
 }
 
-export default function ChangelogPage({ channel, version, onBack, banner }) {
-  const backRef = useRef(null);
+export interface ChangelogPageProps {
+  channel: Settings['updateChannel'];
+  version: string;
+  onBack: () => void;
+  banner?: ReactNode;
+}
+
+interface LoadState {
+  status: 'loading' | 'ready' | 'error';
+  items: ChangelogEntry[];
+  error: string;
+}
+
+export default function ChangelogPage({ channel, version, onBack, banner }: ChangelogPageProps) {
+  const backRef = useRef<HTMLButtonElement>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [state, setState] = useState({ status: 'loading', items: [], error: '' });
+  const [state, setState] = useState<LoadState>({ status: 'loading', items: [], error: '' });
 
   useEffect(() => {
     let cancelled = false;
     setState({ status: 'loading', items: [], error: '' });
     fetchReleaseNotes(channel).then((items) => {
       if (!cancelled) setState({ status: 'ready', items, error: '' });
-    }).catch((error) => {
-      if (!cancelled) setState({ status: 'error', items: [], error: error?.message || '更新日志加载失败' });
+    }).catch((error: unknown) => {
+      if (!cancelled) setState({ status: 'error', items: [], error: error instanceof Error ? error.message : '更新日志加载失败' });
     });
     return () => { cancelled = true; };
   }, [channel, reloadKey]);
@@ -86,7 +121,7 @@ export default function ChangelogPage({ channel, version, onBack, banner }) {
   useEffect(() => { backRef.current?.focus(); }, []);
 
   useEffect(() => {
-    const onKey = (event) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
       onBack();

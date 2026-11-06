@@ -1,11 +1,17 @@
 import React, { useCallback, useEffect, useRef } from 'react';
+import type { KeyboardEvent, ReactNode, RefObject } from 'react';
 import markUrl from '../../../icons/128.png';
 import { runningDevBuild } from '../../common/build.js';
+import type { OptionsPage } from '../../common/optionsLink.js';
+import type { ProfileScore } from '../../common/profile.js';
+import type { Settings } from '../../common/types.js';
+import type { SaveStatus } from './saveQueue.js';
+import type { Notification } from './types.js';
 import { CHANGELOG_RETURN_KEY, SETTINGS_PAGES, changelogReturnTarget, formatSavedClock, isChangelogHash, nextNavIndex, sectionTargetId } from './pageHash.js';
-import ChangelogPage from './ChangelogPage.jsx';
+import ChangelogPage from './ChangelogPage.js';
 
-function Icon({ name }) {
-  const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' };
+function Icon({ name }: { name: string }) {
+  const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
   if (name === 'profile') {
     return <svg {...common}><circle cx="8" cy="5.2" r="2.2" /><path d="M3.3 13.1c.7-2.2 2.5-3.3 4.7-3.3s4 1.1 4.7 3.3" /></svg>;
   }
@@ -18,18 +24,25 @@ function Icon({ name }) {
   return <svg {...common}><circle cx="8" cy="8" r="2" /><path d="M8 1.8v1.5M8 12.7v1.5M1.8 8h1.5M12.7 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" /></svg>;
 }
 
-function onNavKeyDown(event) {
-  const links = [...event.currentTarget.querySelectorAll('a[href^="#"]')];
-  const index = links.indexOf(document.activeElement);
+function onNavKeyDown(event: KeyboardEvent<HTMLElement>) {
+  const links = [...event.currentTarget.querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
+  const active = document.activeElement;
+  const index = active ? links.indexOf(active as HTMLAnchorElement) : -1;
   const next = nextNavIndex(index, event.key, links.length);
   if (next < 0 || next === index) return;
   event.preventDefault();
   const link = links[next];
+  if (!link) return;
   link.focus();
   if (link.hash !== location.hash) link.click();
 }
 
-function SaveStatus({ status, onRetry }) {
+interface SaveStatusViewProps {
+  status: SaveStatus;
+  onRetry: () => void;
+}
+
+function SaveStatusView({ status, onRetry }: SaveStatusViewProps) {
   if (!status || status.phase === 'idle') return null;
   const failed = status.phase === 'error';
   const saved = status.phase === 'saved';
@@ -42,7 +55,7 @@ function SaveStatus({ status, onRetry }) {
   </div>;
 }
 
-export function ProfileRail({ score }) {
+export function ProfileRail({ score }: { score: ProfileScore }) {
   const ratio = Math.max(0, Math.min(100, Number(score.score) || 0));
   return <aside className="settings-rail" aria-label="画像完整度">
     <div className="rail-card">
@@ -57,7 +70,15 @@ export function ProfileRail({ score }) {
   </aside>;
 }
 
-function VersionRow({ version, logOpen, onCheckUpdate, onOpenLog, logButtonRef }) {
+interface VersionRowProps {
+  version: string;
+  logOpen: boolean;
+  onCheckUpdate: () => void;
+  onOpenLog: () => void;
+  logButtonRef: RefObject<HTMLButtonElement | null>;
+}
+
+function VersionRow({ version, logOpen, onCheckUpdate, onOpenLog, logButtonRef }: VersionRowProps) {
   if (!version) return null;
   return <div className={logOpen ? 'settings-version is-log' : 'settings-version'}>
     <div className="settings-version-num">版本 {version}</div>
@@ -75,7 +96,12 @@ function VersionRow({ version, logOpen, onCheckUpdate, onOpenLog, logButtonRef }
   </div>;
 }
 
-function Notice({ notice, onDismiss }) {
+interface NoticeProps {
+  notice: Notification | null;
+  onDismiss: () => void;
+}
+
+function Notice({ notice, onDismiss }: NoticeProps) {
   if (!notice) return null;
   return <div className={notice.error ? 'settings-notice is-error' : 'settings-notice'} role={notice.error ? 'alert' : 'status'}>
     <span>{notice.message}</span>
@@ -83,11 +109,27 @@ function Notice({ notice, onDismiss }) {
   </div>;
 }
 
-export default function SettingsShell({ page, hash, title, status, onRetry, version, updateChannel, onCheckUpdate, notice, onDismissNotice, busy, rail, children }) {
+export interface SettingsShellProps {
+  page: OptionsPage;
+  hash: string;
+  title: string;
+  status: SaveStatus;
+  onRetry: () => void;
+  version: string;
+  updateChannel: Settings['updateChannel'];
+  onCheckUpdate: () => void;
+  notice: Notification | null;
+  onDismissNotice: () => void;
+  busy: string;
+  rail: ReactNode;
+  children: ReactNode;
+}
+
+export default function SettingsShell({ page, hash, title, status, onRetry, version, updateChannel, onCheckUpdate, notice, onDismissNotice, busy, rail, children }: SettingsShellProps) {
   const logOpen = isChangelogHash(hash);
   const lead = SETTINGS_PAGES.find((item) => item.id === page)?.lead;
   const dev = runningDevBuild();
-  const logButtonRef = useRef(null);
+  const logButtonRef = useRef<HTMLButtonElement>(null);
   const openLog = useCallback(() => {
     if (isChangelogHash(location.hash)) return;
     try { sessionStorage.setItem(CHANGELOG_RETURN_KEY, location.hash || '#profile'); } catch { /* 隐私模式写不进去时，返回仍落到个人画像 */ }
@@ -112,7 +154,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
 
   const banner = (notice || status?.phase === 'error') ? <>
     <Notice notice={notice} onDismiss={onDismissNotice} />
-    {status?.phase === 'error' && <SaveStatus status={status} onRetry={onRetry} />}
+    {status?.phase === 'error' && <SaveStatusView status={status} onRetry={onRetry} />}
   </> : null;
 
   return <div className="settings-shell" inert={busy ? true : undefined}>
@@ -139,7 +181,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
               <h1>{title}</h1>
               {lead && <p className="settings-lead">{lead}</p>}
             </div>
-            <SaveStatus status={status} onRetry={onRetry} />
+            <SaveStatusView status={status} onRetry={onRetry} />
           </header>
           <Notice notice={notice} onDismiss={onDismissNotice} />
           {page === 'profile'
@@ -150,7 +192,7 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
   </div>;
 }
 
-export function extensionVersion() {
+export function extensionVersion(): string {
   try {
     return chrome.runtime.getManifest().version || '';
   } catch {

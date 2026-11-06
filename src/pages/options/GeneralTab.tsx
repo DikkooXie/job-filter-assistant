@@ -2,29 +2,41 @@ import React, { useEffect, useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { MODE, MSG, STORAGE_KEYS } from '../../common/constants.js';
 import { send } from '../../extension/messages.js';
-import UpdatePanel from './UpdatePanel.jsx';
+import UpdatePanel from './UpdatePanel.js';
 import { summarizeJobs } from './jobStats.js';
+import type { JobStats } from './jobStats.js';
+import type { Job, PrivacySettings, Settings } from '../../common/types.js';
+import type { Report, RequestConfirm, SettingsPatch, UpdateSettings } from './types.js';
 import './general.css';
 
-const MODE_OPTIONS = [
+const MODE_OPTIONS: ReadonlyArray<readonly [Settings['mode'], string]> = [
   [MODE.auto, '跟随当前网站'],
   [MODE.boss, '只用 BOSS 直聘'],
 ];
 
-const CAPTURE_ROWS = [
+type CaptureKey = 'autoCapture' | 'autoScore' | 'showBadge' | 'dedupe';
+
+const CAPTURE_ROWS: ReadonlyArray<readonly [CaptureKey, string, string]> = [
   ['autoCapture', '自动收录岗位', ''],
   ['autoScore', '自动 AI 分析', '每个新岗位消耗一次接口调用。'],
   ['showBadge', '显示收录角标', '显示在招聘网站页面右下角。'],
   ['dedupe', '合并重复岗位', ''],
 ];
 
-const PRIVACY_ROWS = [
+const PRIVACY_ROWS: ReadonlyArray<readonly [keyof PrivacySettings, string, string]> = [
   ['redactPII', '发送前脱敏', '不能保证移除所有个人信息'],
   ['sendCompanyName', '发送岗位公司名', ''],
   ['confirmBeforeSend', '发送招呼语前确认', ''],
 ];
 
-function SwitchRow({ label, hint, checked, onChange }) {
+interface SwitchRowProps {
+  label: string;
+  hint?: string;
+  checked?: boolean;
+  onChange: (checked: boolean) => void;
+}
+
+function SwitchRow({ label, hint, checked, onChange }: SwitchRowProps) {
   return <label className="gen-switch">
     <span className="gen-switch-copy">
       <span className="gen-switch-title">{label}</span>
@@ -34,23 +46,32 @@ function SwitchRow({ label, hint, checked, onChange }) {
   </label>;
 }
 
-export default function GeneralTab({ settings, updateSettings, exportData, setConfirm, report, updateCheckToken = 0 }) {
-  const [stats, setStats] = useState(null);
-  const reloadRef = useRef(async () => {});
+export interface GeneralTabProps {
+  settings: Settings;
+  updateSettings: UpdateSettings;
+  exportData: (format: string) => void;
+  setConfirm: RequestConfirm;
+  report: Report;
+  updateCheckToken?: number;
+}
+
+export default function GeneralTab({ settings, updateSettings, exportData, setConfirm, report, updateCheckToken = 0 }: GeneralTabProps) {
+  const [stats, setStats] = useState<JobStats | null>(null);
+  const reloadRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const jobs = await send(MSG.JOB_LIST_REQUEST);
+        const jobs = await send<Job[]>(MSG.JOB_LIST_REQUEST);
         if (!cancelled) setStats(summarizeJobs(jobs));
       } catch (e) {
-        if (!cancelled) report(e.message || '岗位库读取失败', true);
+        if (!cancelled) report(e instanceof Error ? e.message : '岗位库读取失败', true);
       }
     };
     reloadRef.current = load;
     load();
-    const onChanged = (changes, area) => {
+    const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'local' && changes[STORAGE_KEYS.jobs]) load();
     };
     const storageEvents = globalThis.chrome?.storage?.onChanged;
@@ -80,7 +101,7 @@ export default function GeneralTab({ settings, updateSettings, exportData, setCo
     <section className="gen-group">
       <h2>收录与分析</h2>
       <div className="gen-switches">
-        {CAPTURE_ROWS.map(([key, label, hint]) => <SwitchRow key={key} label={label} hint={hint} checked={settings[key]} onChange={(v) => updateSettings({ [key]: v })} />)}
+        {CAPTURE_ROWS.map(([key, label, hint]) => <SwitchRow key={key} label={label} hint={hint} checked={settings[key]} onChange={(v) => updateSettings({ [key]: v } as SettingsPatch)} />)}
       </div>
       <div className="gen-field">
         <div className="gen-field-label">
@@ -96,7 +117,7 @@ export default function GeneralTab({ settings, updateSettings, exportData, setCo
     <section className="gen-group">
       <h2>隐私</h2>
       <div className="gen-switches">
-        {PRIVACY_ROWS.map(([key, label, hint]) => <SwitchRow key={key} label={label} hint={hint} checked={settings.privacy[key]} onChange={(v) => updateSettings({ privacy: { [key]: v } })} />)}
+        {PRIVACY_ROWS.map(([key, label, hint]) => <SwitchRow key={key} label={label} hint={hint} checked={settings.privacy[key]} onChange={(v) => updateSettings({ privacy: { [key]: v } as Partial<PrivacySettings> })} />)}
       </div>
     </section>
 

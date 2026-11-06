@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { isUpdatedHash, pageFromHash } from './pageHash.js';
+import type { OptionsPage } from '../../common/optionsLink.js';
 
-export function useSettingsHash() {
+export interface SettingsHashState {
+  hash: string;
+  page: OptionsPage;
+  updated: boolean;
+}
+
+export function useSettingsHash(): SettingsHashState {
   const [hash, setHash] = useState(() => location.hash);
 
   useEffect(() => {

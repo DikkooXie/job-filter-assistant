@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import type { ChangeEvent, MutableRefObject } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { MSG } from '../../common/constants.js';
 import { PRESETS, PROTOCOLS, PROTOCOL_LABELS, providerFromPreset, validateProvider } from '../../common/ai/providers.js';
 import { send } from '../../extension/messages.js';
+import type { AIProvider, Settings } from '../../common/types.js';
 import {
   formatConnectionResult,
   formatElapsed,
@@ -13,17 +15,47 @@ import {
   providerMeta,
   removeProviderState,
 } from './aiState.js';
+import type { FormattedResult } from './aiState.js';
+import type { Report, RequestConfirm, RunAction, UpdateSettings } from './types.js';
 import './ai.css';
+
+type OperationKind = 'test' | 'models';
+
+interface PendingOperation {
+  id: string;
+  kind: OperationKind;
+  started: number;
+  token: number;
+}
+
+interface TestResponse {
+  ok?: boolean;
+  message?: unknown;
+  sample?: unknown;
+}
+
+export interface AiTabProps {
+  action: RunAction;
+  updateProviders: (next: AIProvider[]) => void;
+  providersRef: MutableRefObject<AIProvider[]>;
+  flush: (key: string) => Promise<void>;
+  settingsRef: MutableRefObject<Settings | null>;
+  updateSettings: UpdateSettings;
+  report: Report;
+  providers: AIProvider[];
+  settings: Settings;
+  setConfirm: RequestConfirm;
+}
 
 // AI 接口页：上方列表，下方只编辑选中的一条。沿用自动保存，不提供保存按钮。
 export default function AiTab({
   action, updateProviders, providersRef, flush, settingsRef, updateSettings, report, providers, settings, setConfirm,
-}) {
-  const [preset, setPreset] = useState(PRESETS[0].key);
+}: AiTabProps) {
+  const [preset, setPreset] = useState(() => PRESETS[0]?.key ?? '');
   const [selectedId, setSelectedId] = useState(() => initialSelectedId(providers, settings.activeProviderId));
   const [focusNonce, setFocusNonce] = useState(0);
-  const [results, setResults] = useState({});
-  const [pending, setPending] = useState(null);
+  const [results, setResults] = useState<Record<string, FormattedResult>>({});
+  const [pending, setPending] = useState<PendingOperation | null>(null);
   const [, setClock] = useState(0);
   const opRef = useRef(0);
 
@@ -39,7 +71,7 @@ export default function AiTab({
 
   const selected = providers.find((provider) => provider.id === selectedId) || null;
 
-  const changeProvider = (id, patch) => {
+  const changeProvider = (id: string, patch: Partial<AIProvider>) => {
     updateProviders(providersRef.current.map((provider) => (provider.id === id ? { ...provider, ...patch } : provider)));
   };
 
@@ -47,7 +79,7 @@ export default function AiTab({
     const created = providerFromPreset(preset);
     updateProviders([...providersRef.current, created]);
     await flush('providers');
-    if (!settingsRef.current.activeProviderId) {
+    if (!settingsRef.current?.activeProviderId) {
       updateSettings({ activeProviderId: created.id });
       await flush('settings');
     }
@@ -56,7 +88,7 @@ export default function AiTab({
     report('已添加，请填写 API Key 与模型');
   });
 
-  const runOperation = async (provider, kind) => {
+  const runOperation = async (provider: AIProvider, kind: OperationKind) => {
     if (kind === 'test') {
       const valid = validateProvider(provider);
       if (!valid.ok) {
@@ -74,7 +106,7 @@ export default function AiTab({
     setPending({ id: provider.id, kind, started, token });
     try {
       if (kind === 'test') {
-        const result = await send(MSG.AI_PROVIDER_TEST, { provider });
+        const result = await send<TestResponse>(MSG.AI_PROVIDER_TEST, { provider });
         if (opRef.current !== token) return;
         const view = formatConnectionResult({
           ok: !!result?.ok,
@@ -84,7 +116,8 @@ export default function AiTab({
         });
         setResults((current) => ({ ...current, [provider.id]: view }));
       } else {
-        const models = await send(MSG.AI_PROVIDER_MODELS, { provider });
+        const response = await send<unknown>(MSG.AI_PROVIDER_MODELS, { provider });
+        const models: string[] = Array.isArray(response) ? (response as string[]) : [];
         if (opRef.current !== token) return;
         changeProvider(provider.id, { discoveredModels: models });
         setResults((current) => ({
@@ -105,7 +138,8 @@ export default function AiTab({
     }
   };
 
-  const askDelete = (provider) => {
+  const askDelete = (provider: AIProvider) => {
+    const current = settingsRef.current;
     const active = settings.activeProviderId === provider.id;
     setConfirm({
       title: '删除这个接口？',
@@ -115,20 +149,20 @@ export default function AiTab({
       run: async () => {
         const next = removeProviderState({
           providers: providersRef.current,
-          activeProviderId: settingsRef.current.activeProviderId,
+          activeProviderId: current?.activeProviderId,
           selectedId,
           removedId: provider.id,
         });
         updateProviders(next.providers);
         await flush('providers');
-        if (next.activeProviderId !== settingsRef.current.activeProviderId) {
+        if (next.activeProviderId !== settingsRef.current?.activeProviderId) {
           updateSettings({ activeProviderId: next.activeProviderId });
           await flush('settings');
         }
         setSelectedId(next.selectedId);
-        setResults((current) => {
-          if (!current[provider.id]) return current;
-          const copy = { ...current };
+        setResults((previous) => {
+          if (!previous[provider.id]) return previous;
+          const copy = { ...previous };
           delete copy[provider.id];
           return copy;
         });
@@ -199,20 +233,32 @@ export default function AiTab({
   </TabsContent>;
 }
 
-function ProviderEditor({ provider, focusNonce, pending, elapsed, result, onChange, onModels }) {
+type ProviderField = 'name' | 'baseUrl' | 'model' | 'apiKey' | 'anthropicVersion' | 'requestUrl' | 'modelsUrl' | 'temperature' | 'maxTokens';
+
+interface ProviderEditorProps {
+  provider: AIProvider;
+  focusNonce: number;
+  pending: PendingOperation | null;
+  elapsed: number;
+  result?: FormattedResult;
+  onChange: (patch: Partial<AIProvider>) => void;
+  onModels: () => void;
+}
+
+function ProviderEditor({ provider, focusNonce, pending, elapsed, result, onChange, onModels }: ProviderEditorProps) {
   const [showKey, setShowKey] = useState(false);
   const [headers, setHeaders] = useState(() => (Object.keys(provider.extraHeaders || {}).length ? JSON.stringify(provider.extraHeaders) : ''));
   const [headersError, setHeadersError] = useState('');
-  const nameRef = useRef(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const listId = `models-${provider.id}`;
 
   useEffect(() => {
     if (focusNonce) nameRef.current?.focus();
   }, [focusNonce]);
 
-  const bind = (key, type = 'text') => ({
-    value: provider[key] ?? '',
-    onChange: (event) => onChange({ [key]: type === 'number' ? Number(event.target.value) : event.target.value }),
+  const bind = (key: ProviderField, type: 'text' | 'number' = 'text') => ({
+    value: (provider[key] ?? '') as string | number,
+    onChange: (event: ChangeEvent<HTMLInputElement>) => onChange({ [key]: type === 'number' ? Number(event.target.value) : event.target.value } as Partial<AIProvider>),
   });
 
   const liveText = pending

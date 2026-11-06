@@ -1,17 +1,26 @@
 import React, { useRef, useState } from 'react';
+import type { ChangeEvent, DragEvent, ReactNode } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { toList } from '../../common/text.js';
 import { getDealbreakers, updateDealbreakers } from '../../common/profile.js';
+import type { Profile } from '../../common/types.js';
+import type { Report } from './types.js';
 import './profile.css';
 
-const IMPORT_MODES = [
+type ImportMode = 'resume' | 'paste' | 'json';
+
+const IMPORT_MODES: ReadonlyArray<{ id: ImportMode; label: string }> = [
   { id: 'resume', label: '简历文件' },
   { id: 'paste', label: '粘贴文本' },
   { id: 'json', label: '画像 JSON' },
 ];
 
-const DRAFT_ROWS = [
+type ProfileGroup = 'target' | 'basics' | 'capabilities' | 'preference';
+
+type DraftValue = string | string[] | undefined;
+
+const DRAFT_ROWS: ReadonlyArray<readonly [string, (draft: Profile) => DraftValue]> = [
   ['目标岗位', (d) => d.target.jobTitles],
   ['目标城市', (d) => d.target.cities],
   ['期望薪资', (d) => (d.target.salaryMinK || d.target.salaryMaxK ? `${d.target.salaryMinK ?? ''}-${d.target.salaryMaxK ?? ''}k` : '')],
@@ -32,18 +41,34 @@ const DRAFT_ROWS = [
   ['给 AI 的说明', (d) => d.preference.notes],
 ];
 
-export default function ProfileTab({ profile, draft, report, onEdit, onImportFiles, onExtractText, onApplyDraft, onDiscardDraft, onClear }) {
-  const [mode, setMode] = useState('resume');
+export interface ProfileTabProps {
+  profile: Profile;
+  draft: Profile | null;
+  report: Report;
+  onEdit: (group: ProfileGroup | null, key: string, value: unknown) => void;
+  onImportFiles: (files: File[], mode: ImportMode) => void;
+  onExtractText: (text: string) => void;
+  onApplyDraft: (replace: boolean) => void;
+  onDiscardDraft: () => void;
+  onClear: () => void;
+}
+
+export default function ProfileTab({ profile, draft, report, onEdit, onImportFiles, onExtractText, onApplyDraft, onDiscardDraft, onClear }: ProfileTabProps) {
+  const [mode, setMode] = useState<ImportMode>('resume');
   const [paste, setPaste] = useState('');
   const [over, setOver] = useState(false);
-  const fileRef = useRef(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
-  const valueOf = (group, key) => (group ? profile[group][key] : profile[key]);
-  const editText = (group, key, type = 'text') => (event) => {
+  const valueOf = (group: ProfileGroup | null, key: string): string | number | null => {
+    const scope = group ? (profile[group] as unknown as Record<string, unknown>) : (profile as unknown as Record<string, unknown>);
+    const value = scope[key];
+    return typeof value === 'string' || typeof value === 'number' ? value : null;
+  };
+  const editText = (group: ProfileGroup | null, key: string, type: 'text' | 'number' = 'text') => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const raw = event.target.value;
     onEdit(group, key, type === 'number' ? (raw === '' ? null : Number(raw)) : raw);
   };
-  const takeFiles = (fileList) => {
+  const takeFiles = (fileList: FileList | null) => {
     const files = Array.from(fileList || []);
     if (files.length) onImportFiles(files, mode);
   };
@@ -71,10 +96,10 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
           </div>
         </div> : <div
           className={over ? 'dropzone is-over' : 'dropzone'}
-          onDragEnter={(event) => { event.preventDefault(); dragDepth.current += 1; setOver(true); }}
-          onDragOver={(event) => event.preventDefault()}
+          onDragEnter={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); dragDepth.current += 1; setOver(true); }}
+          onDragOver={(event: DragEvent<HTMLDivElement>) => event.preventDefault()}
           onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setOver(false); }}
-          onDrop={(event) => { event.preventDefault(); dragDepth.current = 0; setOver(false); takeFiles(event.dataTransfer.files); }}
+          onDrop={(event: DragEvent<HTMLDivElement>) => { event.preventDefault(); dragDepth.current = 0; setOver(false); takeFiles(event.dataTransfer.files); }}
         >
           <input
             ref={fileRef}
@@ -168,14 +193,29 @@ export default function ProfileTab({ profile, draft, report, onEdit, onImportFil
   </TabsContent>;
 }
 
-function ProfileField({ label, note, htmlFor, children }) {
+interface ProfileFieldProps {
+  label: string;
+  note?: string;
+  htmlFor?: string;
+  children?: ReactNode;
+}
+
+function ProfileField({ label, note, htmlFor, children }: ProfileFieldProps) {
   return <div className="profile-field">
     {htmlFor ? <label className="field-label" htmlFor={htmlFor}>{label}</label> : <div className="field-label">{label}</div>}
     <div className="field-control">{children}{note ? <p className="field-note">{note}</p> : null}</div>
   </div>;
 }
 
-function ProfileTags({ label, value = [], onChange, placeholder, note }) {
+interface ProfileTagsProps {
+  label: string;
+  value?: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+  note?: string;
+}
+
+function ProfileTags({ label, value = [], onChange, placeholder, note }: ProfileTagsProps) {
   const [input, setInput] = useState('');
   const inputId = `profile-tags-${label}`;
   const commit = () => {
@@ -195,9 +235,15 @@ function ProfileTags({ label, value = [], onChange, placeholder, note }) {
   </ProfileField>;
 }
 
-function DraftPreview({ draft, onApply, onDiscard }) {
-  const rows = DRAFT_ROWS.map(([label, read]) => [label, read(draft)]).filter(([, value]) => value && value.length);
-  return <Dialog open onOpenChange={(open) => { if (!open) onDiscard(); }}>
+interface DraftPreviewProps {
+  draft: Profile;
+  onApply: (replace: boolean) => void;
+  onDiscard: () => void;
+}
+
+function DraftPreview({ draft, onApply, onDiscard }: DraftPreviewProps) {
+  const rows = DRAFT_ROWS.map(([label, read]) => [label, read(draft)] as const).filter(([, value]) => !!(value && value.length));
+  return <Dialog open onOpenChange={(open: boolean) => { if (!open) onDiscard(); }}>
     <DialogContent className="draft-dialog" showCloseButton={false}>
       <div className="draft-heading">
         <DialogTitle>画像草稿</DialogTitle>

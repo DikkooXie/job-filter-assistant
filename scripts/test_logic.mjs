@@ -1087,7 +1087,7 @@ test('列表行展示协议、模型和主机', () => {
 });
 test('AI 接口页保留原字段、自动保存，并且自己计时', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const ui = fs.readFileSync(path.join(root, 'src/pages/options/AiTab.jsx'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'src/pages/options/AiTab.tsx'), 'utf8');
   const client = fs.readFileSync(path.join(root, 'src/common/ai/client.ts'), 'utf8');
   for (const field of ['baseUrl', 'apiKey', 'model', 'anthropicVersion', 'temperature', 'maxTokens', 'requestUrl', 'modelsUrl', 'extraHeaders', 'discoveredModels', 'activeProviderId']) {
     assert.match(ui, new RegExp(field));
@@ -1631,7 +1631,7 @@ await testAsync('在设置页关闭后，已显示的角标立即移除；重新
 
 // ---------- 设置页保存队列 ----------
 section('设置页保存队列');
-const { createSaveQueue } = await import('../src/pages/options/saveQueue.js');
+const { createSaveQueue } = await import('../src/pages/options/saveQueue.ts');
 
 function createClock() {
   let now = 0;
@@ -1892,12 +1892,12 @@ await testAsync('更新的编辑进行中时，不把状态停在上一次失败
 });
 
 test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
-  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/OptionsApp.jsx'), 'utf8');
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/OptionsApp.tsx'), 'utf8');
   assert.match(src, /enqueue\('settings',[\s\S]*?,\s*200\)/);
   assert.match(src, /enqueue\('profile',[\s\S]*?,\s*600\)/);
   assert.match(src, /enqueue\('providers',[\s\S]*?,\s*500\)/);
   assert.doesNotMatch(src, /import\(/);
-  const queueSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/saveQueue.js'), 'utf8');
+  const queueSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/saveQueue.ts'), 'utf8');
   assert.match(queueSrc, /pagehide/);
   assert.match(queueSrc, /beforeunload/);
   assert.doesNotMatch(queueSrc, /import\(/);
@@ -1947,8 +1947,8 @@ test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () =>
 
 test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.jsx'), 'utf8');
-  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.jsx'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.tsx'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.tsx'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.doesNotMatch(tab, /完整度/);
   assert.match(tab, /简历文件/);
@@ -1973,7 +1973,7 @@ test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
   const html = fs.readFileSync(path.join(root, 'extension-pages/options.html'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.tsx'), 'utf8');
   assert.match(html, /<body class="settings-root">/);
   assert.match(css, /\.settings-root\s*\{/);
   assert.match(css, /--s-page:\s*#f1f2f0/);
@@ -2026,8 +2026,8 @@ test('筛选页补丁不携带 salaryMaxK，合并后原值还在', () => {
 });
 test('筛选页不渲染月薪上限，保存仍走字段合并', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const tab = fs.readFileSync(path.join(root, 'src/pages/options/FiltersTab.jsx'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/FiltersTab.tsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.tsx'), 'utf8');
   const store = fs.readFileSync(path.join(root, 'src/common/settingsStore.ts'), 'utf8');
   assert.match(tab, /filterSettingsPatch/);
   assert.match(tab, /包含任一/);
@@ -2128,7 +2128,7 @@ test('岗位库数量只统计列表和收藏', () => {
 
 test('通用与隐私页保留原设置字段，并用岗位列表统计数量', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const page = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.jsx'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.tsx'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'src/pages/options/general.css'), 'utf8');
   for (const key of ['autoCapture', 'autoScore', 'showBadge', 'dedupe', 'maxJobs', 'redactPII', 'sendCompanyName', 'confirmBeforeSend']) {
     assert.match(page, new RegExp(key));
@@ -2141,7 +2141,7 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /gen-update-slot/);
   assert.match(page, /UpdatePanel/);
   assert.match(page, /updateChannel/);
-  const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.jsx'), 'utf8');
+  const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.tsx'), 'utf8');
   const updater = fs.readFileSync(path.join(root, 'src/extension/update.ts'), 'utf8');
   const script = fs.readFileSync(path.join(root, 'scripts/release.mjs'), 'utf8');
   assert.match(panel, /更新通道/);
@@ -2158,9 +2158,9 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(updater, /changelogEntries\(json, channel\)/);
   assert.match(panel, /checkToken/);
   assert.match(panel, /fetchLatestRelease\(channel\)/);
-  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.jsx'), 'utf8');
-  const logPage = fs.readFileSync(path.join(root, 'src/pages/options/ChangelogPage.jsx'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.tsx'), 'utf8');
+  const logPage = fs.readFileSync(path.join(root, 'src/pages/options/ChangelogPage.tsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.tsx'), 'utf8');
   const shellCss = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.match(shell, /检查更新/);
   assert.match(shell, /更新日志/);
@@ -2760,7 +2760,7 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const profile = fs.readFileSync(path.join(root, 'src/pages/options/profile.css'), 'utf8');
-  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.jsx'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.tsx'), 'utf8');
   assert.match(profile, /\.paste-box\s*\{[^}]*border-radius:\s*14px/);
   assert.match(profile, /\.paste-box \.area-input\s*\{[^}]*padding:\s*14px 14px 16px/);
   assert.match(profile, /\.paste-bar\s*\{/);
@@ -3377,7 +3377,7 @@ await testAsync('批量里单个缺描述失败不会挡住下一条', async () 
   const pump = sidepanel.slice(pumpStart, pumpEnd);
   assert.match(pump, /catch \(error\)/);
   assert.doesNotMatch(pump, /throw /);
-  const general = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.jsx'), 'utf8');
+  const general = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.tsx'), 'utf8');
   assert.match(general, /exportData\('capture-log'\)/);
 });
 
