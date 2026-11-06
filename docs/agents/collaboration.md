@@ -4,9 +4,9 @@ GitHub 是跨设备的进度来源：规格说明目标，issue 记录任务与�
 
 ## 仓库与基线
 
-- 唯一写入目标：`DikkooXie/job-filter-assistant`。使用 `gh` 时显式写 `--repo DikkooXie/job-filter-assistant`，API 路径也显式指定仓库。
+- 唯一写入目标：`DikkooXie/offercome`。使用 `gh` 时显式写 `--repo DikkooXie/offercome`，API 路径也显式指定仓库。
 - 推送使用 `personal` remote，并先确认 URL 指向这个仓库。本机的 `origin` 是 `goehou/job-filter-assistant` 只读上游；云端 clone 后 `origin` 可能指向个人仓库，也仍使用验证后的 `personal`，不依赖 remote 名字猜仓库身份。
-- 通过 `gh repo view DikkooXie/job-filter-assistant --json defaultBranchRef --jq .defaultBranchRef.name` 读取默认集成分支；当前为 `feat/vite-ui-roadmap`，不要假定名为 `main`。
+- 通过 `gh repo view DikkooXie/offercome --json defaultBranchRef --jq .defaultBranchRef.name` 读取默认集成分支；当前为 `feat/vite-ui-roadmap`，不要假定名为 `main`。
 - 新任务从最新集成分支开始。已有任务从它的远端任务分支恢复；开始前检查工作区，保留其他会话的未提交修改。
 
 ## 选择任务
@@ -16,9 +16,9 @@ GitHub 是跨设备的进度来源：规格说明目标，issue 记录任务与�
 原生依赖是开工条件。父计划的复选框用于展示，不能替代依赖查询：
 
 ```bash
-gh issue list --repo DikkooXie/job-filter-assistant --state open --label ready-for-agent
-gh issue view <N> --repo DikkooXie/job-filter-assistant --comments
-gh api repos/DikkooXie/job-filter-assistant/issues/<N>/dependencies/blocked_by
+gh issue list --repo DikkooXie/offercome --state open --label ready-for-agent
+gh issue view <N> --repo DikkooXie/offercome --comments
+gh api repos/DikkooXie/offercome/issues/<N>/dependencies/blocked_by
 ```
 
 ## 领取：先建远端分支，再改代码
@@ -29,7 +29,7 @@ gh api repos/DikkooXie/job-filter-assistant/issues/<N>/dependencies/blocked_by
 2. 用该 SHA 创建 `refs/heads/agent/issue-<N>`。示例中的占位值由 Agent 现场查询并替换：
 
    ```bash
-   gh api --method POST repos/DikkooXie/job-filter-assistant/git/refs \
+   gh api --method POST repos/DikkooXie/offercome/git/refs \
      -f ref=refs/heads/agent/issue-<N> -f sha=<integration-sha>
    ```
 
