@@ -31,7 +31,6 @@
       || text.match(/[?&]encryptJobId=([\w-]+)/)
       || text.match(/[?&]jobId=([\w-]+)/)
       || text.match(/\/job\/(\d+)/)
-      || text.match(/jobs\.51job\.com\/[^/]*\/(\d+)\.html/)
       || text.match(/[?&]jobid=(\d+)/i);
     return matched ? matched[1] : '';
   }
@@ -46,7 +45,7 @@
     return body || page || '';
   }
 
-  // 从详情请求里取出岗位标识（BOSS: encryptJobId；51job: jobid）
+  // 从详情请求里取出岗位标识（encryptJobId / jobId）
   function jobKeyFromDetail(url, payload) {
     // 1) 优先请求 URL 上的查询参数
     let queryKey = '';
@@ -70,7 +69,6 @@
 
   function platformOfHost(host) {
     if (/(^|\.)zhipin\.com$/i.test(host)) return 'boss';
-    if (/(^|\.)51job\.com$/i.test(host)) return 'qcwy';
     return null;
   }
   const PLATFORM = platformOfHost(location.hostname);
@@ -168,24 +166,16 @@
 
   // —— 识别当前详情页岗位标识 & 是否聊天页 ——
   function detectJobKey() {
-    const u = location.href;
-    if (PLATFORM === 'boss') {
-      // 详情页：/job_detail/<encryptId>.html；地理列表页详情抽屉不改 URL，识别不到属正常
-      const m = u.match(/job_detail\/([\w-]+)\.html/) || u.match(/[?&]jobId=([\w-]+)/);
-      return m ? m[1] : null;
-    }
-    if (PLATFORM === 'qcwy') {
-      const m = u.match(/\/job\/(\d+)/) || u.match(/jobs\.51job\.com\/[^/]*\/(\d+)\.html/) || u.match(/[?&]jobid=(\d+)/i);
-      return m ? m[1] : null;
-    }
-    return null;
+    if (PLATFORM !== 'boss') return null;
+    // 详情页：/job_detail/<encryptId>.html；地理列表页详情抽屉不改 URL，识别不到属正常
+    const m = location.href.match(/job_detail\/([\w-]+)\.html/) || location.href.match(/[?&]jobId=([\w-]+)/);
+    return m ? m[1] : null;
   }
   // 是否处于沟通/聊天页（用于 UI 提示「可直接发送」）
   function detectChat() {
+    if (PLATFORM !== 'boss') return false;
     const u = location.href.toLowerCase();
-    if (PLATFORM === 'boss') return /\/chat|\/geek\/chat|zhipin\.com\/web\/geek\/chat/.test(u) || !!document.querySelector('.chat-input, .conversation-message, #chat-input');
-    if (PLATFORM === 'qcwy') return /\/im|message|chat/.test(u) || !!document.querySelector('.im-input, .message-input, [class*="chat-input"]');
-    return false;
+    return /\/chat|\/geek\/chat|zhipin\.com\/web\/geek\/chat/.test(u) || !!document.querySelector('.chat-input, .conversation-message, #chat-input');
   }
 
   // —— 上报页面上下文 ——
@@ -262,13 +252,11 @@
   // —— DOM 兜底：当接口嗅探长时间未命中时，从可见卡片粗略抓取 ——
   // 仅作为兜底，字段不如接口完整。默认延迟启动，命中过接口则不启用。
   function domFallback() {
-    if (captured > 0 || !PLATFORM) return;
-    const jobs = PLATFORM === 'boss' ? scrapeBoss() : scrapeQcwy();
+    if (captured > 0 || PLATFORM !== 'boss') return;
+    const jobs = scrapeBoss();
     if (jobs.length) {
       // 包装成接口信封形状，复用 background 的归一化
-      const payload = PLATFORM === 'boss'
-        ? { code: 0, zpData: { jobList: jobs } }
-        : { status: '1', resultbody: { job: { items: jobs } } };
+      const payload = { code: 0, zpData: { jobList: jobs } };
       send(MSG.JOBS_CAPTURED, { platform: PLATFORM, url: location.href + '#dom', payload });
       captured++;
       flashBadge();
@@ -302,32 +290,6 @@
         brandIndustry: txt(c, '.company-tag-list li'),
         brandScaleName: '',
         brandStageName: '',
-      });
-    });
-    return out;
-  }
-
-  function scrapeQcwy() {
-    const cards = document.querySelectorAll('.joblist-item, .j_joblist .e, [class*="joblist-item"]');
-    const out = [];
-    cards.forEach((c) => {
-      const jobName = txt(c, '.jname') || txt(c, '.job-title') || txt(c, 'a[title]');
-      if (!jobName) return;
-      out.push({
-        jobId: c.getAttribute('data-jobid') || jobName,
-        jobName,
-        provideSalaryString: txt(c, '.sal') || txt(c, '.salary'),
-        jobAreaString: txt(c, '.d.at') || txt(c, '.area'),
-        workYearString: '',
-        degreeString: '',
-        jobTags: Array.from(c.querySelectorAll('.tags .tag, .job-tags span')).map((x) => x.textContent.trim()),
-        fullCompanyName: txt(c, '.cname') || txt(c, '.company-name'),
-        companyName: txt(c, '.cname'),
-        coIndustryText: txt(c, '.dc.at'),
-        companySizeString: '',
-        companyTypeString: '',
-        jobDescribe: '',
-        jobHref: (c.querySelector('a[href]') || {}).href || '',
       });
     });
     return out;
@@ -384,20 +346,8 @@
   }
 
   function detailDescriptionSelectors() {
-    if (PLATFORM === 'boss') {
-      return ['.job-sec-text', '.job-detail-section .job-sec-text', '.job-detail .job-sec-text'];
-    }
-    if (PLATFORM === 'qcwy') {
-      return [
-        '.bmsg.job_msg.inbox',
-        '.job_msg.inbox',
-        '.job_msg',
-        '.job-detail .job-word',
-        '.job-word',
-        '[class*="job-describe"]',
-      ];
-    }
-    return [];
+    if (PLATFORM !== 'boss') return [];
+    return ['.job-sec-text', '.job-detail-section .job-sec-text', '.job-detail .job-sec-text'];
   }
 
   function longestVisibleText(nodes) {

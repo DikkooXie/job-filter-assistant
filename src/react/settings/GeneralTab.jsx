@@ -9,7 +9,6 @@ import './general.css';
 const MODE_OPTIONS = [
   [MODE.auto, '跟随当前网站'],
   [MODE.boss, '只用 BOSS 直聘'],
-  [MODE.qcwy, '只用前程无忧'],
 ];
 
 const CAPTURE_ROWS = [

@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useReducer, useRef } from 'react';
 import { Toaster, toast } from '@/components/ui/sonner';
-import { MSG, MODE, STORAGE_KEYS } from '../common/constants.js';
+import { MSG, STORAGE_KEYS } from '../common/constants.js';
 import { decideOpenOriginal } from '../common/ensureDescription.js';
 import { appendDealbreaker, appendPreferenceNote, emptyProfile, scoreProfile } from '../common/profile.js';
 import { pickActiveProvider, profileFingerprint } from '../common/profileFingerprint.js';
@@ -45,7 +45,7 @@ const verdictNames = { strong: '强匹配', good: '较匹配', fair: '一般', w
 
 function buildDetailedCsv(items, progress) {
   const cols = [
-    ['平台', (job) => job.platform === 'boss' ? 'BOSS直聘' : '前程无忧51job'],
+    ['平台', (job) => job.platform === 'boss' ? 'BOSS直聘' : '其他平台'],
     ['匹配档次', (job) => descriptionGap(job)?.label || (isCompleteAnalysis(job) ? VERDICT_LABELS[job.match.verdict] || job.match.verdict : '未分析')],
     ['匹配分', (job) => isCompleteAnalysis(job) ? (job.match?.score ?? '') : ''], ['是否收藏', (job) => job.star ? '★' : ''],
     ['处理状态', (job) => csvProgressLabels[progress.get(job.uid)?.status] || '未处理'],
@@ -69,8 +69,6 @@ function buildDetailedCsv(items, progress) {
 function appliedLabel(view) {
   const parts = [];
   if (view.search.trim()) parts.push(`“${view.search.trim()}”`);
-  if (view.platform === 'boss') parts.push('BOSS直聘');
-  if (view.platform === 'qcwy') parts.push('前程无忧');
   if (view.verdict !== 'all') parts.push(verdictNames[view.verdict] || view.verdict);
   if (view.sort === 'score') parts.push('匹配优先');
   if (view.sort === 'salary') parts.push('月薪优先');
@@ -87,7 +85,7 @@ export default function Sidepanel() {
     jobs: [], settings: null, profile: null, providers: [], activeCtx: null, selectedUid: null,
     screen: 'list', followLive: false, loadError: null, readError: '', lastViewedUid: null,
     listScroll: 0, restoreList: false, filterOpen: false,
-    view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent', platform: 'all' },
+    view: { sub: 'info', greetLevel: 'standard', search: '', verdict: 'all', sort: 'recent' },
     scoring: new Set(), tailoring: new Set(), checked: new Set(), progress: new Map(), comm: new Map(), greetings: new Map(), advice: new Map(),
     saveTimers: new Map(), batch: emptyBatch(), queueOpen: false, pumping: false, successTimer: null, reloadVersion: 0, loading: true,
     modelNotice: false, seenReady: false, seenIds: new Set(), freshIds: new Set(),
@@ -131,7 +129,6 @@ export default function Sidepanel() {
       const keys = jobs.flatMap((job) => [progressKey(job.uid), commKey(job.uid)]);
       const stored = keys.length ? await chrome.storage.local.get(keys) : {};
       if (version !== s.reloadVersion) return;
-      const firstLoad = !s.settings;
       Object.assign(s, { jobs, settings, profile, providers, activeCtx, loading: false, loadError: null, readError: '' });
       const jobIds = new Set(jobs.map((job) => job.uid));
       for (const uid of s.progress.keys()) if (!jobIds.has(uid)) s.progress.delete(uid);
@@ -146,7 +143,6 @@ export default function Sidepanel() {
         if (commValue) s.comm.set(job.uid, sanitizeComm(commValue));
         else s.comm.delete(job.uid);
       });
-      if (firstLoad && settings.mode !== MODE.auto) s.view.platform = settings.mode;
       const captured = noteCapturedJobs({ ready: s.seenReady, seen: s.seenIds, fresh: s.freshIds }, jobs);
       s.seenReady = captured.ready;
       s.seenIds = captured.seen;
@@ -395,7 +391,7 @@ export default function Sidepanel() {
     const found = uid && s.jobs.some((job) => job.uid === uid) ? uid : null;
     openDetail(found, 'info', true);
   };
-  const resetView = () => setView({ search: '', platform: 'all', verdict: 'all', sort: 'recent' });
+  const resetView = () => setView({ search: '', verdict: 'all', sort: 'recent' });
   const openBossBrowse = () => {
     try {
       const opened = chrome.tabs.create({ url: BOSS_BROWSE_URL });
@@ -417,7 +413,7 @@ export default function Sidepanel() {
   const detailMode = s.screen !== 'detail' ? null : job ? 'job' : s.selectedUid ? 'removed' : 'unmatched';
   const profileScore = s.profile ? scoreProfile(s.profile).score : 0;
   const hasProfile = profileScore > 0;
-  const filterCount = (s.view.platform !== 'all' ? 1 : 0) + (s.view.verdict !== 'all' ? 1 : 0);
+  const filterCount = s.view.verdict !== 'all' ? 1 : 0;
   const viewChanged = viewConditionsChanged(s.view);
   const devBuild = runningDevBuild();
   const selecting = checked.length > 0;

@@ -1,5 +1,5 @@
-// 平台适配层：把 BOSS / 51job 各自的原始接口响应，归一化为统一岗位对象。
-// 字段依据 D:\boss分析 与 D:\前程分析 的真机逆向样本确定，非猜测。
+// 平台适配层：把 BOSS 直聘的原始接口响应归一化为统一岗位对象。
+// 字段依据真机逆向样本确定，非猜测。
 import { PLATFORM } from './constants.js';
 
 // 统一岗位 schema：
@@ -28,19 +28,12 @@ export function matchPlatformApi(urlStr) {
       return { platform: PLATFORM.boss, kind: 'detail' };
     }
   }
-  // 51job：we.51job.com/api/job/search-pc | search-h5
-  if (/(^|\.)51job\.com$/i.test(host)) {
-    if (/\/api\/job\/search-(pc|h5)/.test(path)) {
-      return { platform: PLATFORM.qcwy, kind: 'list' };
-    }
-  }
   return null;
 }
 
 // —— 从站点 host 推断平台 ——
 export function platformOfHost(host = '') {
   if (/(^|\.)zhipin\.com$/i.test(host)) return PLATFORM.boss;
-  if (/(^|\.)51job\.com$/i.test(host)) return PLATFORM.qcwy;
   return null;
 }
 
@@ -49,7 +42,6 @@ export function platformOfHost(host = '') {
 export function normalizeResponse(platform, payload, opts = {}) {
   try {
     if (platform === PLATFORM.boss) return normalizeBoss(payload, opts);
-    if (platform === PLATFORM.qcwy) return normalizeQcwy(payload);
   } catch (e) {
     return [];
   }
@@ -75,7 +67,6 @@ export function jobKeyFromPageUrl(pageUrl) {
     || text.match(/[?&]encryptJobId=([\w-]+)/)
     || text.match(/[?&]jobId=([\w-]+)/)
     || text.match(/\/job\/(\d+)/)
-    || text.match(/jobs\.51job\.com\/[^/]*\/(\d+)\.html/)
     || text.match(/[?&]jobid=(\d+)/i);
   return matched ? matched[1] : '';
 }
@@ -397,73 +388,6 @@ function bossJob(o) {
   };
 }
 
-// ============ 前程无忧 51job ============
-// 信封 {status, message, resultbody}；status==="1" 成功；列表在 resultbody.job.items[]
-function normalizeQcwy(payload) {
-  if (!isObj(payload)) return [];
-  const okStatus = payload.status === '1' || payload.status === 1;
-  if (!okStatus && !payload.resultbody) return [];
-  const rb = payload.resultbody || payload.resultBody || {};
-  const items = (rb.job && rb.job.items) || rb.items || [];
-  if (!Array.isArray(items)) return [];
-  return items.map(qcwyJob).filter(Boolean);
-}
-
-function qcwyJob(o) {
-  if (!isObj(o)) return null;
-  const jobId = str(o.jobId);
-  if (!jobId && !str(o.jobName)) return null;
-  const salaryText = str(o.provideSalaryString);
-  let minK = numK(o.jobSalaryMin);
-  let maxK = numK(o.jobSalaryMax);
-  if (minK == null && maxK == null) {
-    [minK, maxK] = parseSalary(salaryText);
-  }
-  const area = o.jobAreaLevelDetail || {};
-  return {
-    uid: `${PLATFORM.qcwy}:${jobId}`,
-    platform: PLATFORM.qcwy,
-    jobId,
-    title: str(o.jobName),
-    salaryText,
-    salaryMinK: minK,
-    salaryMaxK: maxK,
-    city: str(area.cityString) || firstArea(o.jobAreaString),
-    district: str(area.districtString) || restArea(o.jobAreaString),
-    experience: str(o.workYearString),
-    degree: str(o.degreeString),
-    skills: qcwyTags(o),
-    tags: arrStr(o.jobTags),
-    welfare: qcwyWelfare(o.jobWelfareCodeDataList),
-    company: str(o.fullCompanyName) || str(o.companyName),
-    companyIndustry: str(o.coIndustryText) || str(o.industryType1Str),
-    companyScale: str(o.companySizeString),
-    companyType: str(o.companyTypeString),
-    companyStage: '',
-    hrName: str(o.hrName),
-    hrTitle: str(o.hrPosition),
-    description: str(o.jobDescribe), // 51job 列表直接带完整 JD
-    url: str(o.jobHref),
-    publishedAt: str(o.issueDateString) || str(o.confirmDateString),
-    raw: {
-      encCoId: str(o.encCoId),
-      coId: str(o.coId),
-      funcType1Code: str(o.funcType1Code),
-    },
-  };
-}
-
-function qcwyTags(o) {
-  // jobTags 里混了经验/学历/技能/福利，取中间偏技能的词；这里保守用 jobTags 去掉明显的经验学历
-  const tags = arrStr(o.jobTags);
-  return tags.filter((t) => !/^\d|年$|本科|大专|硕士|博士|学历|应届|经验/.test(t)).slice(0, 12);
-}
-
-function qcwyWelfare(list) {
-  if (!Array.isArray(list)) return [];
-  return list.map((x) => str(x && x.chineseTitle)).filter(Boolean);
-}
-
 // ============ 工具函数 ============
 function isObj(x) {
   return typeof x === 'object' && x !== null && !Array.isArray(x);
@@ -486,19 +410,6 @@ function arrStr(x) {
 }
 function joinNonEmpty(arr, sep) {
   return arr.map(str).filter(Boolean).join(sep);
-}
-function firstArea(s) {
-  const parts = str(s).split(/[·\-]/);
-  return parts[0] || '';
-}
-function restArea(s) {
-  const parts = str(s).split(/[·\-]/);
-  return parts.slice(1).join('·');
-}
-function numK(x) {
-  const n = Number(x);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return Math.round((n / 1000) * 10) / 10; // 元 -> 千元
 }
 
 // 解析中文薪资串："1.1-1.8万·13薪" / "10-13K·13薪" / "5千-1万" / "8-12k"

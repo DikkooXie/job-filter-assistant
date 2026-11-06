@@ -1,5 +1,5 @@
 // 设置与 AI 供应商列表的 storage 读写。
-import { STORAGE_KEYS, defaultSettings, defaultFilters } from './constants.js';
+import { STORAGE_KEYS, defaultSettings, defaultFilters, MODE } from './constants.js';
 import { sanitizeProviderList } from './ai/providers.js';
 import { pickActiveProvider } from './profileFingerprint.js';
 import { normalizeUpdateChannel } from './update.js';
@@ -24,6 +24,8 @@ export function mergeSettings(input) {
   return {
     ...d,
     ...input,
+    // 归一运行模式：已移除的平台（如旧的 qcwy）落回 auto，存储键与结构不变。
+    mode: Object.values(MODE).includes(input.mode) ? input.mode : d.mode,
     privacy: { ...d.privacy, ...(isObj(input.privacy) ? input.privacy : {}) },
     filters: { ...defaultFilters(), ...(isObj(input.filters) ? input.filters : {}) },
     updateChannel: normalizeUpdateChannel(input.updateChannel),

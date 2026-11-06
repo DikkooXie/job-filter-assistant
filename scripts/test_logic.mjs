@@ -103,10 +103,6 @@ test('BOSS joblist 命中', () => {
   const m = matchPlatformApi('https://www.zhipin.com/wapi/zpgeek/search/joblist.json?city=101280100');
   assert.equal(m.platform, 'boss');
 });
-test('51job search-pc 命中', () => {
-  const m = matchPlatformApi('https://we.51job.com/api/job/search-pc?keyword=python');
-  assert.equal(m.platform, 'qcwy');
-});
 test('无关 URL 不命中', () => {
   assert.equal(matchPlatformApi('https://www.baidu.com/s?wd=x'), null);
 });
@@ -667,25 +663,10 @@ test('非 JSON drop 转发时不带正文', () => {
   assert.equal(JSON.stringify(logged).includes('不应落盘'), false);
 });
 
-// ---------- 51job 归一化（合成样本，结构仿真机） ----------
-section('51job 归一化（qcwy_job.sample.json）');
-const qcwySample = loadFixture('qcwy_job.sample.json');
-const qcwyEnvelope = { status: '1', message: '成功', resultbody: { job: { items: [qcwySample], totalcount: 1 } } };
-const qcwyJobs = normalizeResponse('qcwy', qcwyEnvelope);
-test('解析出 1 条', () => assert.equal(qcwyJobs.length, 1));
-test('字段映射正确', () => {
-  const j = qcwyJobs[0];
-  assert.equal(j.platform, 'qcwy');
-  assert.equal(j.title, 'python开发工程师');
-  assert.equal(j.jobId, '888800011');
-  assert.ok(j.description.includes('岗位职责'), '带完整 JD 正文');
-  assert.equal(j.city, '珠海');
-  assert.deepEqual([j.salaryMinK, j.salaryMaxK], [11, 18], 'jobSalaryMin/Max 元->千元');
-  assert.ok(j.company.includes('半导体'), '公司名');
-  assert.ok(j.companyIndustry, '行业');
-});
-test('status 非 1 返回空', () => {
-  assert.equal(normalizeResponse('qcwy', { status: '0' }).length, 0);
+// ---------- 未知平台 / 失败信封 ----------
+section('归一化失败信封');
+test('未注册平台返回空', () => {
+  assert.equal(normalizeResponse('unknown', { status: '1' }).length, 0);
 });
 test('BOSS code 非 0 返回空', () => {
   assert.equal(normalizeResponse('boss', { code: 37, message: '风控' }).length, 0);
@@ -2155,7 +2136,6 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /JOB_LIST_REQUEST/);
   assert.match(page, /跟随当前网站/);
   assert.match(page, /只用 BOSS 直聘/);
-  assert.match(page, /只用前程无忧/);
   assert.match(page, /role="radiogroup"/);
   assert.match(page, /type="radio"/);
   assert.match(page, /gen-update-slot/);
@@ -2897,7 +2877,7 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
 
 section('空 JD 分析前补抓');
 test('已有描述或没有定位信息的岗位不补抓，间隔不小于现有限速', () => {
-  assert.equal(jobNeedsDescription({ uid: 'qcwy:1', platform: 'qcwy', description: '岗位职责：已有', url: 'https://jobs.51job.com/a/1.html' }), false);
+  assert.equal(jobNeedsDescription({ uid: 'boss:0', platform: 'boss', description: '岗位职责：已有', url: 'https://www.zhipin.com/job_detail/0.html' }), false);
   assert.equal(jobNeedsDescription({ uid: 'boss:1', platform: 'boss', description: '  ', jobId: 'abc', url: 'https://www.zhipin.com/job_detail/abc.html' }), true);
   assert.equal(jobNeedsDescription({ uid: 'boss:2', description: '' }), false);
   assert.equal(hasJobDescription({ description: '  正文 ' }), true);
@@ -3058,7 +3038,6 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
-  const legacy = fs.readFileSync(path.join(root, 'src/ui/sidepanel.js'), 'utf8');
   const scoreStart = background.indexOf('async function scoreOne');
   const promptAt = background.indexOf('buildMatchPrompt(profile, job', scoreStart);
   const ensureAt = background.indexOf('queueEnsure(job)', scoreStart);
@@ -3094,7 +3073,6 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   assert.doesNotMatch(background, /wapi\/zpgeek/);
   assert.match(sidepanel, /changes\[STORAGE_KEYS\.jobs\]/);
   assert.match(sidepanel, /await sleep\(500\)/);
-  assert.match(legacy, /changes\[STORAGE_KEYS\.jobs\]/);
 });
 
 test('空 JD 不能标成已分析：库内有描述就显示，没有描述则降级', () => {
@@ -3179,7 +3157,7 @@ test('已有描述只打开，空描述才等待；刮到的正文只补已有 u
   assert.equal(decideOpenOriginal({ uid: 'boss:abc', url: '', description: '' }), 'skip');
   assert.equal(decideOpenOriginal({ uid: 'boss:abc', url: 'javascript:alert(1)', description: '' }), 'open');
   assert.equal(jobKeyFromUid('boss:abc'), 'abc');
-  assert.equal(jobKeyFromUid('qcwy:998877'), '998877');
+  assert.equal(jobKeyFromUid('boss:998877'), '998877');
   assert.equal(DETAIL_TEXT_MIN, 20);
   assert.equal(cleanDetailText('立即沟通'), '');
   const scraped = acceptDetailScrape({
@@ -3214,7 +3192,7 @@ test('已有描述只打开，空描述才等待；刮到的正文只补已有 u
   );
   assert.equal(kept.patched, false);
   assert.match(kept.jobs[0].description, /接口返回/);
-  assert.equal(patchExistingDescription([{ uid: 'qcwy:1', description: '' }], 'qcwy:1', '  ').patched, false);
+  assert.equal(patchExistingDescription([{ uid: 'boss:1', description: '' }], 'boss:1', '  ').patched, false);
 });
 test('打开原岗位的接线：空描述走等待，超时才刮；已有描述仍只开标签', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -3320,17 +3298,10 @@ test('详情页按可见正文刮 JD，标识不一致或过短则不采用', ()
   });
   const fallback = hidden({ type: 'SCRAPE_JOB_DETAIL', jobKey: 'abc' });
   assert.equal(fallback.description, jd);
-  const qcwy = runDetailPage('https://jobs.51job.com/shanghai/998877.html', {
-    '.job_msg': [detailNode(jd)],
-  });
-  const from51 = qcwy({ type: 'SCRAPE_JOB_DETAIL', jobKey: '998877' });
-  assert.equal(from51.ok, true);
-  assert.equal(from51.jobKey, '998877');
-  assert.equal(from51.description, jd);
   const merged = patchExistingDescription(
-    [{ uid: 'qcwy:998877', description: '', title: '数据岗' }],
-    'qcwy:998877',
-    from51.description,
+    [{ uid: 'boss:abc', description: '', title: '数据岗' }],
+    'boss:abc',
+    hit.description,
   );
   assert.equal(merged.patched, true);
   assert.equal(merged.jobs[0].description, jd);
@@ -3612,16 +3583,12 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
     }
   };
   walk(srcDir);
-  const legacy = path.join(srcDir, 'ui', 'sidepanel.js');
   const offenders = [];
   for (const file of files) {
-    if (file === legacy) continue;
     const hits = callsIn(fs.readFileSync(file, 'utf8'));
     if (hits.length) offenders.push(`${path.relative(root, file)}: ${hits.join(', ')}`);
   }
   assert.deepEqual(offenders, []);
-  const legacyText = fs.readFileSync(legacy, 'utf8');
-  assert.equal(callsIn(legacyText).length, 4);
   const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
   assert.doesNotMatch(vite, /src\/ui\/sidepanel\.js/);
   const sidepanel = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel.jsx'), 'utf8');
@@ -3683,7 +3650,6 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   assert.match(browse, /data-sonner-toaster/);
   assert.match(browse, /--jp-surface-2/);
   assert.match(browse, /data-type='error'/);
-  assert.match(common, /data-offercome-toast/);
   assert.equal(callsIn(common).length, 0);
 });
 

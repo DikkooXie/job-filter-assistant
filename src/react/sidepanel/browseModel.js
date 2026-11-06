@@ -117,7 +117,8 @@ export function warningZone(job) {
 }
 
 export function platformLabel(platform) {
-  return platform === 'boss' ? 'BOSS' : '51job';
+  // 只收录 BOSS；旧数据里的其他平台标识仍可显示，但不再新增。
+  return platform === 'boss' ? 'BOSS' : '其他平台';
 }
 
 // 空描述上的分数不是完整分析。有 match 只说明跑过打分，不代表用了 JD。

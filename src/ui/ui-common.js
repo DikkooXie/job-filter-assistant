@@ -1,5 +1,5 @@
-// UI 层共享小工具：消息封装、DOM 构造、toast、转义。
-import { VERDICT_LABELS } from '../common/ai/prompts.js';
+// UI 层共享小工具：向 background 发消息、列表字段解析。
+// 旧版原生 UI（h/esc/toast/debounce 等 DOM 工具）已随旧页面一并删除。
 
 // 向 background 发消息，抛错友好。
 // 带超时：MV3 service worker 可能在长任务中被回收，导致回调永不触发。
@@ -31,84 +31,10 @@ export function send(type, extra = {}, timeoutMs = 120000) {
   });
 }
 
-export function h(tag, attrs = {}, children = []) {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v == null) continue;
-    if (k === 'class') el.className = v;
-    else if (k === 'text') el.textContent = v;
-    else if (k === 'html') el.innerHTML = v;
-    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === 'dataset') Object.assign(el.dataset, v);
-    // 布尔属性（disabled/checked/hidden…）：HTML 里「有该属性即生效」，与值无关。
-    // 所以 v===false 必须「不设置」，否则 disabled="false" 反而把按钮禁用了。
-    else if (v === false) continue;
-    else if (v === true) el.setAttribute(k, '');
-    else el.setAttribute(k, v);
-  }
-  const kids = Array.isArray(children) ? children : [children];
-  for (const c of kids) {
-    if (c == null || c === false) continue;
-    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  }
-  return el;
-}
-
-export function esc(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]),
-  );
-}
-
-let toastEl = null;
-let toastTimer = null;
-// 旧预览页（根目录 / dev 的 sidepanel、popup）没有 React。这里用同一套贴底反馈，不走浏览器 alert。
-export function toast(message, isError = false) {
-  const text = String(message ?? '').trim();
-  if (!text) return;
-  if (!toastEl) {
-    toastEl = document.createElement('div');
-    toastEl.setAttribute('data-offercome-toast', '');
-    document.body.appendChild(toastEl);
-  }
-  toastEl.replaceChildren();
-  const mark = document.createElement('span');
-  mark.className = 'toast-mark';
-  mark.setAttribute('aria-hidden', 'true');
-  mark.textContent = isError ? '!' : '✓';
-  const label = document.createElement('span');
-  label.className = 'toast-text';
-  label.textContent = text;
-  toastEl.append(mark, label);
-  toastEl.className = `toast show${isError ? ' err' : ''}`;
-  toastEl.setAttribute('role', isError ? 'alert' : 'status');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    if (!toastEl) return;
-    toastEl.className = `toast${isError ? ' err' : ''}`;
-  }, 2600);
-}
-
-export function verdictLabel(v) {
-  return VERDICT_LABELS[v] || '';
-}
-
-// 逗号/换行分隔字符串 <-> 数组
+// 逗号/换行分隔字符串 -> 数组
 export function toList(str) {
   return String(str || '')
     .split(/[,，、;；\n]/)
     .map((s) => s.trim())
     .filter(Boolean);
-}
-export function fromList(arr) {
-  return Array.isArray(arr) ? arr.join('、') : '';
-}
-
-// 防抖
-export function debounce(fn, ms = 400) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
 }

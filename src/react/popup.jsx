@@ -47,7 +47,7 @@ export default function Popup() {
     {!settings ? <p className="text-sm text-muted-foreground">{error ? '请重新打开扩展。' : '正在加载…'}</p> : <>
       <p className="text-sm text-muted-foreground">{context.platform ? `当前：${context.platformName}（正在监听）` : '当前不在招聘站点'}</p>
       <Tabs value={settings.mode} onValueChange={(mode) => update({ mode })}>
-        <TabsList className="w-full"><TabsTrigger value={MODE.auto} disabled={saving}>自动</TabsTrigger><TabsTrigger value={MODE.boss} disabled={saving}>BOSS</TabsTrigger><TabsTrigger value={MODE.qcwy} disabled={saving}>51job</TabsTrigger></TabsList>
+        <TabsList className="w-full"><TabsTrigger value={MODE.auto} disabled={saving}>自动</TabsTrigger><TabsTrigger value={MODE.boss} disabled={saving}>BOSS</TabsTrigger></TabsList>
       </Tabs>
       <div className="grid grid-cols-2 gap-3 border-y py-3">
         {[[jobs.length, '已收录岗位'], [scored, '已 AI 分析'], ...(scored ? [[strong, '较匹配以上'], [jobs.filter((job) => job.star).length, '已收藏']] : [])].map(([value, label]) => <div key={label} className="flex flex-col gap-1"><span className="text-lg font-semibold tabular-nums">{value}</span><span className="text-xs text-muted-foreground">{label}</span></div>)}

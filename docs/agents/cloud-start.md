@@ -33,6 +33,6 @@ npm run build
 
 新 session 以远端任务分支、issue 评论和关联 PR 为准。`docs/settings-ui-spec.md` 是这轮界面改造的视觉依据；本机被忽略的原型不作为前置材料。
 
-`dev/mock-chrome.js` 是普通浏览器预览用的合成数据和模拟消息服务，`dev/*.html` 是旧版预览入口，不能据此声称 React 设置页或真实扩展已验收。React 入口为 `extension-pages/options.html`；扩展验证从构建出的 `dist/` 加载。界面工单需要补充规格要求的深浅色与宽窄屏证据，以及相关数据 / 交互检查。
+`dev/browse-preview-chrome.js` 是岗位浏览预览页（`extension-pages/sidepanel-browse-preview.jsx`）用的合成数据和模拟消息服务，不能据此声称 React 设置页或真实扩展已验收。React 入口为 `extension-pages/`；扩展验证从构建出的 `dist/` 加载。界面工单需要补充规格要求的深浅色与宽窄屏证据，以及相关数据 / 交互检查。
 
 GitHub Actions 的 `Checks` 自动运行 `npm ci`、`npm test`、`npm run build`；它验证构建和逻辑，不替代扩展浏览器验收。它也不会自动运行 AI Agent。

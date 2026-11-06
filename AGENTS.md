@@ -10,7 +10,7 @@
 
 ## 这个项目是什么
 
-Chrome / Edge 扩展（Manifest V3）：浏览 BOSS直聘 或 前程无忧 时被动收录岗位，结合本机保存的个人画像，调用用户自己配置的 AI 接口逐个分析岗位匹配度。
+Chrome / Edge 扩展（Manifest V3）：浏览 BOSS直聘 时被动收录岗位，结合本机保存的个人画像，调用用户自己配置的 AI 接口逐个分析岗位匹配度。
 
 技术栈：Vite 6 + React 19 + Tailwind CSS v4 + shadcn/ui（Radix）。扩展页面在 `extension-pages/`，业务代码在 `src/`，别名 `@` 指向 `src`。
 

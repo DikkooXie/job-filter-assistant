@@ -138,7 +138,7 @@
 
 ### 通用与隐私（单栏，最大 760px）
 
-1. **运行平台**：三张单选卡片——跟随当前网站 / 只用 BOSS 直聘 / 只用前程无忧。对应 `settings.mode` 的 `auto` / `boss` / `qcwy`。
+1. **运行平台**：两张单选卡片——跟随当前网站 / 只用 BOSS 直聘。对应 `settings.mode` 的 `auto` / `boss`；历史值 `qcwy` 读取时会归一到 `auto`。
 2. **收录与分析**：自动收录岗位；自动 AI 分析（「每个新岗位消耗一次接口调用。」）；显示收录角标（「显示在招聘网站页面右下角。」）；合并重复岗位。对应 `autoCapture`、`autoScore`、`showBadge`、`dedupe`。岗位库上限对应 `maxJobs`，说明「超出后先淘汰最早收录的，收藏的岗位不会被淘汰」。
 3. **隐私**：发送前脱敏（含「不能保证移除所有个人信息」）、发送岗位公司名、发送招呼语前确认。对应 `privacy.redactPII / sendCompanyName / confirmBeforeSend`。
 4. **岗位数据**：说明行「已收录 N 个，其中收藏 M 个，上限 X 个」——用 `JOB_LIST_REQUEST` 的返回统计，不新增消息。两行：导出岗位（JSON / CSV，辅助说明「只有 JSON 可以用来恢复」）；清空岗位库（危险色，二次确认，提示「建议先导出 JSON」）。

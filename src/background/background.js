@@ -341,7 +341,7 @@ async function sendGreetingToChat(text, platform, url) {
 
   const hostGlobs = platform && PLATFORM_META[platform]
     ? PLATFORM_META[platform].hosts.map((host) => `*://${host}/*`)
-    : ['*://*.zhipin.com/*', '*://*.51job.com/*'];
+    : ['*://*.zhipin.com/*'];
 
   let tabs = [];
   try {
@@ -350,7 +350,7 @@ async function sendGreetingToChat(text, platform, url) {
     tabs = [];
   }
   if (!tabs.length) {
-    throw new Error('未找到已打开的 BOSS/51job 页面，请先在网站上打开对应平台');
+    throw new Error('未找到已打开的 BOSS 直聘页面，请先在网站上打开岗位');
   }
 
   // 优先当前激活标签，其次最近使用

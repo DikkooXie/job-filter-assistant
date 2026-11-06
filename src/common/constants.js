@@ -10,10 +10,9 @@ export const STORAGE_KEYS = {
   lastReport: 'jobHelperLastCaptureReportV1', // 补抓/嗅探失败原因。不改键名；条目里不放 JD 正文
 };
 
-// 平台标识
+// 平台标识。目前只支持 BOSS；51job 支持已移除（见 docs/refactor-plan.md P2）。
 export const PLATFORM = {
   boss: 'boss',
-  qcwy: 'qcwy', // 前程无忧 51job
 };
 
 export const PLATFORM_META = {
@@ -25,21 +24,13 @@ export const PLATFORM_META = {
     hosts: ['zhipin.com', 'www.zhipin.com'],
     searchUrl: 'https://www.zhipin.com/web/geek/jobs',
   },
-  [PLATFORM.qcwy]: {
-    id: PLATFORM.qcwy,
-    name: '前程无忧 51job',
-    short: '51job',
-    color: '#eb6100',
-    hosts: ['we.51job.com', 'www.51job.com', 'jobs.51job.com'],
-    searchUrl: 'https://we.51job.com/pc/search',
-  },
 };
 
-// 运行模式：auto = 跟随当前站点；其余为强制单平台视图
+// 运行模式：auto = 跟随当前站点；boss = 只看 BOSS。
+// 只保留合法取值，不做迁移：mergeSettings 负责把历史值（如已移除的 qcwy）归一为 auto。
 export const MODE = {
   auto: 'auto',
   boss: PLATFORM.boss,
-  qcwy: PLATFORM.qcwy,
 };
 
 // 消息协议（background <-> content <-> UI）

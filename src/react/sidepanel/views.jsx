@@ -778,7 +778,7 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
     return (
       <div className="surface-state">
         <h2>还没有收录岗位</h2>
-        <p>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。在前程无忧浏览也会收录。</p>
+        <p>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。</p>
         <button type="button" className="jp-btn jp-btn-primary" onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
       </div>
     );
@@ -840,7 +840,7 @@ export function JobDetail({
           {mode !== 'job' ? (
             <>
               <h2 tabIndex={-1}>{mode === 'removed' ? '岗位已不在列表中' : '未匹配到当前页面'}</h2>
-              <p>{mode === 'removed' ? '它可能刚被删除或清出岗位库。返回后可以从列表继续。' : '在 BOSS直聘或前程无忧打开岗位详情后，再点当前岗位。'}</p>
+              <p>{mode === 'removed' ? '它可能刚被删除或清出岗位库。返回后可以从列表继续。' : '在 BOSS直聘打开岗位详情后，再点当前岗位。'}</p>
             </>
           ) : (
             <>
@@ -870,7 +870,7 @@ export function JobDetail({
                     ['城市', [job.city, job.district].filter(Boolean).join(' · ')],
                     ['经验', job.experience],
                     ['学历', job.degree],
-                    ['平台', job.platform === 'boss' ? 'BOSS直聘' : '前程无忧'],
+                    ['平台', job.platform === 'boss' ? 'BOSS直聘' : '其他平台'],
                   ]} />
                   {(job.skills?.length || job.tags?.length) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags).slice(0, 20)} /></>}
                   {job.welfare?.length > 0 && <><h3>福利</h3><Tags values={job.welfare.slice(0, 20)} /></>}
@@ -1008,14 +1008,6 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }) {
           <button type="button" className="icon-btn" aria-label="关闭" onClick={onClose}><X aria-hidden="true" /></button>
         </header>
         <div className="sheet-content">
-          <fieldset>
-            <legend>平台</legend>
-            <div className="segmented">
-              {[['all', '全部'], ['boss', 'BOSS直聘'], ['qcwy', '前程无忧']].map(([key, label]) => (
-                <button type="button" key={key} aria-pressed={view.platform === key} onClick={() => onView({ platform: key })}>{label}</button>
-              ))}
-            </div>
-          </fieldset>
           <fieldset>
             <legend>匹配结果</legend>
             <div className="filter-options">

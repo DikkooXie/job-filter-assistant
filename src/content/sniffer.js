@@ -1,4 +1,4 @@
-// MAIN world 嗅探器：劫持 fetch / XHR，捕获 BOSS / 51job 的岗位接口 JSON 响应，
+// MAIN world 嗅探器：劫持 fetch / XHR，捕获 BOSS 直聘的岗位接口 JSON 响应，
 // 通过 window.postMessage 转发给 ISOLATED world 的 collector。
 // 不改请求、不碰令牌/WAF —— 只被动读取页面自己发出的请求的响应。
 (function () {
@@ -42,9 +42,6 @@
       if (/\/wapi\/zpgeek\/(search\/joblist|pc\/recommend\/job\/list|mobile\/search\/joblist|job\/detail(?:\/[a-z]+)?|pc\/recommend\/job\/detail|job\/card|geek\/job\/detail)\.json/.test(path)) {
         return 'boss';
       }
-    }
-    if (/(^|\.)51job\.com$/i.test(host)) {
-      if (/\/api\/job\/(search-(pc|h5)|detail)/.test(path)) return 'qcwy';
     }
     return null;
   }
