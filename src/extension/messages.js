@@ -1,7 +1,4 @@
-// UI 层共享小工具：向 background 发消息、列表字段解析。
-// 旧版原生 UI（h/esc/toast/debounce 等 DOM 工具）已随旧页面一并删除。
-
-// 向 background 发消息，抛错友好。
+// 扩展运行时适配层：向 background 发消息。
 // 带超时：MV3 service worker 可能在长任务中被回收，导致回调永不触发。
 // 超时后 reject，避免上层 await 永久挂起（进而卡住 batchBusy 之类的状态）。
 export function send(type, extra = {}, timeoutMs = 120000) {
@@ -29,12 +26,4 @@ export function send(type, extra = {}, timeoutMs = 120000) {
       finish(reject, e instanceof Error ? e : new Error(String(e)));
     }
   });
-}
-
-// 逗号/换行分隔字符串 -> 数组
-export function toList(str) {
-  return String(str || '')
-    .split(/[,，、;；\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
 }

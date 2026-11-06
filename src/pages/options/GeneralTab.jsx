@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { MODE, MSG, STORAGE_KEYS } from '../../common/constants.js';
-import { send } from '../../ui/ui-common.js';
-import UpdatePanel from '../UpdatePanel.jsx';
+import { send } from '../../extension/messages.js';
+import UpdatePanel from './UpdatePanel.jsx';
 import { summarizeJobs } from './jobStats.js';
 import './general.css';
 

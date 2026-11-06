@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { MSG } from '../../common/constants.js';
 import { PRESETS, PROTOCOLS, PROTOCOL_LABELS, providerFromPreset, validateProvider } from '../../common/ai/providers.js';
-import { send } from '../../ui/ui-common.js';
+import { send } from '../../extension/messages.js';
 import {
   formatConnectionResult,
   formatElapsed,

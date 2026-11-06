@@ -1,5 +1,5 @@
 // 岗位筛选页的表单补丁。salaryMaxK 仍保存在 filters 里，但页面不再编辑它。
-import { toList } from '../../ui/ui-common.js';
+import { toList } from '../../common/text.js';
 
 export const FILTER_FORM_KEYS = [
   'enabled',

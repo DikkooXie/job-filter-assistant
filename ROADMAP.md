@@ -16,7 +16,7 @@
 - [x] 盘点当前安装方式、扩展 ID、浏览器本地存储和构建输出之间的关系。
 - [x] 在 `manifest.json` 中固定扩展公钥，使扩展 ID 在换目录、重新构建后保持不变。
 - [x] 放弃「运行 `npm run update` 再重新加载」的流程：用户不应需要命令行。
-- [x] 扩展内更新：通过 File System Access 授权扩展文件夹，下载 GitHub Release 安装包，校验名称、key/ID、版本和 zip 路径后覆盖写入（manifest.json 最后写），再自动重新加载并重开设置页。（`src/common/update.js`、`src/ui/update.js`、`src/react/UpdatePanel.jsx`）
+- [x] 扩展内更新：通过 File System Access 授权扩展文件夹，下载 GitHub Release 安装包，校验名称、key/ID、版本和 zip 路径后覆盖写入（manifest.json 最后写），再自动重新加载并重开设置页。（`src/common/update.js`、`src/extension/update.js`、`src/pages/options/UpdatePanel.jsx`）
 - [x] 发版脚本 `npm run release`：测试、构建、打包 dist 内容并创建 GitHub Release。
 - [x] 1.0.0 → 1.0.1 在真实 Edge 中一键更新成功。
 - [x] 简化流程：不再单独「选择文件夹」，首次点「立即更新」时自动弹出选择窗口，并提示到扩展管理页「来源」查找位置；自动更新失败或浏览器不支持时显示手动更新三步；README 和设置页说明解压出的文件夹就是扩展本身，不要删除或移动。

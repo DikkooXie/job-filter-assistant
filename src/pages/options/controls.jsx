@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toList } from '../../ui/ui-common.js';
+import { toList } from '../../common/text.js';
 
 export function Field({ label, children }) {
   return <label className="grid gap-2 text-sm font-medium">{label}{children}</label>;

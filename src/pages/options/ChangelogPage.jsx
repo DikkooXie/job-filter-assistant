@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { RELEASES_PAGE, CHANGELOG_SECTION_ORDER, isCurrentChangelogVersion, formatChangelogWhen } from '../../common/update.js';
-import { fetchReleaseNotes } from '../../ui/update.js';
+import { fetchReleaseNotes } from '../../extension/update.js';
 
 const EMPTY_PAGE = '暂时还没有整理好的版本说明';
 const UNCLASSIFIED = '本版暂无整理好的更新说明';

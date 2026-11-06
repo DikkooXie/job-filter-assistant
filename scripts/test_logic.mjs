@@ -9,7 +9,7 @@ import vm from 'node:vm';
 import { defaultFilters, defaultSettings, MSG, STORAGE_KEYS } from '../src/common/constants.js';
 import { isDevBuild, toDevManifest } from '../src/common/build.js';
 import { loadSettings, mergeSettings, saveSettings } from '../src/common/settingsStore.js';
-import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/react/settings/filterForm.js';
+import { commitTags, filterSettingsPatch, mergeFilterPatch, parseSalaryMinK, removeLastTag } from '../src/pages/options/filterForm.js';
 import { normalizeResponse, matchPlatformApi, parseSalary, jobKeyFromPageUrl, preferDetailJobKey, detailUidDecision, acceptedHintJobId, captureKeyNotes } from '../src/common/platforms.js';
 import {
   ENSURE_DESC_GAP_MS, ENSURE_DESC_TIMEOUT_MS, createEnsureQueue, ensureGapWait, filterCapturedJobs,
@@ -29,20 +29,20 @@ import {
 import { evaluateJob, applyFilters, autoScoreUids } from '../src/common/filters.js';
 import {
   analysisEmptyMessage, analysisGrade, analysisSummary, analysisTargets, analysisUsesForce, descriptionGap, exclusionReasons, filterVisibleJobs, flowEntryLabel, flowStatusLabel, FRESH_CAPSULE_MS, FRESH_MARK_VISIBLE_MS, isCompleteAnalysis, jobDescriptionText, librarySurface, noteCapturedJobs, returnFocusTarget, riskLines, shouldReturnToListAfterDelete, warningZone,
-} from '../src/react/sidepanel/browseModel.js';
-import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/react/sidepanel/librarySource.js';
+} from '../src/pages/sidepanel/browseModel.js';
+import { BOSS_BROWSE_URL, jobsForLibrary } from '../src/pages/sidepanel/librarySource.js';
 import {
   canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, groupChatDays, ignorePending, isGreetGateOpen, nextChip,
   railSteps, sanitizeComm, suggestionFromChip, suggestionFromDemand, syncLabel,
-} from '../src/react/sidepanel/commTab.js';
-import { createConfirmQueue, splitConfirmCopy } from '../src/react/sidepanel/confirmQueue.js';
+} from '../src/pages/sidepanel/commTab.js';
+import { createConfirmQueue, splitConfirmCopy } from '../src/pages/sidepanel/confirmQueue.js';
 import {
   QUEUE_PREVIEW, SUCCESS_HOLD_MS, batchCounts, cancelRemaining, cardCopy, drawerModel, emptyBatch, enqueueBatch, estimateMinutes, finishPhase, retryFailed, settle as settleItem, stripModel, takeNext, visibleSections,
-} from '../src/react/sidepanel/batchQueue.js';
+} from '../src/pages/sidepanel/batchQueue.js';
 import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
-} from '../src/react/settings/aiState.js';
+} from '../src/pages/options/aiState.js';
 import { sanitizeMatch, scoreToVerdict, normalizeGreetings, normalizeDims, sanitizeTailor, buildMatchPrompt, buildSuggestReplyPrompt, sanitizeSuggestReply, replyEchoesInstruction } from '../src/common/ai/prompts.js';
 import { redactText } from '../src/common/ai/privacy.js';
 import {
@@ -1087,7 +1087,7 @@ test('列表行展示协议、模型和主机', () => {
 });
 test('AI 接口页保留原字段、自动保存，并且自己计时', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const ui = fs.readFileSync(path.join(root, 'src/react/settings/AiTab.jsx'), 'utf8');
+  const ui = fs.readFileSync(path.join(root, 'src/pages/options/AiTab.jsx'), 'utf8');
   const client = fs.readFileSync(path.join(root, 'src/common/ai/client.js'), 'utf8');
   for (const field of ['baseUrl', 'apiKey', 'model', 'anthropicVersion', 'temperature', 'maxTokens', 'requestUrl', 'modelsUrl', 'extraHeaders', 'discoveredModels', 'activeProviderId']) {
     assert.match(ui, new RegExp(field));
@@ -1631,7 +1631,7 @@ await testAsync('在设置页关闭后，已显示的角标立即移除；重新
 
 // ---------- 设置页保存队列 ----------
 section('设置页保存队列');
-const { createSaveQueue } = await import('../src/react/settings/saveQueue.js');
+const { createSaveQueue } = await import('../src/pages/options/saveQueue.js');
 
 function createClock() {
   let now = 0;
@@ -1892,18 +1892,18 @@ await testAsync('更新的编辑进行中时，不把状态停在上一次失败
 });
 
 test('设置页仍然使用 200 / 600 / 500 毫秒防抖', () => {
-  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/react/options.jsx'), 'utf8');
+  const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/OptionsApp.jsx'), 'utf8');
   assert.match(src, /enqueue\('settings',[\s\S]*?,\s*200\)/);
   assert.match(src, /enqueue\('profile',[\s\S]*?,\s*600\)/);
   assert.match(src, /enqueue\('providers',[\s\S]*?,\s*500\)/);
   assert.doesNotMatch(src, /import\(/);
-  const queueSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/react/settings/saveQueue.js'), 'utf8');
+  const queueSrc = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/pages/options/saveQueue.js'), 'utf8');
   assert.match(queueSrc, /pagehide/);
   assert.match(queueSrc, /beforeunload/);
   assert.doesNotMatch(queueSrc, /import\(/);
 });
 
-const { pageFromHash, isUpdatedHash, isChangelogHash, changelogReturnTarget, nextNavIndex, SETTINGS_PAGES, optionsUrlHash, sectionTargetId } = await import('../src/react/settings/pageHash.js');
+const { pageFromHash, isUpdatedHash, isChangelogHash, changelogReturnTarget, nextNavIndex, SETTINGS_PAGES, optionsUrlHash, sectionTargetId } = await import('../src/pages/options/pageHash.js');
 test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () => {
   assert.deepEqual(SETTINGS_PAGES.map((page) => page.id), ['profile', 'ai', 'filters', 'general']);
   assert.equal(SETTINGS_PAGES.find((page) => page.id === 'ai').label, '模型接口');
@@ -1947,9 +1947,9 @@ test('设置页 hash 保持四个页面，#updated 落到通用与隐私', () =>
 
 test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const tab = fs.readFileSync(path.join(root, 'src/react/settings/ProfileTab.jsx'), 'utf8');
-  const shell = fs.readFileSync(path.join(root, 'src/react/settings/SettingsShell.jsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.jsx'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.doesNotMatch(tab, /完整度/);
   assert.match(tab, /简历文件/);
   assert.match(tab, /粘贴文本/);
@@ -1971,9 +1971,9 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
 test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const html = fs.readFileSync(path.join(root, 'extension-pages/options.html'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
-  const globals = fs.readFileSync(path.join(root, 'src/react/globals.css'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
+  const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
   assert.match(html, /<body class="settings-root">/);
   assert.match(css, /\.settings-root\s*\{/);
   assert.match(css, /--s-page:\s*#f1f2f0/);
@@ -2026,8 +2026,8 @@ test('筛选页补丁不携带 salaryMaxK，合并后原值还在', () => {
 });
 test('筛选页不渲染月薪上限，保存仍走字段合并', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const tab = fs.readFileSync(path.join(root, 'src/react/settings/FiltersTab.jsx'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/FiltersTab.jsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
   const store = fs.readFileSync(path.join(root, 'src/common/settingsStore.js'), 'utf8');
   assert.match(tab, /filterSettingsPatch/);
   assert.match(tab, /包含任一/);
@@ -2120,7 +2120,7 @@ await testAsync('旧设置没有 updateChannel 时按稳定读回，非法值不
   }
 });
 
-const { summarizeJobs } = await import('../src/react/settings/jobStats.js');
+const { summarizeJobs } = await import('../src/pages/options/jobStats.js');
 test('岗位库数量只统计列表和收藏', () => {
   assert.deepEqual(summarizeJobs(null), { total: 0, starred: 0 });
   assert.deepEqual(summarizeJobs([{ star: true }, { star: false }, {}, null]), { total: 4, starred: 1 });
@@ -2128,8 +2128,8 @@ test('岗位库数量只统计列表和收藏', () => {
 
 test('通用与隐私页保留原设置字段，并用岗位列表统计数量', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const page = fs.readFileSync(path.join(root, 'src/react/settings/GeneralTab.jsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/react/settings/general.css'), 'utf8');
+  const page = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/options/general.css'), 'utf8');
   for (const key of ['autoCapture', 'autoScore', 'showBadge', 'dedupe', 'maxJobs', 'redactPII', 'sendCompanyName', 'confirmBeforeSend']) {
     assert.match(page, new RegExp(key));
   }
@@ -2141,8 +2141,8 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /gen-update-slot/);
   assert.match(page, /UpdatePanel/);
   assert.match(page, /updateChannel/);
-  const panel = fs.readFileSync(path.join(root, 'src/react/UpdatePanel.jsx'), 'utf8');
-  const updater = fs.readFileSync(path.join(root, 'src/ui/update.js'), 'utf8');
+  const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.jsx'), 'utf8');
+  const updater = fs.readFileSync(path.join(root, 'src/extension/update.js'), 'utf8');
   const script = fs.readFileSync(path.join(root, 'scripts/release.mjs'), 'utf8');
   assert.match(panel, /更新通道/);
   assert.match(panel, /\['stable', '稳定'\]/);
@@ -2158,10 +2158,10 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(updater, /changelogEntries\(json, channel\)/);
   assert.match(panel, /checkToken/);
   assert.match(panel, /fetchLatestRelease\(channel\)/);
-  const shell = fs.readFileSync(path.join(root, 'src/react/settings/SettingsShell.jsx'), 'utf8');
-  const logPage = fs.readFileSync(path.join(root, 'src/react/settings/ChangelogPage.jsx'), 'utf8');
-  const options = fs.readFileSync(path.join(root, 'src/react/options.jsx'), 'utf8');
-  const shellCss = fs.readFileSync(path.join(root, 'src/react/settings/shell.css'), 'utf8');
+  const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.jsx'), 'utf8');
+  const logPage = fs.readFileSync(path.join(root, 'src/pages/options/ChangelogPage.jsx'), 'utf8');
+  const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.jsx'), 'utf8');
+  const shellCss = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.match(shell, /检查更新/);
   assert.match(shell, /更新日志/);
   assert.match(shell, /onCheckUpdate/);
@@ -2309,8 +2309,8 @@ test('列表警示区：过滤命中只露红 chip，普通警示才计数，没
 
 test('列表卡片把警示区放进分析框，摘要两行省略，操作行结构仍在', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const rowStart = views.indexOf('export function JobRow');
   const rowEnd = views.indexOf('export function ListFooter');
   const row = views.slice(rowStart, rowEnd);
@@ -2352,8 +2352,8 @@ test('岗位库只采用已收录列表，空结果不补演示岗位', () => {
 
 test('正式侧栏读取岗位库，不引用预览演示数据', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
   const entry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel.jsx'), 'utf8');
   const previewEntry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel-browse-preview.jsx'), 'utf8');
   const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
@@ -2482,8 +2482,8 @@ function legacyProfileFingerprint(profile, provider) {
 
 test('侧栏底栏改为工作台入口和智能分析', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
   assert.match(views, /进入工作台/);
   assert.match(views, /智能分析/);
   assert.match(views, /只分析尚未分析的/);
@@ -2513,8 +2513,8 @@ test('侧栏底栏改为工作台入口和智能分析', () => {
 
 test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
   assert.match(browse, /\.continuous-list\s*\{[^}]*gap:\s*10px/);
   assert.match(browse, /\.analysis\s*\{[^}]*background:\s*var\(--jp-inset\)/);
   assert.match(browse, /\.analysis\s*\{[^}]*border:\s*0/);
@@ -2558,8 +2558,8 @@ test('岗位摘要不造假分，有分析时才给警示计数', () => {
 
 test('详情分析 Tab 回吃匹配块，岗位不再挂警示墙', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   assert.match(views, /\['match', '分析'\]/);
   assert.doesNotMatch(views, /\['match', '匹配'\]/);
   const infoStart = views.indexOf("sub === 'info'");
@@ -2589,9 +2589,9 @@ test('详情分析 Tab 回吃匹配块，岗位不再挂警示墙', () => {
 
 test('列表项方案 E 把打招呼放在分析块外面，未分析只有文案', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const analysisStart = views.indexOf('className={`analysis');
   const actionsStart = views.indexOf('className="row-actions"', analysisStart);
   const analysis = views.slice(analysisStart, actionsStart);
@@ -2630,7 +2630,7 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
 
 test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const icon = browse.match(/\.job-panel \.act-icon \{[^}]*\}/)?.[0] || '';
   const hover = browse.match(/\.job-panel \.act-icon:hover,\s*\n\.job-panel \.act-icon:focus-visible \{[^}]*\}/)?.[0] || '';
   assert.match(icon, /min-width:\s*28px/);
@@ -2648,7 +2648,7 @@ test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
 
 test('智能分析抽屉按 4pt 终锁留白', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const sheet = browse.match(/\.analyze-sheet \{[^}]*\}/)?.[0] || '';
   assert.match(sheet, /padding:\s*12px 16px calc\(16px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
   assert.match(browse, /\.analyze-sheet \.sheet-handle \{[^}]*margin:\s*0 auto 12px/);
@@ -2662,7 +2662,7 @@ test('智能分析抽屉按 4pt 终锁留白', () => {
 
 test('详情删除成功才回到列表，批量删除不改去向', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const deleteFn = sidepanel.slice(sidepanel.indexOf('async function deleteJob'), sidepanel.indexOf('function dislikeJob'));
   const deleteChecked = sidepanel.slice(sidepanel.indexOf('const deleteChecked'), sidepanel.indexOf('const startAnalysis'));
   const detailDelete = sidepanel.match(/onDelete=\{\(\) => job && deleteJob\([^}]*\)\}/)?.[0] || '';
@@ -2678,9 +2678,9 @@ test('详情删除成功才回到列表，批量删除不改去向', () => {
 
 test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const barStart = views.indexOf('function DetailActionBar');
   const barEnd = views.indexOf('export function ListFooter');
   const bar = views.slice(barStart, barEnd);
@@ -2708,8 +2708,8 @@ test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
 
 test('删除确认态文案是再次点击确认删除', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
   assert.match(views, /confirming === 'delete' \? '再次点击确认删除' : '删除'/);
   assert.match(views, /aria-label=\{confirming === 'delete' \? `再次点击确认删除 \$\{name\}`/);
   assert.doesNotMatch(views, /\? `确认删除 \$\{name\}`/);
@@ -2722,9 +2722,9 @@ test('删除确认态文案是再次点击确认删除', () => {
 
 test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重跑', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const row = views.slice(views.indexOf('export function JobRow'), views.indexOf('export function ListFooter'));
   const sheet = views.slice(views.indexOf('export function DislikeSheet'), views.indexOf('function LibraryCount'));
   const save = sidepanel.slice(sidepanel.indexOf('async function saveDislike'));
@@ -2759,8 +2759,8 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const profile = fs.readFileSync(path.join(root, 'src/react/settings/profile.css'), 'utf8');
-  const tab = fs.readFileSync(path.join(root, 'src/react/settings/ProfileTab.jsx'), 'utf8');
+  const profile = fs.readFileSync(path.join(root, 'src/pages/options/profile.css'), 'utf8');
+  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.jsx'), 'utf8');
   assert.match(profile, /\.paste-box\s*\{[^}]*border-radius:\s*14px/);
   assert.match(profile, /\.paste-box \.area-input\s*\{[^}]*padding:\s*14px 14px 16px/);
   assert.match(profile, /\.paste-bar\s*\{/);
@@ -2829,11 +2829,11 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.equal(SUCCESS_HOLD_MS, 1600);
 
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const browse = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
-  const queue = fs.readFileSync(path.join(root, 'src/react/sidepanel/batchQueue.js'), 'utf8');
+  const queue = fs.readFileSync(path.join(root, 'src/pages/sidepanel/batchQueue.js'), 'utf8');
   const footerStart = views.indexOf('export function ListFooter');
   const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
   const footer = views.slice(footerStart, sheetStart);
@@ -3037,7 +3037,7 @@ await testAsync('多次补抓串行，不会同时点开两张卡', async () => 
 test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗位库', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const scoreStart = background.indexOf('async function scoreOne');
   const promptAt = background.indexOf('buildMatchPrompt(profile, job', scoreStart);
   const ensureAt = background.indexOf('queueEnsure(job)', scoreStart);
@@ -3103,7 +3103,7 @@ test('空 JD 不能标成已分析：库内有描述就显示，没有描述则�
   assert.equal(unscored.length, 1);
   assert.equal(unscored[0].description, '');
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
   assert.match(views, /jobDescriptionText\(job\)/);
   assert.match(views, /descriptionGap\(job\)/);
   assert.doesNotMatch(views, /job\.description \|\| '暂无岗位描述/);
@@ -3197,7 +3197,7 @@ test('已有描述只打开，空描述才等待；刮到的正文只补已有 u
 test('打开原岗位的接线：空描述走等待，超时才刮；已有描述仍只开标签', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const collector = fs.readFileSync(path.join(root, 'src/content/collector.js'), 'utf8');
   const openStart = background.indexOf('async function openOriginalJob');
   const openEnd = background.indexOf('async function activateOriginalJobTab');
@@ -3371,13 +3371,13 @@ await testAsync('批量里单个缺描述失败不会挡住下一条', async () 
   assert.equal(results[1].value.score, 81);
   assert.deepEqual(sleeps, [400]);
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const sidepanel = fs.readFileSync(path.join(root, 'src/react/sidepanel.jsx'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.jsx'), 'utf8');
   const pumpStart = sidepanel.indexOf('const pump = async');
   const pumpEnd = sidepanel.indexOf('const acceptAuto', pumpStart);
   const pump = sidepanel.slice(pumpStart, pumpEnd);
   assert.match(pump, /catch \(error\)/);
   assert.doesNotMatch(pump, /throw /);
-  const general = fs.readFileSync(path.join(root, 'src/react/settings/GeneralTab.jsx'), 'utf8');
+  const general = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.jsx'), 'utf8');
   assert.match(general, /exportData\('capture-log'\)/);
 });
 
@@ -3449,9 +3449,9 @@ test('沟通 Tab：建议标签单选改写，再点回基线；发送只吃自�
 
 test('沟通 Tab 按 LOCK-v2：气泡在滚动区，建议条贴底，底色共用详情令牌', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const views = fs.readFileSync(path.join(root, 'src/react/sidepanel/views.jsx'), 'utf8');
-  const comm = fs.readFileSync(path.join(root, 'src/react/sidepanel/CommTab.jsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/react/sidepanel/browse.css'), 'utf8');
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.jsx'), 'utf8');
+  const comm = fs.readFileSync(path.join(root, 'src/pages/sidepanel/CommTab.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
   assert.match(views, /\['flow', '沟通'\]/);
   assert.doesNotMatch(views, /\['flow', '流程'\]/);
@@ -3591,10 +3591,10 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   assert.deepEqual(offenders, []);
   const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
   assert.doesNotMatch(vite, /src\/ui\/sidepanel\.js/);
-  const sidepanel = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel.jsx'), 'utf8');
-  const comm = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel', 'CommTab.jsx'), 'utf8');
-  const browse = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel', 'browse.css'), 'utf8');
-  const common = fs.readFileSync(path.join(srcDir, 'ui', 'ui-common.js'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'SidepanelApp.jsx'), 'utf8');
+  const comm = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'CommTab.jsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'browse.css'), 'utf8');
+  const common = fs.readFileSync(path.join(srcDir, 'extension', 'messages.js'), 'utf8');
   assert.match(sidepanel, /askConfirm\(/);
   assert.match(sidepanel, /from '@\/components\/ui\/sonner'/);
   assert.match(sidepanel, /<Toaster \/>/);
@@ -3641,7 +3641,7 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   assert.match(footerRule, /color:\s*var\(--jp-summary\)/);
   assert.match(footerRule, /\.jp-btn-primary \{[^}]*background:\s*var\(--jp-accent\)/);
   assert.match(footerRule, /\.jp-btn-danger \{[^}]*background:\s*var\(--jp-confirm-del\)/);
-  const views = fs.readFileSync(path.join(srcDir, 'react', 'sidepanel', 'views.jsx'), 'utf8');
+  const views = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'views.jsx'), 'utf8');
   assert.match(views, /function useDeleteConfirm/);
   assert.match(views, /function DetailActionBar/);
   assert.doesNotMatch(views, /askConfirm\(/);

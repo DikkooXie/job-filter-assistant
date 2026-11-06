@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { toList } from '../../ui/ui-common.js';
+import { toList } from '../../common/text.js';
 import { getDealbreakers, updateDealbreakers } from '../../common/profile.js';
 import './profile.css';
 

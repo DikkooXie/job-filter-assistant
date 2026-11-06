@@ -37,7 +37,7 @@
 
 实现约定：
 
-- 变量挂在 `.settings-root` 类上，这个类加在 `extension-pages/options.html` 的 `<body>` 上，不写到 `:root`。`src/react/globals.css` 是三个扩展页面共用的，写到 `:root` 会改到浮窗和侧边栏。
+- 变量挂在 `.settings-root` 类上，这个类加在 `extension-pages/options.html` 的 `<body>` 上，不写到 `:root`。`src/pages/globals.css` 是三个扩展页面共用的，写到 `:root` 会改到浮窗和侧边栏。
 - 统一加 `--s-` 前缀。shadcn 已经占用了 `--border`、`--accent` 等同名变量，含义不同（shadcn 的 `--accent` 是悬停底色，不是强调色），不加前缀会互相覆盖。
 - 深色模式跟随系统，和项目现有做法一致（`globals.css` 里的 `@custom-variant dark` 用的是 `prefers-color-scheme`）。不加 `data-theme` 属性，不新增主题设置项。
 - 设置页里继续用到的 shadcn 组件（如 Select 的下拉层），在 `.settings-root` 内把 shadcn 变量映射到上面这组颜色。类加在 `<body>` 上，Radix 渲染到 `body` 下的弹出层也能拿到这些变量。

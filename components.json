@@ -3,7 +3,7 @@
   "style": "new-york",
   "rsc": false,
   "tsx": false,
-  "tailwind": { "config": "", "css": "src/react/globals.css", "baseColor": "neutral", "cssVariables": true },
+  "tailwind": { "config": "", "css": "src/pages/globals.css", "baseColor": "neutral", "cssVariables": true },
   "iconLibrary": "lucide",
   "aliases": { "components": "@/components", "utils": "@/lib/utils", "ui": "@/components/ui", "lib": "@/lib", "hooks": "@/hooks" }
 }

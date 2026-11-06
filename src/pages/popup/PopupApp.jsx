@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import markUrl from '../../icons/32.png';
+import markUrl from '../../../icons/32.png';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MSG, MODE } from '../common/constants.js';
-import { isCompleteAnalysis } from './sidepanel/browseModel.js';
-import { send } from '../ui/ui-common.js';
+import { MSG, MODE } from '../../common/constants.js';
+import { isCompleteAnalysis } from '../sidepanel/browseModel.js';
+import { send } from '../../extension/messages.js';
 export default function Popup() {
   const [settings, setSettings] = useState(null);
   const [jobs, setJobs] = useState([]);

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { RELEASE_PAGE, normalizeUpdateChannel } from '../common/update.js';
-import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../ui/update.js';
+import { RELEASE_PAGE, normalizeUpdateChannel } from '../../common/update.js';
+import { folderStatus, fetchLatestRelease, installRelease, supportsFolderAccess, extensionsPageUrl } from '../../extension/update.js';
 import './update-panel.css';
 
 const FOLDER_TEXT = {

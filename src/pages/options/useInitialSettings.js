@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { MSG } from '../../common/constants.js';
-import { send } from '../../ui/ui-common.js';
+import { send } from '../../extension/messages.js';
 
 export function useInitialSettings({ settingsRef, providersRef, profileRef, setSettings, setProviders, setProfile, report }) {
   useEffect(() => { let live = true; Promise.all([send(MSG.SETTINGS_GET), send(MSG.AI_PROVIDERS_GET), send(MSG.PROFILE_GET)]).then(([s, p, r]) => {
