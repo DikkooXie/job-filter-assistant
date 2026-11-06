@@ -11,9 +11,9 @@
 首次 clone：
 
 ```bash
-git clone https://github.com/DikkooXie/job-filter-assistant.git
-cd job-filter-assistant
-git remote add personal https://github.com/DikkooXie/job-filter-assistant.git
+git clone https://github.com/DikkooXie/offercome.git
+cd offercome
+git remote add personal https://github.com/DikkooXie/offercome.git
 npm ci
 npm test
 npm run build

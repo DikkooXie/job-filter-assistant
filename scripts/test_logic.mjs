@@ -1232,7 +1232,7 @@ const selfManifest = JSON.parse(fs.readFileSync(new URL('../manifest.json', impo
 const SELF_ID = 'bpepclacjmlmbljmggblckdocinkdide';
 const release = (over = {}) => ({
   tag_name: 'v1.2.0', name: 'v1.2.0', body: ' 说明 ', html_url: 'https://github.com/x/y/releases/tag/v1.2.0',
-  assets: [{ name: 'job-filter-assistant-1.2.0.zip', size: 10, browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.2.0/a.zip' }],
+  assets: [{ name: 'job-filter-assistant-1.2.0.zip', size: 10, browser_download_url: 'https://github.com/DikkooXie/offercome/releases/download/v1.2.0/a.zip' }],
   ...over,
 });
 
@@ -1283,7 +1283,7 @@ test('稳定通道拒绝 prerelease 和 draft，预览通道接受 prerelease', 
   const preview = parseRelease(release({
     prerelease: true,
     tag_name: 'v1.0.3.1',
-    assets: [{ name: 'a.zip', size: 12, browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.0.3.1/a.zip' }],
+    assets: [{ name: 'a.zip', size: 12, browser_download_url: 'https://github.com/DikkooXie/offercome/releases/download/v1.0.3.1/a.zip' }],
   }), { channel: 'preview' });
   assert.equal(preview.version, '1.0.3.1');
   assert.equal(preview.zipSize, 12);
@@ -1293,7 +1293,7 @@ test('稳定通道拒绝 prerelease 和 draft，预览通道接受 prerelease', 
   }), { channel: 'preview' }), /本项目/);
 });
 test('预览列表按版本号取最高的带 zip prerelease，没有则暂无预览版', () => {
-  const zip = (tag) => ({ name: 'a.zip', browser_download_url: `https://github.com/DikkooXie/job-filter-assistant/releases/download/${tag}/a.zip` });
+  const zip = (tag) => ({ name: 'a.zip', browser_download_url: `https://github.com/DikkooXie/offercome/releases/download/${tag}/a.zip` });
   const pre = (tag, over = {}) => release({ tag_name: tag, prerelease: true, assets: [zip(tag)], ...over });
   // GitHub /releases 按 tag_name 字符串降序：.9 … .2 在 .10 前面
   const githubOrder = [
@@ -1342,7 +1342,7 @@ test('稳定通道上正式版更旧时只提示手动覆盖，不标记可更�
   const previewCurrent = assessUpdate(parseRelease(release({
     tag_name: 'v1.0.3.1',
     prerelease: true,
-    assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/download/v1.0.3.1/a.zip' }],
+    assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/DikkooXie/offercome/releases/download/v1.0.3.1/a.zip' }],
   }), { channel: 'preview' }), '1.0.3.1', 'preview');
   assert.equal(previewCurrent.hasUpdate, false);
   assert.equal(previewCurrent.aheadOfStable, false);
@@ -1353,7 +1353,7 @@ test('更新日志按通道过滤正式版和预发布，版本号标题不重�
     release({
       tag_name: 'v1.0.3.7', name: 'v1.0.3.7', prerelease: true, draft: false,
       published_at: '2026-11-04T07:26:09Z', body: '预览：列表抽屉',
-      html_url: 'https://github.com/DikkooXie/job-filter-assistant/releases/tag/v1.0.3.7',
+      html_url: 'https://github.com/DikkooXie/offercome/releases/tag/v1.0.3.7',
     }),
     release({
       tag_name: 'v1.0.3', name: '固定文件名', prerelease: false,
@@ -1388,7 +1388,7 @@ test('更新日志按通道过滤正式版和预发布，版本号标题不重�
   assert.equal(withPreview[0].prerelease, true);
   assert.equal(withPreview[0].publishedAt, '2026-11-04T07:26:09Z');
   assert.throws(() => changelogEntries({ message: 'nope' }), /格式不正确/);
-  assert.equal(RELEASES_PAGE, 'https://github.com/DikkooXie/job-filter-assistant/releases');
+  assert.equal(RELEASES_PAGE, 'https://github.com/DikkooXie/offercome/releases');
 });
 test('更新日志按发布时间降序，缺时间戳时按版本号降序', () => {
   // GitHub /releases 按 tag 字符串降序，.9 会排在 .11 前面；发布时间新的应排到最前。

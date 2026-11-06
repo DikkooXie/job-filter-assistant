@@ -1,7 +1,7 @@
 // 扩展内更新的纯逻辑：版本比较、GitHub Release 解析、安装包校验。
 // 不依赖 chrome.* / DOM，可直接在 Node 下单测（scripts/test_logic.mjs）。
 
-export const RELEASE_REPO = 'DikkooXie/job-filter-assistant';
+export const RELEASE_REPO = 'DikkooXie/offercome';
 export const RELEASE_API = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
 export const RELEASES_API = `https://api.github.com/repos/${RELEASE_REPO}/releases`;
 export const RELEASE_PAGE = `https://github.com/${RELEASE_REPO}/releases/latest`;

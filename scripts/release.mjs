@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const REPO = 'DikkooXie/job-filter-assistant';
+const REPO = 'DikkooXie/offercome';
 const projectDir = resolve(import.meta.dirname, '..');
 const distDir = resolve(projectDir, 'dist');
 const outDir = resolve(projectDir, 'release');

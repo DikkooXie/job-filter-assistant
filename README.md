@@ -10,7 +10,7 @@
 
 ## 安装
 
-用 Chrome 或 Edge。从 [发布页](https://github.com/DikkooXie/job-filter-assistant/releases) 下载 zip，以「加载已解压的扩展程序」安装。
+用 Chrome 或 Edge。从 [发布页](https://github.com/DikkooXie/offercome/releases) 下载 zip，以「加载已解压的扩展程序」安装。
 
 这次体验请下**预发布**包，不要只点页面上的 Latest。Latest 仍是正式版（目前是 v1.0.3）。预发布的版本号是四段，例如 **1.0.3.12**，标题旁有 Pre-release。安装包文件名类似 `job-filter-assistant-1.0.3.12.zip`。
 
@@ -34,7 +34,7 @@
 
 | 通道 | 会安装什么 |
 |---|---|
-| **稳定**（默认） | 只看正式版，也就是发布页上的 Latest（[/releases/latest](https://github.com/DikkooXie/job-filter-assistant/releases/latest)）。四段预发布不会出现在这里。 |
+| **稳定**（默认） | 只看正式版，也就是发布页上的 Latest（[/releases/latest](https://github.com/DikkooXie/offercome/releases/latest)）。四段预发布不会出现在这里。 |
 | **预览** | 才会检查并安装预发布。版本号是四段，例如 `1.0.3.12`，且必须高于当前已装版本。 |
 
 这次小范围体验：装好后把通道选成 **预览**，再点「检查更新」。Latest 始终是正式版，选预览不会把 Latest 改成预发布。
