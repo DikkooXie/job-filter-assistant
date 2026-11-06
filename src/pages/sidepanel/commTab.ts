@@ -1,7 +1,75 @@
 // 沟通 Tab v3.3 的纯展示规则。不读写存储，不发消息。
 // 节点只来自已确认记录；没有记录时只保留「打招呼」这一真实节点。
 
-export const COMM_CHIPS = [
+export interface CommChip {
+  id: string;
+  label: string;
+}
+
+export interface CommNode {
+  id: string;
+  label: string;
+  state: 'done' | 'current';
+  sub: string;
+  detail: string;
+}
+
+export interface CommPending {
+  id: string;
+  label: string;
+  sub: string;
+  hint: string;
+}
+
+export interface CommMessage {
+  id: string;
+  role: 'me' | 'hr';
+  text: string;
+  at: string;
+}
+
+export interface CommSync {
+  at: string;
+  count: number;
+}
+
+export interface CommState {
+  nodes: CommNode[];
+  pending: CommPending | null;
+  baseline: string;
+  messages: CommMessage[];
+  sync: CommSync | null;
+}
+
+export interface CommStage {
+  label?: string;
+  sub?: string;
+}
+
+export interface ChatGroup {
+  key: string;
+  label: string;
+  messages: CommMessage[];
+}
+
+export interface RailStep {
+  id: string;
+  label: string;
+  sub: string;
+  detail: string;
+  state: 'done' | 'current' | 'ghost';
+  ghost: boolean;
+  mark: string;
+}
+
+export interface Suggestion {
+  text: string;
+  emphasis: string;
+  source: 'baseline' | 'chip' | 'demand';
+  chipId: string | null;
+}
+
+export const COMM_CHIPS: ReadonlyArray<CommChip> = [
   { id: 'overtime', label: '问问加班' },
   { id: 'outsourcing', label: '排除外包' },
   { id: 'scope', label: '明确工作内容' },
@@ -11,52 +79,57 @@ export const COMM_CHIPS = [
 
 const CHIP_IDS = new Set(COMM_CHIPS.map((chip) => chip.id));
 
-function clean(value, max) {
+function clean(value: unknown, max: number): string {
   return String(value == null ? '' : value).trim().slice(0, max);
 }
 
-function asObject(value) {
-  return value && typeof value === 'object' ? value : {};
+function asObject(value: unknown): Record<string, unknown> {
+  return (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
 }
 
-export function sanitizeComm(raw) {
+export function sanitizeComm(raw: unknown): CommState {
   const source = asObject(raw);
-  const nodes = [];
-  for (const item of Array.isArray(source.nodes) ? source.nodes : []) {
-    const label = clean(item?.label, 16);
+  const nodes: CommNode[] = [];
+  for (const entry of Array.isArray(source.nodes) ? source.nodes : []) {
+    const item = asObject(entry);
+    const label = clean(item.label, 16);
     if (!label) continue;
-    const id = clean(item?.id, 40) || `node-${nodes.length + 1}`;
+    const id = clean(item.id, 40) || `node-${nodes.length + 1}`;
     nodes.push({
       id,
       label,
-      state: item?.state === 'done' ? 'done' : 'current',
-      sub: clean(item?.sub, 24),
-      detail: clean(item?.detail, 40),
+      state: item.state === 'done' ? 'done' : 'current',
+      sub: clean(item.sub, 24),
+      detail: clean(item.detail, 40),
     });
   }
   let seenCurrent = false;
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
-    if (nodes[index].state !== 'current') continue;
+    const node = nodes[index];
+    if (!node || node.state !== 'current') continue;
     if (!seenCurrent) {
       seenCurrent = true;
       continue;
     }
-    nodes[index] = { ...nodes[index], state: 'done' };
+    nodes[index] = { ...node, state: 'done' };
   }
-  if (nodes.length && !seenCurrent) nodes[nodes.length - 1] = { ...nodes[nodes.length - 1], state: 'current' };
+  const last = nodes[nodes.length - 1];
+  if (last && !seenCurrent) nodes[nodes.length - 1] = { ...last, state: 'current' };
 
-  const pendingLabel = clean(source.pending?.label, 16);
-  const pending = pendingLabel ? {
-    id: clean(source.pending?.id, 40) || `pending-${nodes.length + 1}`,
+  const rawPending = asObject(source.pending);
+  const pendingLabel = clean(rawPending.label, 16);
+  const pending: CommPending | null = pendingLabel ? {
+    id: clean(rawPending.id, 40) || `pending-${nodes.length + 1}`,
     label: pendingLabel,
-    sub: clean(source.pending?.sub, 24),
-    hint: clean(source.pending?.hint, 24) || '摘自对话',
+    sub: clean(rawPending.sub, 24),
+    hint: clean(rawPending.hint, 24) || '摘自对话',
   } : null;
 
-  let sync = null;
-  const count = Number(source.sync?.count);
+  const rawSync = asObject(source.sync);
+  let sync: CommSync | null = null;
+  const count = Number(rawSync.count);
   if (Number.isFinite(count) && count > 0) {
-    sync = { at: clean(source.sync?.at, 40), count: Math.min(9999, Math.round(count)) };
+    sync = { at: clean(rawSync.at, 40), count: Math.min(9999, Math.round(count)) };
   }
 
   return {
@@ -68,16 +141,16 @@ export function sanitizeComm(raw) {
   };
 }
 
-function sanitizeMessages(raw) {
+function sanitizeMessages(raw: unknown): CommMessage[] {
   const list = Array.isArray(raw) ? raw : [];
-  const messages = [];
-  const used = new Set();
-  for (const item of list) {
-    if (!item || typeof item !== 'object') continue;
+  const messages: CommMessage[] = [];
+  const used = new Set<string>();
+  for (const entry of list) {
+    const item = asObject(entry);
     const text = clean(item.text ?? item.content, 500);
     if (!text) continue;
     const roleRaw = clean(item.role ?? item.from, 16).toLowerCase();
-    const role = /^(me|self|user|mine|candidate|我)$/u.test(roleRaw) ? 'me' : 'hr';
+    const role: CommMessage['role'] = /^(me|self|user|mine|candidate|我)$/u.test(roleRaw) ? 'me' : 'hr';
     let id = clean(item.id, 40) || `msg-${messages.length + 1}`;
     if (used.has(id)) id = `${id}-${messages.length + 1}`;
     used.add(id);
@@ -87,11 +160,11 @@ function sanitizeMessages(raw) {
   return messages;
 }
 
-function chatDayLabel(at, now) {
+function chatDayLabel(at: string, now: Date): string {
   if (!at) return '';
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return '';
-  const same = (left, right) => left.getFullYear() === right.getFullYear()
+  const same = (left: Date, right: Date) => left.getFullYear() === right.getFullYear()
     && left.getMonth() === right.getMonth()
     && left.getDate() === right.getDate();
   if (same(date, now)) return '今天';
@@ -100,8 +173,8 @@ function chatDayLabel(at, now) {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-export function groupChatDays(messages, now = new Date()) {
-  const groups = [];
+export function groupChatDays(messages: readonly CommMessage[] | null | undefined, now: Date = new Date()): ChatGroup[] {
+  const groups: ChatGroup[] = [];
   (messages || []).forEach((message, index) => {
     const label = chatDayLabel(message?.at, now);
     const last = groups[groups.length - 1];
@@ -114,7 +187,7 @@ export function groupChatDays(messages, now = new Date()) {
   return groups;
 }
 
-export function confirmedNodes({ progressStatus, record }) {
+export function confirmedNodes({ progressStatus, record }: { progressStatus?: string | null; record?: unknown }): CommNode[] {
   const cleanRecord = sanitizeComm(record);
   if (cleanRecord.nodes.length) return cleanRecord.nodes;
   const sent = progressStatus === 'sent';
@@ -128,31 +201,33 @@ export function confirmedNodes({ progressStatus, record }) {
 }
 
 // 未完成打招呼时不展示建议和输入条。已发送，或已有招呼之后的确认节点，才开门。
-export function isGreetGateOpen({ progressStatus, record }) {
+export function isGreetGateOpen({ progressStatus, record }: { progressStatus?: string | null; record?: unknown }): boolean {
   if (progressStatus === 'sent') return true;
   return sanitizeComm(record).nodes.some((node) => node.id !== 'greet');
 }
 
-export function canExpandNodes(nodes) {
+export function canExpandNodes(nodes: readonly CommNode[] | null | undefined): boolean {
   return Array.isArray(nodes) && nodes.length >= 2;
 }
 
-export function stageFrom(nodes, pending) {
+export function stageFrom(nodes: readonly CommNode[] | null | undefined, pending?: CommPending | null): Required<CommStage> {
   if (pending?.label) return { label: pending.label, sub: pending.sub || '' };
-  const current = (nodes || []).find((node) => node.state === 'current') || (nodes || [])[nodes.length - 1];
+  const list = nodes || [];
+  const current = list.find((node) => node.state === 'current') || list[list.length - 1];
   return { label: current?.label || '打招呼', sub: current?.sub || '' };
 }
 
-export function headlineBadge(nodes, pending) {
+export function headlineBadge(nodes: readonly CommNode[] | null | undefined, pending?: CommPending | null): 'pending' | 'done' | 'current' {
   if (pending?.label) return 'pending';
-  const current = (nodes || []).find((node) => node.state === 'current') || (nodes || [])[nodes.length - 1];
+  const list = nodes || [];
+  const current = list.find((node) => node.state === 'current') || list[list.length - 1];
   return current?.state === 'done' ? 'done' : 'current';
 }
 
 // 展开后的步骤条只在真实节点 ≥2 时出现。末尾「待生长」不计入节点，单节点永不出现。
-export function railSteps(nodes, expanded) {
+export function railSteps(nodes: readonly CommNode[] | null | undefined, expanded: boolean): RailStep[] {
   if (!expanded || !canExpandNodes(nodes)) return [];
-  const steps = nodes.map((node) => ({
+  const steps: RailStep[] = (nodes || []).map((node) => ({
     id: node.id,
     label: node.label,
     sub: node.sub || '',
@@ -173,10 +248,10 @@ export function railSteps(nodes, expanded) {
   return steps;
 }
 
-export function confirmPending(record, progressStatus) {
+export function confirmPending(record: unknown, progressStatus?: string | null): CommState {
   const cleanRecord = sanitizeComm(record);
   if (!cleanRecord.pending) return cleanRecord;
-  const nodes = confirmedNodes({ progressStatus, record: cleanRecord }).map((node) => ({ ...node, state: 'done' }));
+  const nodes: CommNode[] = confirmedNodes({ progressStatus, record: cleanRecord }).map((node) => ({ ...node, state: 'done' }));
   const used = new Set(nodes.map((node) => node.id));
   let id = cleanRecord.pending.id;
   if (used.has(id)) id = `${id}-confirmed`;
@@ -190,30 +265,30 @@ export function confirmPending(record, progressStatus) {
   return { ...cleanRecord, nodes, pending: null };
 }
 
-export function ignorePending(record) {
+export function ignorePending(record: unknown): CommState {
   const cleanRecord = sanitizeComm(record);
   return { ...cleanRecord, pending: null };
 }
 
-export function nextChip(current, chipId) {
-  if (!CHIP_IDS.has(chipId)) return current || null;
+export function nextChip(current: string | null, chipId: string | null): string | null {
+  if (!chipId || !CHIP_IDS.has(chipId)) return current || null;
   return current === chipId ? null : chipId;
 }
 
-function lead(stage) {
+function lead(stage?: CommStage | null): string {
   if (stage?.sub) return `好的，${stage.sub}下午都可以。`;
   if (stage?.label === '初聊') return '好的，谢谢回复。';
   return '好的，收到。';
 }
 
-export function defaultBaseline(stage) {
+export function defaultBaseline(stage?: CommStage | null): string {
   if (stage?.label === '一面' && stage.sub) return `好的，${stage.sub}下午都可以。一面是视频还是现场？`;
   if (stage?.label === '一面') return '好的。一面是视频还是现场？';
   if (stage?.label === '初聊') return '好的，谢谢回复。';
   return '好的，收到。';
 }
 
-export function suggestionFromChip(baseline, chipId, stage) {
+export function suggestionFromChip(baseline: string, chipId: string | null, stage?: CommStage | null): Suggestion {
   const text = String(baseline || '');
   if (!chipId || !CHIP_IDS.has(chipId)) return { text, emphasis: '', source: 'baseline', chipId: null };
   if (chipId === 'overtime') {
@@ -247,7 +322,7 @@ export function suggestionFromChip(baseline, chipId, stage) {
 }
 
 // 自填发送只吃输入条里的改写说明，不读取当前选中的建议标签。
-export function suggestionFromDemand(demand, stage) {
+export function suggestionFromDemand(demand: string | null | undefined, stage?: CommStage | null): Suggestion | null {
   const raw = String(demand || '').trim();
   if (!raw) return null;
   const body = /[。？！!?]$/.test(raw) ? raw : `${raw}。`;
@@ -260,7 +335,7 @@ export function suggestionFromDemand(demand, stage) {
   };
 }
 
-export function syncLabel(sync, now = new Date()) {
+export function syncLabel(sync?: CommSync | null, now: Date = new Date()): string {
   if (!sync?.count) return '';
   const at = new Date(sync.at);
   if (Number.isNaN(at.getTime())) return `已同步 · ${sync.count} 条`;
@@ -273,6 +348,6 @@ export function syncLabel(sync, now = new Date()) {
   return `已同步 · ${when} · ${sync.count} 条`;
 }
 
-export function chipLabel(chipId) {
+export function chipLabel(chipId: string | null): string {
   return COMM_CHIPS.find((chip) => chip.id === chipId)?.label || '';
 }

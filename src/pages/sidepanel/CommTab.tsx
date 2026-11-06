@@ -1,13 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Copy, ExternalLink, Image, RefreshCw, Send } from 'lucide-react';
+import type { Job } from '../../common/types.js';
 import {
   COMM_CHIPS, canExpandNodes, confirmPending, confirmedNodes, defaultBaseline, groupChatDays,
   headlineBadge, ignorePending, isGreetGateOpen, nextChip, railSteps, sanitizeComm, stageFrom,
 } from './commTab.js';
+import type { CommMessage, CommNode, CommPending, CommStage, CommState } from './commTab.js';
+
+interface DrawerProps {
+  nodes: CommNode[];
+  pending: CommPending | null;
+  expanded: boolean;
+  onToggle: () => void;
+  onConfirm: () => void;
+  onIgnore: () => void;
+}
 
 function Drawer({
   nodes, pending, expanded, onToggle, onConfirm, onIgnore,
-}) {
+}: DrawerProps) {
   const expandable = canExpandNodes(nodes);
   const stage = stageFrom(nodes, pending);
   const badge = headlineBadge(nodes, pending);
@@ -69,7 +80,7 @@ function Drawer({
   );
 }
 
-function ChatThread({ messages }) {
+function ChatThread({ messages }: { messages: CommMessage[] }) {
   const groups = groupChatDays(messages);
   return (
     <div className="comm-chat" aria-label="对话">
@@ -90,9 +101,21 @@ function ChatThread({ messages }) {
   );
 }
 
+interface GreetWorkProps {
+  greeting: string;
+  scoring: boolean;
+  onGreeting: (value: string) => void;
+  onCopy: (text: string) => void;
+  onAnalyze: () => void;
+  onRegenerate: () => void;
+  onSendGreeting: () => void;
+  onMarkSent: () => void;
+  onNotice: (message: string, error?: boolean) => void;
+}
+
 function GreetWork({
   greeting, scoring, onGreeting, onCopy, onAnalyze, onRegenerate, onSendGreeting, onMarkSent, onNotice,
-}) {
+}: GreetWorkProps) {
   const ready = Boolean(greeting.trim());
   return (
     <section className="comm-work">
@@ -124,12 +147,37 @@ function GreetWork({
   );
 }
 
+export interface SuggestRequest {
+  instruction: string;
+  current?: string;
+  stage: CommStage;
+  messages: CommMessage[];
+}
+
+export interface CommTabProps {
+  job: Pick<Job, 'uid'> | null | undefined;
+  progressStatus?: string | null;
+  record?: unknown;
+  greeting: string;
+  scoring: boolean;
+  onGreeting: (value: string) => void;
+  onCopy: (text: string) => void;
+  onAnalyze: () => void;
+  onRegenerate: () => void;
+  onSendGreeting: () => void;
+  onMarkSent: () => void;
+  onOpenChat: (text: string) => void;
+  onComm: (record: CommState) => void;
+  onNotice: (message: string, error?: boolean) => void;
+  onSuggest?: (request: SuggestRequest) => Promise<{ text?: string } | null | undefined> | null | undefined;
+}
+
 export function CommTab({
   job, progressStatus, record, greeting, scoring,
   onGreeting, onCopy, onAnalyze, onRegenerate, onSendGreeting, onMarkSent, onOpenChat, onComm, onNotice, onSuggest,
-}) {
+}: CommTabProps) {
   const [expanded, setExpanded] = useState(false);
-  const [chipId, setChipId] = useState(null);
+  const [chipId, setChipId] = useState<string | null>(null);
   const [demand, setDemand] = useState('');
   const [anchor, setAnchor] = useState('');
   const [draft, setDraft] = useState('');
@@ -157,7 +205,7 @@ export function CommTab({
   const baseline = clean.baseline || defaultBaseline(stage);
   const suggestion = draft || anchor || baseline;
 
-  const rewrite = async (instruction, { chip = null, current } = {}) => {
+  const rewrite = async (instruction: string, { chip = null, current }: { chip?: string | null; current?: string } = {}) => {
     const ask = String(instruction || '').trim();
     if (!ask || inflight.current) return;
     const ticket = generation.current;
@@ -184,7 +232,7 @@ export function CommTab({
       }
     } catch (error) {
       if (ticket !== generation.current) return;
-      onNotice?.(error?.message || '改写失败', true);
+      onNotice?.(error instanceof Error ? error.message : '改写失败', true);
     } finally {
       if (ticket === generation.current) {
         inflight.current = false;
@@ -193,7 +241,7 @@ export function CommTab({
     }
   };
 
-  const pickChip = (id) => {
+  const pickChip = (id: string) => {
     const next = nextChip(chipId, id);
     if (!next) {
       setChipId(null);

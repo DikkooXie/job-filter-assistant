@@ -1,25 +1,80 @@
 // 批量分析队列的纯展示规则。不读写存储，也不发消息。
 // 细条、半高抽屉和列表卡共用这一份状态：进行中 / 排队 / 失败 / 完成。
+import type { Job } from '../../common/types.js';
 
 export const QUEUE_PREVIEW = 4;
 export const ESTIMATE_SECONDS = 16;
 export const SUCCESS_HOLD_MS = 1600;
 
-export function emptyBatch() {
+export type BatchStatus = 'queued' | 'running' | 'done' | 'failed';
+export type BatchPhase = 'idle' | 'running' | 'success' | 'failed';
+export type BatchSource = 'manual' | 'auto';
+
+export interface BatchItem {
+  uid: string;
+  title: string;
+  status: BatchStatus;
+  error: string;
+  source: BatchSource;
+  force: boolean;
+}
+
+export interface Batch {
+  items: BatchItem[];
+  phase: BatchPhase;
+}
+
+export interface StripModel {
+  visible: boolean;
+  tone: 'idle' | 'running' | 'success' | 'failed';
+  auto: boolean;
+  label: string;
+  progress: number;
+}
+
+export interface DrawerModel {
+  failed: BatchItem[];
+  queued: number;
+  running: BatchItem[];
+  total: number;
+  finished: number;
+  done: BatchItem[];
+  head: string;
+  progress: number;
+  estimate: string;
+  summary: string;
+  queuedPreview: BatchItem[];
+  queuedHidden: number;
+  canCancel: boolean;
+}
+
+export interface CardCopy {
+  kind: 'running' | 'queued' | 'failed';
+  label: string;
+  hint?: string;
+}
+
+type JobLike = Partial<Pick<Job, 'uid' | 'title'>> | null | undefined;
+
+export function emptyBatch(): Batch {
   return { items: [], phase: 'idle' };
 }
 
-export function isPending(batch) {
+export function isPending(batch: Batch | null | undefined): boolean {
   return (batch?.items || []).some((item) => item.status === 'queued' || item.status === 'running');
 }
 
-export function enqueueBatch(batch, jobs, { source = 'manual', force = false } = {}) {
+export function enqueueBatch(
+  batch: Batch | null | undefined,
+  jobs: ReadonlyArray<JobLike>,
+  { source = 'manual', force = false }: { source?: BatchSource; force?: boolean } = {},
+): Batch {
   const items = (batch?.items || []).slice();
   let added = 0;
   for (const job of jobs || []) {
     if (!job?.uid) continue;
     const index = items.findIndex((item) => item.uid === job.uid);
-    const next = {
+    const next: BatchItem = {
       uid: job.uid,
       title: job.title || '未命名岗位',
       status: 'queued',
@@ -33,6 +88,7 @@ export function enqueueBatch(batch, jobs, { source = 'manual', force = false } =
       continue;
     }
     const current = items[index];
+    if (!current) continue;
     if (current.status === 'queued' || current.status === 'running') continue;
     if (current.status === 'done' && !force) continue;
     items.splice(index, 1);
@@ -43,7 +99,7 @@ export function enqueueBatch(batch, jobs, { source = 'manual', force = false } =
   return { items, phase: 'running' };
 }
 
-export function hydrateTitles(batch, jobs) {
+export function hydrateTitles(batch: Batch | null | undefined, jobs: ReadonlyArray<JobLike>): Batch {
   const titles = new Map((jobs || []).map((job) => [job?.uid, job?.title]));
   let changed = false;
   const items = (batch?.items || []).map((item) => {
@@ -53,45 +109,49 @@ export function hydrateTitles(batch, jobs) {
     return { ...item, title };
   });
   if (!changed) return batch?.items ? batch : emptyBatch();
-  return { ...batch, items };
+  return { ...(batch || emptyBatch()), items };
 }
 
-export function markRunning(batch, uid) {
+export function markRunning(batch: Batch | null | undefined, uid: string): Batch {
   let changed = false;
   const items = (batch?.items || []).map((item) => {
     if (item.uid !== uid || item.status !== 'queued') return item;
     changed = true;
-    return { ...item, status: 'running', error: '' };
+    return { ...item, status: 'running' as const, error: '' };
   });
   if (!changed) return batch?.items ? batch : emptyBatch();
-  return { ...batch, items, phase: 'running' };
+  return { ...(batch || emptyBatch()), items, phase: 'running' };
 }
 
-export function takeNext(batch) {
+export function takeNext(batch: Batch | null | undefined): BatchItem | null {
   return (batch?.items || []).find((item) => item.status === 'queued') || null;
 }
 
-export function settle(batch, uid, { ok = false, error = '' } = {}) {
+export function settle(
+  batch: Batch | null | undefined,
+  uid: string,
+  { ok = false, error = '' }: { ok?: boolean; error?: string } = {},
+): Batch {
   let changed = false;
   const items = (batch?.items || []).map((item) => {
     if (item.uid !== uid || item.status === 'done' || item.status === 'failed') return item;
     changed = true;
     return ok
-      ? { ...item, status: 'done', error: '' }
-      : { ...item, status: 'failed', error: error || '分析失败' };
+      ? { ...item, status: 'done' as const, error: '' }
+      : { ...item, status: 'failed' as const, error: error || '分析失败' };
   });
   if (!changed) return batch?.items ? batch : emptyBatch();
-  return { ...batch, items };
+  return { ...(batch || emptyBatch()), items };
 }
 
-export function cancelRemaining(batch) {
+export function cancelRemaining(batch: Batch | null | undefined): Batch {
   const items = (batch?.items || []).filter((item) => item.status !== 'queued');
   return { ...(batch || emptyBatch()), items };
 }
 
-export function retryFailed(batch, uid = null) {
-  const again = [];
-  const rest = [];
+export function retryFailed(batch: Batch | null | undefined, uid: string | null = null): Batch {
+  const again: BatchItem[] = [];
+  const rest: BatchItem[] = [];
   for (const item of batch?.items || []) {
     if (item.status === 'failed' && (uid == null || item.uid === uid)) again.push({ ...item, status: 'queued', error: '' });
     else rest.push(item);
@@ -100,7 +160,7 @@ export function retryFailed(batch, uid = null) {
   return { items: [...rest, ...again], phase: 'running' };
 }
 
-export function finishPhase(batch) {
+export function finishPhase(batch: Batch | null | undefined): Batch {
   const current = batch?.items ? batch : emptyBatch();
   if (isPending(current)) return current;
   if (!current.items.length) return emptyBatch();
@@ -109,7 +169,14 @@ export function finishPhase(batch) {
   return { ...current, phase: failed ? 'failed' : 'success' };
 }
 
-export function batchCounts(batch) {
+export function batchCounts(batch: Batch | null | undefined): {
+  done: number;
+  failed: number;
+  queued: number;
+  running: number;
+  total: number;
+  finished: number;
+} {
   const items = batch?.items || [];
   const done = items.filter((item) => item.status === 'done').length;
   const failed = items.filter((item) => item.status === 'failed').length;
@@ -118,21 +185,21 @@ export function batchCounts(batch) {
   return { done, failed, queued, running, total: items.length, finished: done + failed };
 }
 
-export function itemPosition(batch, uid) {
+export function itemPosition(batch: Batch | null | undefined, uid: string): number {
   const index = (batch?.items || []).findIndex((item) => item.uid === uid);
   return index < 0 ? 0 : index + 1;
 }
 
-export function estimateMinutes(remaining) {
+export function estimateMinutes(remaining: number): number {
   if (!remaining) return 0;
   return Math.max(1, Math.round((remaining * ESTIMATE_SECONDS) / 60));
 }
 
-function showsAuto(batch, activeOnly) {
+function showsAuto(batch: Batch | null | undefined, activeOnly: boolean): boolean {
   return (batch?.items || []).some((item) => item.source === 'auto' && (!activeOnly || item.status === 'queued' || item.status === 'running'));
 }
 
-export function stripModel(batch) {
+export function stripModel(batch: Batch | null | undefined): StripModel {
   const current = batch?.items ? batch : emptyBatch();
   const counts = batchCounts(current);
   if (current.phase === 'idle' || counts.total === 0) return { visible: false, tone: 'idle', auto: false, label: '', progress: 0 };
@@ -165,7 +232,7 @@ export function stripModel(batch) {
   };
 }
 
-export function drawerModel(batch) {
+export function drawerModel(batch: Batch | null | undefined): DrawerModel {
   const current = batch?.items ? batch : emptyBatch();
   const counts = batchCounts(current);
   const runningItem = current.items.find((item) => item.status === 'running');
@@ -192,7 +259,7 @@ export function drawerModel(batch) {
   };
 }
 
-export function visibleSections(batch, chip = 'all') {
+export function visibleSections(batch: Batch | null | undefined, chip = 'all'): DrawerModel {
   const model = drawerModel(batch);
   if (chip === 'running') {
     return { ...model, failed: [], queuedPreview: [], queuedHidden: 0, done: [] };
@@ -203,11 +270,12 @@ export function visibleSections(batch, chip = 'all') {
   return model;
 }
 
-export function cardCopy(batch, uid) {
+export function cardCopy(batch: Batch | null | undefined, uid: string): CardCopy | null {
   const items = batch?.items || [];
   const index = items.findIndex((item) => item.uid === uid);
   if (index < 0) return null;
   const item = items[index];
+  if (!item) return null;
   const total = items.length;
   const n = index + 1;
   if (item.status === 'running') {
@@ -223,7 +291,7 @@ export function cardCopy(batch, uid) {
   return null;
 }
 
-export function queueRowCopy(batch, item) {
+export function queueRowCopy(batch: Batch | null | undefined, item: BatchItem): string {
   const n = itemPosition(batch, item.uid);
   if (item.status === 'running') return item.source === 'auto' ? '自动分析中…' : '分析中…';
   if (item.status === 'queued') return `排队 #${n}`;

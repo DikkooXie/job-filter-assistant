@@ -2,9 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import markUrl from '../../../icons/128.png';
 import { ArrowLeft, Briefcase, ChevronRight, ChevronUp, CircleAlert, Download, ExternalLink, Filter, HeartCrack, MoreHorizontal, RefreshCw, Search, Settings, Star, Trash2, X } from 'lucide-react';
 import { DIM_LABELS } from '../../common/ai/prompts.js';
+import type { TailorSuggestion } from '../../common/ai/prompts.js';
+import type { Job } from '../../common/types.js';
 import { analysisGrade, analysisSummary, descriptionGap, exclusionReasons, flowEntryLabel, flowStatusLabel, jobDescriptionText, platformLabel, riskLines, warningZone } from './browseModel.js';
+import type { AnalysisGrade, BrowseView } from './browseModel.js';
 import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
+import type { Batch, BatchItem, CardCopy, StripModel } from './batchQueue.js';
 import { CommTab } from './CommTab.jsx';
+import type { SuggestRequest } from './CommTab.jsx';
+import type { CommState } from './commTab.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
@@ -12,15 +18,15 @@ const DETAIL_TABS = [
   ['company', '公司'],
   ['resume', '简历'],
   ['flow', '沟通'],
-];
-const DIM_KEYS = ['skill', 'experience', 'requirement', 'location'];
+] as const;
+const DIM_KEYS = ['skill', 'experience', 'requirement', 'location'] as const;
 
-function Tags({ values }) {
+function Tags({ values }: { values?: string[] | null }) {
   if (!values?.length) return null;
   return <div className="tags">{values.map((value, index) => <span key={`${value}-${index}`}>{value}</span>)}</div>;
 }
 
-function Facts({ rows }) {
+function Facts({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   const visible = rows.filter(([, value]) => value);
   if (!visible.length) return null;
   return (
@@ -32,7 +38,7 @@ function Facts({ rows }) {
   );
 }
 
-function GradeMarks({ grade }) {
+function GradeMarks({ grade }: { grade: AnalysisGrade }) {
   return (
     <span className="segs" aria-hidden="true">
       {Array.from({ length: 5 }, (_, index) => (
@@ -42,7 +48,7 @@ function GradeMarks({ grade }) {
   );
 }
 
-function JobSummaryCard({ job, onOpenAnalysis }) {
+function JobSummaryCard({ job, onOpenAnalysis }: { job: Job; onOpenAnalysis: () => void }) {
   const gap = descriptionGap(job);
   const summary = analysisSummary(job);
   if (gap || !summary.grade) {
@@ -88,14 +94,24 @@ function JobSummaryCard({ job, onOpenAnalysis }) {
   );
 }
 
-function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
+interface AnalysisBodyProps {
+  job: Job;
+  scoring: boolean;
+  onAnalyze: () => void;
+  onAccept: (line: string) => void;
+}
+
+function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) {
   const gap = descriptionGap(job);
   const summary = analysisSummary(job);
   const risks = riskLines(job);
   const match = job.match;
+  const blockers = match?.blockers ?? [];
+  const reasons = match?.reasons ?? [];
+  const gaps = match?.gaps ?? [];
   const dims = DIM_KEYS
-    .map((key) => [key, match?.dims?.[key]])
-    .filter(([, value]) => value != null);
+    .map((key) => [key, match?.dims?.[key]] as const)
+    .filter((entry): entry is readonly [typeof DIM_KEYS[number], number] => entry[1] != null);
   return (
     <>
       {gap ? (
@@ -128,22 +144,22 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
               ))}
             </div>
           )}
-          {match.eligible === false && match.blockers?.length > 0 && (
+          {match?.eligible === false && blockers.length > 0 && (
             <section className="detail-sec">
               <h3>存在硬性门槛</h3>
-              <ul className="bullet-list gap">{match.blockers.map((item, index) => <li key={index}>{item}</li>)}</ul>
+              <ul className="bullet-list gap">{blockers.map((item, index) => <li key={index}>{item}</li>)}</ul>
             </section>
           )}
-          {match.reasons?.length > 0 && (
+          {reasons.length > 0 && (
             <section className="detail-sec">
               <h3>契合点</h3>
-              <ul className="bullet-list">{match.reasons.map((item, index) => <li key={index}>{item}</li>)}</ul>
+              <ul className="bullet-list">{reasons.map((item, index) => <li key={index}>{item}</li>)}</ul>
             </section>
           )}
-          {match.gaps?.length > 0 && (
+          {gaps.length > 0 && (
             <section className="detail-sec">
               <h3>差距 / 需补齐</h3>
-              <ul className="bullet-list gap">{match.gaps.map((item, index) => <li key={index}>{item}</li>)}</ul>
+              <ul className="bullet-list gap">{gaps.map((item, index) => <li key={index}>{item}</li>)}</ul>
             </section>
           )}
         </>
@@ -172,8 +188,17 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }) {
   );
 }
 
-function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }) {
-  const ref = useRef(null);
+interface AcceptRiskSheetProps {
+  risk: string;
+  draft: string;
+  saving: boolean;
+  onDraft: (value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }: AcceptRiskSheetProps) {
+  const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -182,8 +207,8 @@ function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }) {
     const previous = document.activeElement;
     const field = root.querySelector('textarea');
     field?.focus();
-    const nodes = () => [...root.querySelectorAll('button,textarea')].filter((element) => !element.disabled);
-    const onKey = (event) => {
+    const nodes = () => [...root.querySelectorAll<HTMLButtonElement | HTMLTextAreaElement>('button,textarea')].filter((element) => !element.disabled);
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
       if (event.key !== 'Tab') return;
       const items = nodes();
@@ -216,8 +241,15 @@ function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }) {
   );
 }
 
-export function DislikeSheet({ job, saving, onClose, onSave }) {
-  const ref = useRef(null);
+interface DislikeSheetProps {
+  job: Job | null;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (draft: string) => Promise<boolean | string | undefined> | boolean | string | undefined;
+}
+
+export function DislikeSheet({ job, saving, onClose, onSave }: DislikeSheetProps) {
+  const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [draft, setDraft] = useState('');
@@ -228,8 +260,8 @@ export function DislikeSheet({ job, saving, onClose, onSave }) {
     const previous = document.activeElement;
     const field = root.querySelector('textarea');
     field?.focus();
-    const nodes = () => [...root.querySelectorAll('button,textarea')].filter((element) => !element.disabled);
-    const onKey = (event) => {
+    const nodes = () => [...root.querySelectorAll<HTMLButtonElement | HTMLTextAreaElement>('button,textarea')].filter((element) => !element.disabled);
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
       if (event.key !== 'Tab') return;
       const items = nodes();
@@ -279,7 +311,7 @@ export function DislikeSheet({ job, saving, onClose, onSave }) {
   );
 }
 
-function LibraryCount({ shown, total, freshCount, onShowFresh }) {
+function LibraryCount({ shown, total, freshCount, onShowFresh }: { shown: number; total: number; freshCount: number; onShowFresh: () => void }) {
   const fresh = freshCount > 0;
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
@@ -310,10 +342,32 @@ function LibraryCount({ shown, total, freshCount, onShowFresh }) {
   );
 }
 
+interface ListHeaderProps {
+  total: number;
+  shown: number;
+  freshCount: number;
+  view: BrowseView;
+  filterEnabled: boolean;
+  settingsReady: boolean;
+  filterCount: number;
+  applied: string;
+  viewChanged: boolean;
+  dev: boolean;
+  onSearch: (value: string) => void;
+  onClearSearch: () => void;
+  onSort: (sort: string) => void;
+  onToggleFilters: (enabled: boolean) => void;
+  onOpenFilters: () => void;
+  onOpenCurrent: () => void;
+  onOptions: () => void;
+  onReset: () => void;
+  onShowFresh: () => void;
+}
+
 export function ListHeader({
   total, shown, freshCount, view, filterEnabled, settingsReady, filterCount, applied, viewChanged, dev,
   onSearch, onClearSearch, onSort, onToggleFilters, onOpenFilters, onOpenCurrent, onOptions, onReset, onShowFresh,
-}) {
+}: ListHeaderProps) {
   return (
     <header className="app-header">
       <div className="app-heading">
@@ -365,7 +419,7 @@ export function ListHeader({
   );
 }
 
-function AnalysisWarnings({ job }) {
+function AnalysisWarnings({ job }: { job: Job }) {
   const zone = warningZone(job);
   if (!zone) return null;
   return (
@@ -393,19 +447,19 @@ function AnalysisWarnings({ job }) {
 }
 
 // 列表和详情共用：第一次点删除只进入确认，180ms 内的连点不算第二次，再点才提交。
-function useDeleteConfirm(resetKey) {
-  const [confirming, setConfirming] = useState(null);
+function useDeleteConfirm(resetKey: string) {
+  const [confirming, setConfirming] = useState<string | null>(null);
   const armedAt = useRef(0);
-  const scopeRef = useRef(null);
+  const scopeRef = useRef<HTMLElement>(null);
 
   useEffect(() => { setConfirming(null); }, [resetKey]);
 
   useEffect(() => {
     if (!confirming) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape') setConfirming(null); };
-    const onPointer = (event) => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setConfirming(null); };
+    const onPointer = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
-      const action = target?.closest('[data-row-action]');
+      const action = target?.closest<HTMLElement>('[data-row-action]');
       if (action && scopeRef.current?.contains(action) && action.dataset.rowAction === confirming) return;
       setConfirming(null);
     };
@@ -417,7 +471,7 @@ function useDeleteConfirm(resetKey) {
     };
   }, [confirming]);
 
-  const arm = (kind) => {
+  const arm = (kind: string) => {
     if (confirming === kind) {
       if (performance.now() - armedAt.current < 180) return false;
       setConfirming(null);
@@ -431,12 +485,27 @@ function useDeleteConfirm(resetKey) {
   return { confirming, arm, scopeRef };
 }
 
-export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }) {
+interface JobRowProps {
+  job: Job;
+  checked: boolean;
+  returned: boolean;
+  isNew: boolean;
+  progressStatus?: string | null;
+  queueCard: CardCopy | null;
+  onToggle: () => void;
+  onOpen: (uid: string, sub: string) => void;
+  onStar: () => void;
+  onDelete: () => void;
+  onDislike: () => void;
+}
+
+export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }: JobRowProps) {
   const gap = descriptionGap(job);
   const grade = gap ? null : analysisGrade(job.match);
   const summary = grade ? (job.match?.summary || '') : '';
   const { confirming, arm, scopeRef } = useDeleteConfirm(job.uid);
   const name = job.title || '岗位';
+  const skills = job.skills?.length ? job.skills : (job.tags || []);
 
   return (
     <article ref={scopeRef} className={`job-row${returned ? ' just-viewed' : ''}${isNew ? ' is-new' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
@@ -466,8 +535,8 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
         <div className="job-meta">
           {[ [job.city, job.district].filter(Boolean).join('·'), job.experience, job.degree ].filter(Boolean).map((item) => <span key={item}>{item}</span>)}
         </div>
-        {(job.skills?.length ? job.skills : job.tags || []).length > 0 && (
-          <ul className="skills" aria-label="岗位技能">{(job.skills?.length ? job.skills : job.tags).slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
+        {skills.length > 0 && (
+          <ul className="skills" aria-label="岗位技能">{skills.slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
         )}
         <div className={`analysis${grade ? '' : ' bare'}${queueCard ? ` queue-${queueCard.kind}` : ''}`}>
           <div className="analysis-top">
@@ -519,7 +588,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
   );
 }
 
-function DeleteRowButton({ confirming, name, onClick }) {
+function DeleteRowButton({ confirming, name, onClick }: { confirming: string | null; name: string; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -537,7 +606,7 @@ function DeleteRowButton({ confirming, name, onClick }) {
   );
 }
 
-function DislikeRowButton({ confirming, name, onDislike }) {
+function DislikeRowButton({ confirming, name, onDislike }: { confirming: string | null; name: string; onDislike: () => void }) {
   return (
     <button
       type="button"
@@ -554,7 +623,17 @@ function DislikeRowButton({ confirming, name, onDislike }) {
   );
 }
 
-function ListRowActions({ name, company, confirming, progressStatus, onDelete, onDislike, onGreet }) {
+interface ListRowActionsProps {
+  name: string;
+  company?: string;
+  confirming: string | null;
+  progressStatus?: string | null;
+  onDelete: () => void;
+  onDislike: () => void;
+  onGreet: () => void;
+}
+
+function ListRowActions({ name, company, confirming, progressStatus, onDelete, onDislike, onGreet }: ListRowActionsProps) {
   return (
     <div className="row-actions">
       <div className="row-actions-inner">
@@ -578,7 +657,13 @@ function ListRowActions({ name, company, confirming, progressStatus, onDelete, o
   );
 }
 
-function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }) {
+function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
+  job: Job;
+  onOpenOriginal: () => void;
+  onStar: () => void;
+  onDislike: () => void;
+  onDelete: () => void;
+}) {
   const name = job.title || '岗位';
   const starred = !!job.star;
   const { confirming, arm, scopeRef } = useDeleteConfirm(job.uid);
@@ -616,17 +701,31 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }) {
   );
 }
 
+interface ListFooterProps {
+  total: number;
+  selectedCount: number;
+  allSelected: boolean;
+  indeterminate: boolean;
+  menuOpen: boolean;
+  onToggleAll: () => void;
+  onToggleMenu: (open: boolean) => void;
+  onDeleteSelected: () => void;
+  onExportSelected: () => void;
+  onAnalyze: () => void;
+  onWorkbench: () => void;
+}
+
 export function ListFooter({
   total, selectedCount, allSelected, indeterminate, menuOpen,
   onToggleAll, onToggleMenu, onDeleteSelected, onExportSelected, onAnalyze, onWorkbench,
-}) {
+}: ListFooterProps) {
   const selecting = selectedCount > 0;
-  const menuRef = useRef(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!menuOpen) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape') onToggleMenu(false); };
-    const onPointer = (event) => {
-      if (!menuRef.current?.contains(event.target)) onToggleMenu(false);
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onToggleMenu(false); };
+    const onPointer = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target instanceof Node ? event.target : null)) onToggleMenu(false);
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onPointer);
@@ -686,23 +785,32 @@ export function ListFooter({
   );
 }
 
-const ANALYZE_CHOICES = [
+interface AnalyzeChoice {
+  id: string;
+  title: string;
+  desc: string;
+  tag?: string;
+  disabled?: boolean;
+}
+
+const ANALYZE_CHOICES: AnalyzeChoice[] = [
   { id: 'unscored', title: '只分析尚未分析的', desc: '跳过已有分数的岗位，只补未分析项', tag: '推荐' },
   { id: 'force', title: '全部重新分析', desc: '覆盖已有结果，按当前画像重跑全部已选' },
   { id: 'fingerprint', title: '只分析当前画像下未分析的', desc: '跳过已在当前画像下分析过的岗位；画像变化后的旧结果会重新分析' },
 ];
 
-export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
-  const ref = useRef(null);
+export function AnalyzeSheet({ selectedCount, onClose, onStart }: { selectedCount: number; onClose: () => void; onStart: (mode: string) => void }) {
+  const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [mode, setMode] = useState('unscored');
   useEffect(() => {
     const root = ref.current;
+    if (!root) return undefined;
     const previous = document.activeElement;
-    const nodes = () => [...root.querySelectorAll('button,input,select,textarea')].filter((element) => !element.disabled);
+    const nodes = () => [...root.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('button,input,select,textarea')].filter((element) => !element.disabled);
     nodes()[0]?.focus();
-    const onKey = (event) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
       if (event.key !== 'Tab') return;
       const items = nodes();
@@ -714,7 +822,7 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
     root.addEventListener('keydown', onKey);
     return () => {
       root.removeEventListener('keydown', onKey);
-      if (previous?.isConnected) previous.focus();
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
   return (
@@ -755,7 +863,14 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }) {
   );
 }
 
-export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onBrowseBoss }) {
+export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onBrowseBoss }: {
+  kind: 'loading' | 'error' | 'empty' | 'nomatch';
+  message?: string | null;
+  viewChanged?: boolean;
+  onRetry?: () => void;
+  onReset?: () => void;
+  onBrowseBoss?: () => void;
+}) {
   if (kind === 'loading') {
     return (
       <div className="surface-state" role="status">
@@ -793,18 +908,52 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
   );
 }
 
+interface JobDetailProps {
+  mode: 'job' | 'removed' | 'unmatched' | null;
+  job: Job | null;
+  sub: string;
+  followLive: boolean;
+  progressStatus?: string | null;
+  greeting: string;
+  advice: TailorSuggestion | null | undefined;
+  scoring: boolean;
+  tailoring: boolean;
+  hasProfile: boolean;
+  dev: boolean;
+  comm?: CommState | null;
+  onBack: () => void;
+  onSub: (sub: string) => void;
+  onAnalyze: () => void;
+  onRegenerate: () => void;
+  onTailor: () => void;
+  onGreeting: (value: string) => void;
+  onCopy: (text: string) => void;
+  onSend: () => void;
+  onOpenChat: (text: string) => void;
+  onComm: (record: CommState) => void;
+  onNotice: (message: string, error?: boolean) => void;
+  onSuggest?: (job: Job, payload: SuggestRequest) => Promise<{ text?: string } | null | undefined> | null | undefined;
+  onMarkSent: () => void;
+  onOpenOriginal: () => void;
+  onStar: () => void;
+  onDislike: () => void;
+  onDelete: () => void;
+  onAcceptRisk?: (text: string) => Promise<boolean>;
+  onProfileSettings: () => void;
+}
+
 export function JobDetail({
   mode, job, sub, followLive, progressStatus, greeting, advice, scoring, tailoring,
   hasProfile, dev, comm, onBack, onSub, onAnalyze, onRegenerate, onTailor, onGreeting, onCopy,
   onSend, onOpenChat, onComm, onNotice, onSuggest, onMarkSent, onOpenOriginal, onStar, onDislike, onDelete, onAcceptRisk, onProfileSettings,
-}) {
-  const titleRef = useRef(null);
-  const [accepting, setAccepting] = useState(null);
+}: JobDetailProps) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [accepting, setAccepting] = useState<string | null>(null);
   const [acceptDraft, setAcceptDraft] = useState('');
   const [acceptSaving, setAcceptSaving] = useState(false);
   useEffect(() => { if (mode === 'job') titleRef.current?.focus(); }, [job?.uid, mode]);
   useEffect(() => { setAccepting(null); setAcceptDraft(''); }, [job?.uid, sub]);
-  const openAccept = (line) => {
+  const openAccept = (line: string) => {
     setAccepting(line);
     setAcceptDraft(`可以接受：${line}`);
   };
@@ -819,15 +968,15 @@ export function JobDetail({
       setAcceptSaving(false);
     }
   };
-  const onTabsKey = (event) => {
+  const onTabsKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
-    const buttons = [...event.currentTarget.querySelectorAll('button')];
-    const index = buttons.indexOf(document.activeElement);
+    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
     if (index < 0) return;
     event.preventDefault();
     const next = buttons[(index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length];
-    next.click();
-    next.focus();
+    next?.click();
+    next?.focus();
   };
   return (
     <div className="detail-wrap">
@@ -845,17 +994,17 @@ export function JobDetail({
           ) : (
             <>
               <div className="detail-title-line">
-                <h2 ref={titleRef} tabIndex={-1}>{job.title || '未命名岗位'}</h2>
-                {job.salaryText && <span className="salary">{job.salaryText}</span>}
+                <h2 ref={titleRef} tabIndex={-1}>{job?.title || '未命名岗位'}</h2>
+                {job?.salaryText && <span className="salary">{job.salaryText}</span>}
               </div>
               <p>
-                {[job.company, [job.city, job.district].filter(Boolean).join(' · '), job.experience, job.degree].filter(Boolean).join(' · ')}
+                {[job?.company, [job?.city, job?.district].filter(Boolean).join(' · '), job?.experience, job?.degree].filter(Boolean).join(' · ')}
                 {followLive && <span className="follow-note"> · 跟随当前页面</span>}
               </p>
             </>
           )}
         </header>
-        {mode === 'job' && (
+        {mode === 'job' && job && (
           <>
             <div className="detail-tabs" role="tablist" aria-label="岗位详情" onKeyDown={onTabsKey}>
               {DETAIL_TABS.map(([key, label]) => (
@@ -872,8 +1021,8 @@ export function JobDetail({
                     ['学历', job.degree],
                     ['平台', job.platform === 'boss' ? 'BOSS直聘' : '其他平台'],
                   ]} />
-                  {(job.skills?.length || job.tags?.length) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags).slice(0, 20)} /></>}
-                  {job.welfare?.length > 0 && <><h3>福利</h3><Tags values={job.welfare.slice(0, 20)} /></>}
+                  {(job.skills?.length || job.tags?.length || 0) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags || []).slice(0, 20)} /></>}
+                  {(job.welfare?.length ?? 0) > 0 && <><h3>福利</h3><Tags values={job.welfare?.slice(0, 20)} /></>}
                   <h3>岗位描述</h3>
                   <p className="pre desc-box">{jobDescriptionText(job)}</p>
                   {exclusionReasons(job).length > 0 && (
@@ -911,7 +1060,7 @@ export function JobDetail({
                         {tailoring && !advice && <p>正在生成建议…</p>}
                         {advice && (
                           <>
-                            {[['可突出的匹配点', advice.matchedSkills], ['建议对齐的岗位关键词', advice.keywordsToAlign], ['暂未体现', advice.missingSkills]].map(([title, values]) => values?.length > 0 && (
+                            {([['可突出的匹配点', advice.matchedSkills], ['建议对齐的岗位关键词', advice.keywordsToAlign], ['暂未体现', advice.missingSkills]] as Array<[string, string[]]>).map(([title, values]) => values.length > 0 && (
                               <div key={title}><h3>{title}</h3><Tags values={values} /></div>
                             ))}
                             {advice.summaryDraft && (
@@ -921,7 +1070,7 @@ export function JobDetail({
                                 <button type="button" className="jp-btn" onClick={() => onCopy(advice.summaryDraft)}>复制草稿</button>
                               </>
                             )}
-                            {[['经历改写建议', advice.bulletSuggestions], ['投递提醒', advice.tips]].map(([title, values]) => values?.length > 0 && (
+                            {([['经历改写建议', advice.bulletSuggestions], ['投递提醒', advice.tips]] as Array<[string, string[]]>).map(([title, values]) => values.length > 0 && (
                               <div key={title}><h3>{title}</h3><ul>{values.map((item, index) => <li key={index}>{item}</li>)}</ul></div>
                             ))}
                             {advice.note && <p>{advice.note}</p>}
@@ -976,16 +1125,23 @@ export function JobDetail({
   );
 }
 
-export function FilterSheet({ view, shown, onView, onReset, onClose }) {
-  const ref = useRef(null);
+export function FilterSheet({ view, shown, onView, onReset, onClose }: {
+  view: BrowseView;
+  shown: number;
+  onView: (patch: BrowseView) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
     const root = ref.current;
+    if (!root) return undefined;
     const previous = document.activeElement;
-    const nodes = () => [...root.querySelectorAll('button,input,select,textarea')].filter((element) => !element.disabled);
+    const nodes = () => [...root.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('button,input,select,textarea')].filter((element) => !element.disabled);
     nodes()[0]?.focus();
-    const onKey = (event) => {
+    const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
       if (event.key !== 'Tab') return;
       const items = nodes();
@@ -997,7 +1153,7 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }) {
     root.addEventListener('keydown', onKey);
     return () => {
       root.removeEventListener('keydown', onKey);
-      if (previous?.isConnected) previous.focus();
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
   return (
@@ -1026,7 +1182,7 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }) {
   );
 }
 
-export function ModelNotice({ onOpenSettings, onDismiss }) {
+export function ModelNotice({ onOpenSettings, onDismiss }: { onOpenSettings: () => void; onDismiss: () => void }) {
   return (
     <div className="model-notice" role="status">
       <span>尚未配置模型接口。</span>
@@ -1036,7 +1192,11 @@ export function ModelNotice({ onOpenSettings, onDismiss }) {
   );
 }
 
-export function BatchStrip({ model, onOpenQueue, onRetryFailed }) {
+export function BatchStrip({ model, onOpenQueue, onRetryFailed }: {
+  model: StripModel | null | undefined;
+  onOpenQueue: () => void;
+  onRetryFailed: () => void;
+}) {
   if (!model?.visible) return null;
   return (
     <div className={`batch-strip is-${model.tone}`} role="status" data-batch-strip={model.tone} aria-live="polite">
@@ -1059,7 +1219,14 @@ export function BatchStrip({ model, onOpenQueue, onRetryFailed }) {
   );
 }
 
-function QueueSection({ id, title, count, open, onToggle, children }) {
+function QueueSection({ id, title, count, open, onToggle, children }: {
+  id: string;
+  title: string;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <section className={`queue-section is-${id}${open ? ' is-open' : ''}`} data-queue-section={id}>
       <button type="button" className="queue-section-toggle" aria-expanded={open} onClick={onToggle}>
@@ -1071,7 +1238,12 @@ function QueueSection({ id, title, count, open, onToggle, children }) {
   );
 }
 
-function QueueJob({ item, batch, failed = false, onRetry }) {
+function QueueJob({ item, batch, failed = false, onRetry }: {
+  item: BatchItem;
+  batch: Batch;
+  failed?: boolean;
+  onRetry?: (uid: string) => void;
+}) {
   return (
     <div className={`queue-job${failed ? ' is-failed' : ''}${item.status === 'running' ? ' is-running' : ''}`}>
       <div className="queue-job-copy">
@@ -1079,28 +1251,40 @@ function QueueJob({ item, batch, failed = false, onRetry }) {
         <span>{queueRowCopy(batch, item)}</span>
       </div>
       {failed && (
-        <button type="button" className="batch-retry-btn" onClick={() => onRetry(item.uid)}>重试</button>
+        <button type="button" className="batch-retry-btn" onClick={() => onRetry?.(item.uid)}>重试</button>
       )}
     </div>
   );
 }
 
-export function QueueDrawer({ batch, onCancel, onRetry, onClose }) {
-  const ref = useRef(null);
+interface QueueSections {
+  running: boolean;
+  failed: boolean;
+  queued: boolean;
+  done: boolean;
+}
+
+export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
+  batch: Batch;
+  onCancel: () => void;
+  onRetry: (uid: string | null) => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [chip, setChip] = useState('all');
-  const [open, setOpen] = useState({ running: true, failed: true, queued: true, done: false });
+  const [open, setOpen] = useState<QueueSections>({ running: true, failed: true, queued: true, done: false });
   const model = drawerModel(batch);
   const view = visibleSections(batch, chip);
   useEffect(() => {
     const root = ref.current;
-    const onKey = (event) => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); } };
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); } };
     root?.addEventListener('keydown', onKey);
-    root?.querySelector('button')?.focus();
+    root?.querySelector<HTMLButtonElement>('button')?.focus();
     return () => root?.removeEventListener('keydown', onKey);
   }, []);
-  const toggle = (id) => setOpen((current) => ({ ...current, [id]: !current[id] }));
+  const toggle = (id: keyof QueueSections) => setOpen((current) => ({ ...current, [id]: !current[id] }));
   return (
     <div className="queue-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="queue-drawer" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>

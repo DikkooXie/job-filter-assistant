@@ -9,15 +9,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { confirmQueue, splitConfirmCopy } from './confirmQueue.js';
+import type { ConfirmItem } from './confirmQueue.js';
 
 /** 侧栏内的确认层。Escape 和「取消」都是 false，不写任何状态。 */
 export function ConfirmDialogHost() {
-  const anchorRef = useRef(null);
-  const [container, setContainer] = useState(null);
-  const [req, setReq] = useState(null);
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [container, setContainer] = useState<Element | null>(null);
+  const [req, setReq] = useState<ConfirmItem | null>(null);
   useEffect(() => setContainer(anchorRef.current?.closest('.job-panel') || null), []);
   useEffect(() => confirmQueue.attach(setReq), []);
-  const finish = (value) => {
+  const finish = (value: boolean) => {
     if (!req || req.settled) return;
     confirmQueue.settle(value);
   };
@@ -25,7 +26,7 @@ export function ConfirmDialogHost() {
   return (
     <>
       <span ref={anchorRef} hidden />
-      <AlertDialog open={!!req && !!container} onOpenChange={(open) => { if (!open) finish(false); }}>
+      <AlertDialog open={!!req && !!container} onOpenChange={(open: boolean) => { if (!open) finish(false); }}>
         <AlertDialogContent container={container} className="jp-confirm">
           <AlertDialogHeader>
             <AlertDialogTitle>{copy.title}</AlertDialogTitle>
