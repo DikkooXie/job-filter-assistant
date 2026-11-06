@@ -2,8 +2,15 @@
 // TXT/MD/JSON（直接读）。均在扩展页面上下文运行（同源，可加载打包的 worker）。
 import { unzipSync, strFromU8 } from '../vendor/fflate.module.js';
 
+export type ResumeFileKind = 'pdf' | 'docx' | 'text';
+
+export interface ParsedResume {
+  text: string;
+  meta: { kind: ResumeFileKind };
+}
+
 // 主入口：File -> { text, meta }
-export async function parseResumeFile(file) {
+export async function parseResumeFile(file: File): Promise<ParsedResume> {
   const name = (file.name || '').toLowerCase();
   const type = file.type || '';
   if (name.endsWith('.pdf') || type === 'application/pdf') {
@@ -21,11 +28,32 @@ export async function parseResumeFile(file) {
 }
 
 // —— PDF ——
-let pdfLibPromise = null;
-async function loadPdfLib() {
+// pdf.js 未附带类型声明，这里只声明实际用到的成员。
+interface PdfTextItem {
+  str: string;
+  transform?: number[];
+}
+
+interface PdfPage {
+  getTextContent(): Promise<{ items: PdfTextItem[] }>;
+}
+
+interface PdfDoc {
+  numPages: number;
+  getPage(index: number): Promise<PdfPage>;
+  destroy(): Promise<void>;
+}
+
+interface PdfLib {
+  GlobalWorkerOptions: { workerSrc: string };
+  getDocument(opts: { data: ArrayBuffer }): { promise: Promise<PdfDoc> };
+}
+
+let pdfLibPromise: Promise<PdfLib> | null = null;
+async function loadPdfLib(): Promise<PdfLib> {
   if (!pdfLibPromise) {
     pdfLibPromise = import('../vendor/pdf.min.mjs').then((mod) => {
-      const lib = mod.default || mod;
+      const lib = ((mod as unknown as { default?: PdfLib }).default ?? mod) as unknown as PdfLib;
       // worker 指向打包的同源文件
       lib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('src/vendor/pdf.worker.min.mjs');
       return lib;
@@ -34,21 +62,21 @@ async function loadPdfLib() {
   return pdfLibPromise;
 }
 
-async function parsePdf(file) {
+async function parsePdf(file: File): Promise<string> {
   const lib = await loadPdfLib();
   const buf = await file.arrayBuffer();
   const doc = await lib.getDocument({ data: buf }).promise;
-  const pages = [];
+  const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
     // 依 y 坐标粗略还原换行
-    let lastY = null;
+    let lastY: number | null = null;
     let line = '';
-    const lines = [];
+    const lines: string[] = [];
     for (const item of content.items) {
       const s = item.str;
-      const y = item.transform ? item.transform[5] : null;
+      const y = item.transform ? (item.transform[5] ?? null) : null;
       if (lastY !== null && y !== null && Math.abs(y - lastY) > 3) {
         lines.push(line);
         line = '';
@@ -66,17 +94,17 @@ async function parsePdf(file) {
 }
 
 // —— DOCX（解压 + 读 word/document.xml，剥标签） ——
-async function parseDocx(file) {
+async function parseDocx(file: File): Promise<string> {
   const buf = new Uint8Array(await file.arrayBuffer());
-  let files;
+  let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(buf);
-  } catch (e) {
+    files = unzipSync(buf, {});
+  } catch {
     throw new Error('DOCX 解析失败，请另存为 PDF 或直接粘贴文本');
   }
   const docXml = files['word/document.xml'];
   if (!docXml) throw new Error('DOCX 结构异常（缺 document.xml），请粘贴文本');
-  const xml = strFromU8(docXml);
+  const xml = strFromU8(docXml, false);
   // 段落 </w:p> 转换行，制表 <w:tab/> 转空格，其余标签去除
   const text = xml
     .replace(/<w:tab\b[^>]*\/?>/g, '\t')

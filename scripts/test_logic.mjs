@@ -2142,7 +2142,7 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /UpdatePanel/);
   assert.match(page, /updateChannel/);
   const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.jsx'), 'utf8');
-  const updater = fs.readFileSync(path.join(root, 'src/extension/update.js'), 'utf8');
+  const updater = fs.readFileSync(path.join(root, 'src/extension/update.ts'), 'utf8');
   const script = fs.readFileSync(path.join(root, 'scripts/release.mjs'), 'utf8');
   assert.match(panel, /更新通道/);
   assert.match(panel, /\['stable', '稳定'\]/);
@@ -3594,7 +3594,7 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   const sidepanel = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'SidepanelApp.jsx'), 'utf8');
   const comm = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'CommTab.jsx'), 'utf8');
   const browse = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'browse.css'), 'utf8');
-  const common = fs.readFileSync(path.join(srcDir, 'extension', 'messages.js'), 'utf8');
+  const common = fs.readFileSync(path.join(srcDir, 'extension', 'messages.ts'), 'utf8');
   assert.match(sidepanel, /askConfirm\(/);
   assert.match(sidepanel, /from '@\/components\/ui\/sonner'/);
   assert.match(sidepanel, /<Toaster \/>/);
