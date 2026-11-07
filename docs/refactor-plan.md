@@ -1,6 +1,6 @@
 # 重构计划：只做 BOSS + 架构梳理 + 全项目 TypeScript
 
-状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页已完成；侧栏已转换批量队列、列表、底部弹层、详情分析、详情头部/标签/正文/事实/维度/要点和空/加载/错误状态，沟通区待转换；浮窗待检查）
+状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页已完成；侧栏已转换批量队列、列表、底部弹层、详情分析、详情头部/标签/正文/事实/维度/要点和空/加载/错误状态、沟通页；浮窗待检查）
 当前：`npm run typecheck` 零错误、`npm run lint` 零警告、`npm test` 197 通过 / 0 失败、`npm run build` 通过
 分支：`refactor/codebase-cleanup`（基于 `dev`，两者均已推送 `personal`）
 基线：`adbf521`，`npm test` 198 通过 / 0 失败，`npm run build` 通过
@@ -161,6 +161,7 @@ src/
 - 已完成：设置页外壳、画像完整度侧栏与更新日志使用 Tailwind，删除 `shell.css`；主题变量和基础字体迁到 `theme.css`，原本无消费者的窄屏规则删除，折叠内容的 `hidden` 由 Tailwind preflight 处理。重新截取原始构建后，设置页四个标签的深浅色、宽窄屏共 16 张与迁移版逐像素一致；更新日志 8 张中 6 张一致、另两张分别相差 2 和 5 像素。原先基线与同一原始构建的重新截图也有大面积差异，因此以同轮重新截图为准。
 - 侧栏进行中：批量进度条与队列抽屉拆至 `BatchViews.tsx`；列表、详情、沟通页的深浅色和宽窄屏共 12 张截图与拆分前逐像素一致。模型接口提示、队列遮罩、抽屉容器、头部、进度与统计、筛选栏容器、滚动区域、分组内容、空状态和底部操作栏已转换为 Tailwind，分别在深浅色和宽窄屏下截图，迁移前后各四张逐像素一致。队列内部及侧栏其余样式仍待转换。
 - 侧栏详情头部、标签、正文与空/加载/错误状态改用 Tailwind，删除 `.job-detail` / `.detail-heading` / `.detail-title-line` / `.detail-tabs` / `.detail-content` / `.dims` / `.facts` / `.tags` / `.bullet-list` / `.surface-state` / `.skeletons` / `.list-scroll` 等规则；复合样式收进 `views.tsx` 顶部常量。列表滚动区同时换掉 `list-scroll`。本轮遇到三处「源码值 ≠ 实际生效值」：详情标题会被 `.job-panel :focus-visible`（未分层）画出青色聚焦环，工具类要写 `focus:!outline-none`；`.fine-print` 的 11px/10px 上边距被 `.detail-content p` 与 `.job-panel p { margin: 0 }` 压掉，实际等同正文段落；返回按钮的 11px/secondary 被 `.job-panel button { font: inherit; color: inherit }` 压掉，实际继承 13px 正文色。比对结论：同一份代码连截两次会整页差 1px（旧基线已陈旧），改用「同一个 dev server 上先 stash 到 HEAD 截一轮、再还原截一轮」后，28 张里有 27 张逐像素一致，仅浅色宽屏详情「岗位」页的要点圆点有 1 个抗锯齿像素相差 34，属可接受噪声。
+- 侧栏沟通页改用 Tailwind：进展抽屉、步骤条、对话气泡、招呼语工作区、贴底建议条全部换成 `CommTab.tsx` 顶部常量，删除 `browse.css` 中 `.comm-*` / `.suggest` / `.sg-*` / `.sticky-comm` 共 359 行规则。按钮和文本框继续带 `!`，因为 `.job-panel button` / `.job-panel textarea` 的未分层重置会压过普通工具类；`.comm-greet-empty p` 的 8px 下边距同样要 `!mb-2`（`.job-panel p { margin: 0 }`）。空状态「生成招呼语」按钮按原样式补 `disabled:opacity-100`。比对用同一套脚本先 stash 到 HEAD 截 28 张基线、再还原截 28 张，逐像素全部一致；中途曾用 Role 选择器直接对比旧脚本的基线，有 4 张因点击后滚动位置不同而整页偏移，不能算回归。测试里按类名的断言改为断言常量内容和「`browse.css` 不再有 comm 规则」。
 - 侧栏详情「分析」页的风险提示与底部操作按钮改用 Tailwind：`detail-warn` / `detail-warn-row` / `warn-txt` / `tune-link` / `analysis-empty` / `reanalyze` / `detail-open` 的规则从 `browse.css` 删除。四态截图里只有等级条（五段斜块）边缘在不同轮次间相差 19–20 像素，同一份代码连截两次也能复现同样的抖动，属截图噪声；其余区域逐像素一致。另用计算样式逐项核对：风险容器内边距 4/6、行内边距 8/6 与 7px 间距、图标 13px + 1px 上移、相邻行 1px 分隔线、「可以接受」悬停展开到 72px、重新分析按钮的禁用透明度 0.48 与悬停描边/文字色、详情按钮 36px 高，全部与转换前相同。
 - 转换要照搬**层叠后实际生效**的样式，不是 CSS 源码里写的值。`update-panel.css` 有一条 `.settings-root .update-panel :where(p, h2, h3, h4, ol, ul) { margin: 0 }`，特异性 (0,2,0) 压过了所有单类名的 margin 规则（`.update-lead`、`.update-hint`、`.update-keep`、`.update-id`、发布说明和手动步骤里的段落/列表），那些外边距从来没生效过；照源码写进去页面会高出 36–102px。同理，「手动更新」的 `›` 原样式收起时没有 transform，这里不能加 `rotate-0`（与「高级设置」相反），否则字形有 7–9 像素不同。
 - 复合样式用 `recipes.ts` 里的 TS 常量 / `cva` 收敛，而不是 `@apply`：类名留在 TSX 里可搜、可类型检查。
