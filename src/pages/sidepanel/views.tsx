@@ -10,6 +10,7 @@ import type { CardCopy } from './batchQueue.js';
 import { CommTab } from './CommTab.jsx';
 import type { SuggestRequest } from './CommTab.jsx';
 import type { CommState } from './commTab.js';
+import { cn } from '../../lib/cn.js';
 
 const DETAIL_TABS = [
   ['info', '岗位'],
@@ -310,6 +311,42 @@ export function DislikeSheet({ job, saving, onClose, onSave }: DislikeSheetProps
   );
 }
 
+// 岗位库头部的 Tailwind 类。browse.css 的 .job-panel button/input/select 重置（border、background、padding、
+// font、color）和 .job-panel svg 尺寸都不在层里，所以按钮、表单控件和图标上与之相争的属性要加 ! 前缀。
+const headerClass = 'shrink-0 border-b border-jp-line bg-jp-surface px-4 pt-4';
+const headingClass = 'flex min-w-0 items-center justify-between gap-2.5';
+const titleRowClass = 'flex min-w-0 items-center gap-[9px]';
+const titleClass = 'min-w-0 shrink-0 text-[19px] font-[650] tracking-[-.02em]';
+const countClass = 'text-hint leading-[1.2] font-[450] text-jp-muted';
+// 新岗位胶囊：先以 24px 的圆点出现，下一帧展开成整句，宽度和内边距一起过渡。
+const freshClass = cn(
+  'inline-flex h-6 items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full',
+  '!bg-[linear-gradient(90deg,#f0b429_0%,#fb923c_100%)] !text-hint !leading-6 !font-bold !text-[#0f1419]',
+  'shadow-[0_0_0_1px_rgba(240,180,41,.35),0_4px_14px_rgba(240,180,41,.25)] transition-[max-width,padding] duration-200 ease-[ease]',
+);
+/** 开发构建标记，列表头和详情导航共用。 */
+const devMarkClass = 'flex-none self-center rounded-[5px] border border-jp-accent-line bg-jp-accent-soft px-[5px] text-[10px] leading-4 font-semibold tracking-normal text-jp-accent';
+const iconButtonClass = 'relative inline-flex size-8 items-center justify-center rounded-md';
+const filterBadgeClass = 'absolute top-0.5 right-px h-3.5 min-w-3.5 rounded-[7px] bg-jp-accent px-[3px] text-center text-[9px] leading-[14px] font-[650] text-jp-on-accent';
+const searchBoxClass = cn(
+  'flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-md border border-jp-line-strong bg-jp-field px-2.5 text-jp-muted',
+  'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-jp-accent',
+);
+// 外框负责焦点环，输入框自身的 :focus-visible 轮廓（来自 .job-panel :focus-visible）要关掉。
+const searchInputClass = 'search-input w-full min-w-0 border-0 bg-transparent !text-hint !text-jp-ink outline-0 focus-visible:!outline-none';
+const clearSearchClass = 'flex min-h-6 min-w-5 items-center justify-center !text-jp-secondary';
+const toolbarClass = 'flex min-w-0 items-center gap-2 pt-[9px] pb-2 text-[11px] text-jp-muted';
+// 原生复选框透明地盖在轨道上，轨道用 peer-* 跟随勾选、焦点和禁用状态。
+const switchLabelClass = 'relative inline-flex min-w-0 items-center gap-[5px] whitespace-nowrap text-jp-secondary';
+const switchInputClass = 'peer absolute m-0 h-[22px] w-6 opacity-0';
+const switchTrackClass = cn(
+  'block h-3.5 w-6 shrink-0 rounded-[9px] bg-jp-switch p-0.5',
+  "after:block after:size-2.5 after:rounded-full after:bg-jp-field after:content-['']",
+  'peer-checked:bg-jp-accent peer-checked:after:translate-x-2.5 peer-checked:after:bg-jp-on-accent',
+  'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-[3px] peer-focus-visible:outline-jp-accent peer-disabled:opacity-[.48]',
+);
+const sortSelectClass = 'min-h-6 max-w-[92px] border-0 bg-transparent !text-[11px] !text-jp-secondary';
+
 function LibraryCount({ shown, total, freshCount, onShowFresh }: { shown: number; total: number; freshCount: number; onShowFresh: () => void }) {
   const fresh = freshCount > 0;
   const [expanded, setExpanded] = useState(false);
@@ -323,7 +360,7 @@ function LibraryCount({ shown, total, freshCount, onShowFresh }: { shown: number
   }, [fresh]);
   if (!fresh) {
     return (
-      <span className="library-count" aria-label={`显示 ${shown} 个，共 ${total} 个`}>
+      <span className={countClass} aria-label={`显示 ${shown} 个，共 ${total} 个`}>
         {shown === total ? total : `${shown} / ${total}`}
       </span>
     );
@@ -331,11 +368,11 @@ function LibraryCount({ shown, total, freshCount, onShowFresh }: { shown: number
   return (
     <button
       type="button"
-      className={`library-count is-fresh${expanded ? ' is-open' : ''}`}
+      className={cn(freshClass, expanded ? 'max-w-[220px] !pr-2.5 !pl-2' : 'max-w-6 !px-[7px]')}
       aria-label={`找到 ${freshCount} 个新岗位`}
       onClick={onShowFresh}
     >
-      <span className="fresh-dot" aria-hidden="true" />
+      <span className="size-[7px] shrink-0 rounded-full bg-[#0f1419] opacity-75" aria-hidden="true" />
       <span>找到 {freshCount} 个新岗位</span>
     </button>
   );
@@ -367,41 +404,43 @@ export function ListHeader({
   total, shown, freshCount, view, filterEnabled, settingsReady, filterCount, applied, viewChanged, dev,
   onSearch, onClearSearch, onSort, onToggleFilters, onOpenFilters, onOpenCurrent, onOptions, onReset, onShowFresh,
 }: ListHeaderProps) {
+  // 有筛选条件时漏斗按钮常亮强调色，悬停也不切回中性底色。
+  const plainIcon = cn(iconButtonClass, 'hover:!bg-jp-inset hover:!text-jp-ink');
   return (
-    <header className="app-header">
-      <div className="app-heading">
-        <div className="heading-title">
-          <img className="sp-logo" src={markUrl} alt="Offercome" width={28} height={28} />
-          <h1>岗位库</h1>
-          {dev && <span className="dev-mark">dev</span>}
-          <span className="library-count-slot" aria-live="polite">
+    <header className={headerClass}>
+      <div className={headingClass}>
+        <div className={titleRowClass}>
+          <img className="block size-7 flex-none object-contain" src={markUrl} alt="Offercome" width={28} height={28} />
+          <h1 className={titleClass}>岗位库</h1>
+          {dev && <span className={devMarkClass}>dev</span>}
+          <span className="inline-flex min-w-0" aria-live="polite">
             <LibraryCount shown={shown} total={total} freshCount={freshCount} onShowFresh={onShowFresh} />
           </span>
         </div>
-        <div className="heading-actions">
-          <button type="button" className="header-icon" aria-label="当前岗位" title="当前岗位" onClick={onOpenCurrent}><Briefcase aria-hidden="true" /></button>
-          <button type="button" className={`header-icon filter-trigger${filterCount ? ' has-filters' : ''}`} aria-label={filterCount ? `筛选，${filterCount} 个条件` : '筛选'} title="筛选" onClick={onOpenFilters}>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" className={plainIcon} aria-label="当前岗位" title="当前岗位" onClick={onOpenCurrent}><Briefcase aria-hidden="true" /></button>
+          <button type="button" className={filterCount ? cn(iconButtonClass, '!bg-jp-accent-soft !text-jp-accent') : plainIcon} aria-label={filterCount ? `筛选，${filterCount} 个条件` : '筛选'} title="筛选" onClick={onOpenFilters}>
             <Filter aria-hidden="true" />
-            {filterCount > 0 && <span className="filter-count">{filterCount}</span>}
+            {filterCount > 0 && <span className={filterBadgeClass}>{filterCount}</span>}
           </button>
-          <button type="button" className="header-icon" aria-label="设置" title="设置" onClick={onOptions}><Settings aria-hidden="true" /></button>
+          <button type="button" className={plainIcon} aria-label="设置" title="设置" onClick={onOptions}><Settings aria-hidden="true" /></button>
         </div>
       </div>
-      <div className="search-line">
-        <label className="search-box">
-          <Search aria-hidden="true" />
-          <input className="search-input" aria-label="搜索岗位、公司或技能" placeholder="搜索岗位、公司或技能" value={view.search} onChange={(event) => onSearch(event.target.value)} />
-          {view.search && <button type="button" className="clear-search" aria-label="清除搜索" onClick={onClearSearch}><X aria-hidden="true" /></button>}
+      <div className="mt-[13px] flex min-w-0 gap-2">
+        <label className={searchBoxClass}>
+          <Search className="!size-[15px]" aria-hidden="true" />
+          <input className={searchInputClass} aria-label="搜索岗位、公司或技能" placeholder="搜索岗位、公司或技能" value={view.search} onChange={(event) => onSearch(event.target.value)} />
+          {view.search && <button type="button" className={clearSearchClass} aria-label="清除搜索" onClick={onClearSearch}><X className="!size-[15px]" aria-hidden="true" /></button>}
         </label>
       </div>
-      <div className="view-toolbar">
-        <label className="local-filter">
-          <input type="checkbox" role="switch" checked={!!filterEnabled} disabled={!settingsReady} onChange={(event) => onToggleFilters(event.target.checked)} />
-          <span className="switch-track" />
+      <div className={toolbarClass}>
+        <label className={switchLabelClass}>
+          <input type="checkbox" role="switch" className={switchInputClass} checked={!!filterEnabled} disabled={!settingsReady} onChange={(event) => onToggleFilters(event.target.checked)} />
+          <span className={switchTrackClass} />
           <span>开启过滤</span>
         </label>
-        <label className="sort-label">
-          <select aria-label="岗位排序" value={view.sort} onChange={(event) => onSort(event.target.value)}>
+        <label className="ml-auto flex shrink-0 items-center text-jp-secondary">
+          <select aria-label="岗位排序" className={sortSelectClass} value={view.sort} onChange={(event) => onSort(event.target.value)}>
             <option value="recent">最近收录</option>
             <option value="score">匹配优先</option>
             <option value="salary">月薪优先</option>
@@ -409,9 +448,9 @@ export function ListHeader({
         </label>
       </div>
       {viewChanged && (
-        <div className="applied-filters">
-          <span>{applied}</span>
-          <button type="button" onClick={onReset}>重置视图</button>
+        <div className="flex min-w-0 items-baseline gap-2 pb-[9px] text-[11px] text-jp-accent">
+          <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{applied}</span>
+          <button type="button" className="min-h-6 whitespace-nowrap !text-jp-muted" onClick={onReset}>重置视图</button>
         </div>
       )}
     </header>
@@ -981,9 +1020,9 @@ export function JobDetail({
     <div className="detail-wrap">
       <section className="job-detail">
         <header className="detail-heading">
-          <div className="detail-nav">
-            <button type="button" className="back" onClick={onBack}><ArrowLeft aria-hidden="true" />岗位库</button>
-            {dev && <span className="dev-mark">dev</span>}
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <button type="button" className="back !mb-0" onClick={onBack}><ArrowLeft aria-hidden="true" />岗位库</button>
+            {dev && <span className={devMarkClass}>dev</span>}
           </div>
           {mode !== 'job' ? (
             <>
