@@ -95,13 +95,14 @@ export function classifyBossDrop(
   return { reason: 'code', code: code || 'invalid' };
 }
 
-export function ensureLogEntry(uid: unknown, result: Record<string, unknown> = {}): CaptureLogEntry | null {
+export function ensureLogEntry(uid: unknown, result: object | null | undefined = {}): CaptureLogEntry | null {
+  const fields = (result || {}) as { action?: unknown; scrape?: unknown; reason?: unknown };
   return sanitizeCaptureEntry({
     kind: 'ensure',
     uid,
-    action: result.action || '',
-    scrape: result.scrape || '',
-    reason: result.reason || '',
+    action: fields.action || '',
+    scrape: fields.scrape || '',
+    reason: fields.reason || '',
   });
 }
 
@@ -121,12 +122,13 @@ export async function loadCaptureLog(): Promise<CaptureLog> {
   return normalizeCaptureLog(got[STORAGE_KEYS.lastReport]);
 }
 
-export async function appendCaptureLog(entry: Record<string, unknown>): Promise<CaptureLog> {
+export async function appendCaptureLog(entry: object | null | undefined): Promise<CaptureLog> {
+  const fields = (entry || {}) as Record<string, unknown>;
   return withCaptureWrite(async () => {
     const current = await loadCaptureLog();
     const next = appendCaptureEntry(current, {
-      ...entry,
-      at: entry && entry.at ? entry.at : new Date().toISOString(),
+      ...fields,
+      at: fields.at || new Date().toISOString(),
     });
     await chrome.storage.local.set({ [STORAGE_KEYS.lastReport]: next });
     return next;

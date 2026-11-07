@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import vm from 'node:vm';
+import { transformSync } from 'esbuild';
 
 import { defaultFilters, defaultSettings, MSG, STORAGE_KEYS } from '../src/common/constants.js';
 import { isDevBuild, toDevManifest } from '../src/common/build.js';
@@ -39,7 +40,7 @@ import { createConfirmQueue, splitConfirmCopy } from '../src/pages/sidepanel/con
 import {
   QUEUE_PREVIEW, SUCCESS_HOLD_MS, batchCounts, cancelRemaining, cardCopy, drawerModel, emptyBatch, enqueueBatch, estimateMinutes, finishPhase, retryFailed, settle as settleItem, stripModel, takeNext, visibleSections,
 } from '../src/pages/sidepanel/batchQueue.js';
-import { sanitizeProvider, validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
+import { validateProvider, providerFromPreset, isProviderUsable, PRESETS, PROTOCOLS } from '../src/common/ai/providers.js';
 import {
   formatConnectionResult, formatElapsed, formatModelsResult, initialSelectedId, parseExtraHeaders, providerHost, providerMeta, removeProviderState,
 } from '../src/pages/options/aiState.js';
@@ -51,6 +52,12 @@ import {
   normalizeUpdateChannel, releaseRequest, selectPreviewRelease, resolvePreviewCheck, assessUpdate,
   changelogTitle, changelogSummary, changelogBullets, changelogSections, formatChangelogWhen, isCurrentChangelogVersion, changelogEntries, RELEASES_PAGE,
 } from '../src/common/update.js';
+
+// 内容脚本是 TypeScript 写的 IIFE，不能 import。测试里先转成 JS 再放进 vm 跑。
+function runtimeScript(rel) {
+  const file = path.join(path.dirname(fileURLToPath(import.meta.url)), rel);
+  return transformSync(fs.readFileSync(file, 'utf8'), { loader: 'ts' }).code;
+}
 
 let pass = 0;
 let fail = 0;
@@ -426,7 +433,7 @@ function installSniffer(options = {}) {
   XMLHttpRequest.prototype.send = function send() {};
   const ctx = { window: fakeWindow, location, URL, XMLHttpRequest };
   vm.runInNewContext(
-    fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/sniffer.js'), 'utf8'),
+    runtimeScript('../src/content/sniffer.ts'),
     ctx,
   );
   return {
@@ -550,7 +557,7 @@ function installCollector(hostname, href) {
     },
   };
   vm.runInNewContext(
-    fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/collector.js'), 'utf8'),
+    runtimeScript('../src/content/collector.ts'),
     ctx,
   );
   return {
@@ -1553,7 +1560,7 @@ test('写入顺序：manifest.json 最后，跳过不安全路径', () => {
 });
 
 // ---------- 页面角标 ----------
-// 在 vm 里用最小桩跑 collector.js（内容脚本不打包，无法直接 import）。
+// 在 vm 里用最小桩跑 collector.ts（内容脚本不打包，无法直接 import）。
 section('页面收录角标');
 function runCollector(stored) {
   const appended = [];
@@ -1594,7 +1601,7 @@ function runCollector(stored) {
       },
     },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/collector.js'), 'utf8'), ctx);
+  vm.runInNewContext(runtimeScript('../src/content/collector.ts'), ctx);
   const capture = async () => {
     for (const fn of listeners.message) {
       fn({ source: fakeWindow, data: { source: 'job-helper:sniffer', platform: 'boss', url: 'https://www.zhipin.com/wapi/zpgeek/search/joblist.json', payload: { zpData: { jobList: [] } } } });
@@ -2499,7 +2506,7 @@ test('侧栏底栏改为工作台入口和智能分析', () => {
   assert.match(sidepanel, /analysisUsesForce\(mode\)/);
   assert.match(sidepanel, /analysisTargets\(checked, mode, fingerprint\)/);
   assert.match(sidepanel, /analysisEmptyMessage\(mode, checked\.length\)/);
-  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.ts'), 'utf8');
   assert.match(background, /from '\.\.\/common\/profileFingerprint\.js'/);
   assert.match(background, /withProfileFp\(cache\[cacheKey\], fp\)/);
   assert.match(background, /withProfileFp\(sanitizeMatch\(raw\), fp\)/);
@@ -2832,7 +2839,7 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
-  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.ts'), 'utf8');
   const queue = fs.readFileSync(path.join(root, 'src/pages/sidepanel/batchQueue.ts'), 'utf8');
   const footerStart = views.indexOf('export function ListFooter');
   const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
@@ -3036,7 +3043,7 @@ await testAsync('多次补抓串行，不会同时点开两张卡', async () => 
 });
 test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗位库', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.ts'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
   const scoreStart = background.indexOf('async function scoreOne');
   const promptAt = background.indexOf('buildMatchPrompt(profile, job', scoreStart);
@@ -3062,7 +3069,7 @@ test('打分入口在出分前补抓，批量仍串行限速，侧栏订阅岗�
   assert.match(batchBody, /await sleep\(400\)/);
   assert.doesNotMatch(batchBody, /throw /);
   assert.doesNotMatch(background.slice(scoreStart, promptAt), /补抓失败仍用现有岗位打分|超时仍打分/);
-  const collector = fs.readFileSync(path.join(root, 'src/content/collector.js'), 'utf8');
+  const collector = fs.readFileSync(path.join(root, 'src/content/collector.ts'), 'utf8');
   assert.match(collector, /hintJobId/);
   assert.match(collector, /pendingClick = \{ jobId, at: Date\.now\(\) \}/);
   assert.match(background, /pageUrl: msg\.pageUrl/);
@@ -3196,9 +3203,9 @@ test('已有描述只打开，空描述才等待；刮到的正文只补已有 u
 });
 test('打开原岗位的接线：空描述走等待，超时才刮；已有描述仍只开标签', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.ts'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
-  const collector = fs.readFileSync(path.join(root, 'src/content/collector.js'), 'utf8');
+  const collector = fs.readFileSync(path.join(root, 'src/content/collector.ts'), 'utf8');
   const openStart = background.indexOf('async function openOriginalJob');
   const openEnd = background.indexOf('async function activateOriginalJobTab');
   const openBody = background.slice(openStart, openEnd);
@@ -3267,7 +3274,7 @@ function runDetailPage(href, blocks) {
     },
   };
   vm.runInNewContext(
-    fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../src/content/collector.js'), 'utf8'),
+    runtimeScript('../src/content/collector.ts'),
     ctx,
   );
   const ask = (msg) => {
@@ -3452,7 +3459,7 @@ test('沟通 Tab 按 LOCK-v2：气泡在滚动区，建议条贴底，底色共�
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const comm = fs.readFileSync(path.join(root, 'src/pages/sidepanel/CommTab.tsx'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
-  const background = fs.readFileSync(path.join(root, 'src/background/background.js'), 'utf8');
+  const background = fs.readFileSync(path.join(root, 'src/background/background.ts'), 'utf8');
   assert.match(views, /\['flow', '沟通'\]/);
   assert.doesNotMatch(views, /\['flow', '流程'\]/);
   assert.doesNotMatch(comm, /回 HR|该问|摘录|精简版|标准版|详细版|标记已发送/);

@@ -36,6 +36,7 @@ export function profileFingerprint(
 }
 
 // 把当前指纹盖到匹配结果上。不改原对象，缺结果时原样返回。
+export function withProfileFp<T extends Match | null | undefined>(match: T, fingerprint: unknown): T;
 export function withProfileFp<T extends Match>(match: T | null | undefined, fingerprint: unknown): T | null | undefined {
   if (!match || typeof match !== 'object') return match;
   return { ...match, profileFp: String(fingerprint ?? '') };

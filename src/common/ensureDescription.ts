@@ -50,7 +50,7 @@ export function hasJobDescription(job: Job | null | undefined): boolean {
   return typeof job?.description === 'string' && job.description.trim().length > 0;
 }
 
-export function jobUrl(job: Job | null | undefined): string {
+export function jobUrl(job: Pick<Job, 'url'> | { url?: unknown } | null | undefined): string {
   const url = String(job?.url || '').trim();
   if (!/^https?:\/\//i.test(url)) return '';
   return url;

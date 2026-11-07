@@ -11,7 +11,7 @@ import {
 import { loadProfile, saveProfile, clearProfile, sanitizeProfile } from '../common/profile.js';
 import { profileFingerprint, withProfileFp } from '../common/profileFingerprint.js';
 import { sanitizeProvider } from '../common/ai/providers.js';
-import { chat, chatJson, testProvider, listModels } from '../common/ai/client.js';
+import { chatJson, testProvider, listModels } from '../common/ai/client.js';
 import { buildResumeExtractPrompt, buildMatchPrompt, sanitizeMatch, buildTailorResumePrompt, sanitizeTailor, buildSuggestReplyPrompt, sanitizeSuggestReply, replyEchoesInstruction } from '../common/ai/prompts.js';
 import { redactText } from '../common/ai/privacy.js';
 import { autoScoreUids } from '../common/filters.js';
@@ -25,9 +25,76 @@ import {
 import {
   appendCaptureLog, captureApiKind, captureLogJson, classifyBossDrop, ensureLogEntry, loadCaptureLog,
 } from '../common/captureLog.js';
+import type { Job } from '../common/types.js';
+import type { SuggestReplyInput } from '../common/ai/prompts.js';
+import type { TabId } from '../common/ensureDescription.js';
+
+// 各界面发来的消息。字段按消息类型取用，进来时都未经校验。
+interface RuntimeMessage {
+  type?: string;
+  uid?: string;
+  uids?: unknown;
+  job?: Job;
+  text?: string;
+  format?: string;
+  platform?: string;
+  url?: string;
+  pageUrl?: string;
+  payload?: unknown;
+  jobKey?: string | null;
+  isChat?: boolean;
+  patch?: object;
+  profile?: unknown;
+  providers?: unknown;
+  provider?: unknown;
+  force?: boolean;
+  page?: string;
+  sniffDrop?: string;
+  hintJobId?: unknown;
+  hintRejected?: unknown;
+  instruction?: unknown;
+  stage?: SuggestReplyInput['stage'];
+  current?: unknown;
+  messages?: SuggestReplyInput['messages'];
+}
+
+// 内容脚本回给后台的应答。只认这些字段。
+interface ContentReply {
+  ok?: boolean;
+  mode?: string;
+  error?: string;
+  clicked?: boolean;
+  mismatch?: boolean;
+  reason?: string;
+  jobKey?: string;
+  description?: string;
+}
+
+interface TabContext {
+  platform?: string | null;
+  url?: string;
+  jobKey?: string | null;
+  isChat?: boolean;
+  at: number;
+}
+
+interface DetailScrape {
+  text: string;
+  reason: string;
+}
+
+type PlatformKey = keyof typeof PLATFORM_META;
+
+function platformMeta(platform: unknown) {
+  return typeof platform === 'string' && platform in PLATFORM_META ? PLATFORM_META[platform as PlatformKey] : null;
+}
+
+function byRecentActive(a: chrome.tabs.Tab, b: chrome.tabs.Tab): number {
+  return (b.active ? 1 : 0) - (a.active ? 1 : 0) || (b.lastAccessed || 0) - (a.lastAccessed || 0);
+}
 
 // 记录每个 tab 当前所处平台，供 UI 查询「当前站点」
-const tabContext = new Map();
+const tabContext = new Map<number, TabContext>();
 
 // —— 侧边栏：点击工具栏图标即打开 ——
 chrome.runtime.onInstalled.addListener(async () => {
@@ -45,7 +112,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 });
 
 // —— 统一消息入口 ——
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse) => {
   if (!msg || typeof msg.type !== 'string') return false;
   handle(msg, sender)
     .then((data) => sendResponse({ ok: true, data }))
@@ -53,28 +120,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true; // 异步响应
 });
 
-async function handle(msg, sender) {
+async function handle(msg: RuntimeMessage, sender: chrome.runtime.MessageSender) {
   switch (msg.type) {
     // ---------- 岗位数据流 ----------
     case MSG.JOBS_CAPTURED:
-      return onJobsCaptured(msg, sender);
+      return onJobsCaptured(msg);
     case MSG.JOB_LIST_REQUEST:
       return loadJobs();
     case MSG.JOB_DELETE:
-      return afterJobsChange(await deleteJob(msg.uid));
+      return afterJobsChange(await deleteJob(String(msg.uid || '')));
     case MSG.JOB_CLEAR_REQUEST:
       return afterJobsChange(await clearJobs());
     case MSG.JOB_STAR_TOGGLE:
-      return afterJobsChange(await toggleStar(msg.uid));
+      return afterJobsChange(await toggleStar(String(msg.uid || '')));
     case MSG.JOB_EXPORT_REQUEST:
       return exportJobs(msg.format);
     case MSG.GREETING_SAVE:
-      return afterJobsChange(await setJobGreeting(msg.uid, msg.text));
+      return afterJobsChange(await setJobGreeting(String(msg.uid || ''), msg.text));
 
     // ---------- 页面上下文 ----------
     case MSG.PAGE_CONTEXT_CHANGED:
       if (sender.tab && sender.tab.id != null) {
-        const prev = tabContext.get(sender.tab.id) || {};
+        const prev: Partial<TabContext> = tabContext.get(sender.tab.id) || {};
         tabContext.set(sender.tab.id, {
           platform: msg.platform,
           url: msg.url,
@@ -87,7 +154,7 @@ async function handle(msg, sender) {
       return { ok: true };
     case MSG.CURRENT_JOB:
       if (sender.tab && sender.tab.id != null) {
-        const prev = tabContext.get(sender.tab.id) || {};
+        const prev: Partial<TabContext> = tabContext.get(sender.tab.id) || {};
         tabContext.set(sender.tab.id, {
           ...prev,
           platform: msg.platform || prev.platform,
@@ -156,9 +223,9 @@ async function handle(msg, sender) {
 }
 
 // 齿轮打开设置页本身；「前往设置」传入 page，落到对应分组。消息类型名仍是 OPEN_OPTIONS。
-async function openOptions(page) {
+async function openOptions(page: unknown) {
   const base = chrome.runtime.getURL('options.html');
-  const requested = optionsUrlHash(page, '');
+  const requested = optionsUrlHash(String(page ?? ''), '');
   if (!requested) {
     await chrome.runtime.openOptionsPage();
     return { ok: true };
@@ -169,7 +236,7 @@ async function openOptions(page) {
     await chrome.tabs.create({ url: `${base}${requested}` });
     return { ok: true };
   }
-  const next = optionsUrlHash(page, existing.url || '');
+  const next = optionsUrlHash(String(page ?? ''), existing.url || '');
   await chrome.tabs.update(existing.id, { active: true, url: `${base}${next}` });
   if (existing.windowId != null) {
     try { await chrome.windows.update(existing.windowId, { focused: true }); } catch { /* 无 windows 权限时标签仍会被激活 */ }
@@ -178,12 +245,13 @@ async function openOptions(page) {
 }
 
 // —— 岗位收录 ——
-async function onJobsCaptured(msg, sender) {
+async function onJobsCaptured(msg: RuntimeMessage) {
   if (msg && msg.sniffDrop === 'non-json') {
     await appendCaptureLog({ kind: 'sniff-drop', reason: 'non-json', api: captureApiKind(msg.url) });
     return { added: 0, logged: true };
   }
-  const drop = classifyBossDrop(msg.platform, msg.payload);
+  const platform = String(msg.platform || '');
+  const drop = classifyBossDrop(platform, msg.payload);
   if (drop) {
     await appendCaptureLog({
       kind: 'sniff-drop',
@@ -204,12 +272,12 @@ async function onJobsCaptured(msg, sender) {
   const settings = await loadSettings();
   // 入库只合并已经嗅到的岗位。缺 JD 不在这里补抓；补抓只发生在之后的分析。
   const hintJobId = acceptedHintJobId(msg.hintJobId, msg.hintRejected);
-  const normalized = normalizeResponse(msg.platform, msg.payload, {
+  const normalized = normalizeResponse(platform, msg.payload, {
     url: msg.url,
     pageUrl: msg.pageUrl,
     hintJobId,
   });
-  const notes = captureKeyNotes(msg.platform, msg.payload, {
+  const notes = captureKeyNotes(platform, msg.payload, {
     url: msg.url,
     pageUrl: msg.pageUrl,
     hintJobId,
@@ -249,25 +317,25 @@ async function sidePanelIsOpen() {
   }
 }
 
-function afterJobsChange(list) {
+function afterJobsChange(list: Job[]): Job[] {
   broadcast(MSG.JOBS_UPDATED, { count: list.length });
   return list;
 }
 
 async function getActiveContext() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  let platform = null;
+  let platform: string | null = null;
   let url = '';
-  let jobKey = null;
+  let jobKey: string | null = null;
   let isChat = false;
   if (tab) {
     url = tab.url || '';
     try {
       platform = platformOfHost(new URL(url).hostname);
     } catch {}
-    const ctx = tabContext.get(tab.id);
+    const ctx = tab.id != null ? tabContext.get(tab.id) : undefined;
     if (ctx) {
-      if (!platform) platform = ctx.platform;
+      if (!platform) platform = ctx.platform || null;
       jobKey = ctx.jobKey || null;
       isChat = !!ctx.isChat;
     }
@@ -277,7 +345,7 @@ async function getActiveContext() {
     url,
     jobKey,
     isChat,
-    platformName: platform ? PLATFORM_META[platform].name : '',
+    platformName: platformMeta(platform)?.name || '',
   };
 }
 
@@ -289,13 +357,14 @@ async function getActiveContext() {
 // 在当前窗口新开一个标签页并激活（视图跳过去），保留用户正在浏览的标签不关闭。
 // 新标签加载完成后，让其 content-script 自动点「立即沟通」开聊天，并尽力填入招呼语；
 // 填不进（BOSS 聊天框常被混淆）时招呼语已在剪贴板，用户 Ctrl+V 手动粘贴即可。
-async function openJobChat(text, platform, url) {
+async function openJobChat(text: unknown, _platform: unknown, url: unknown) {
   const target = String(url || '').trim();
   const content = String(text || '').trim();
   if (!target) throw new Error('该岗位没有可打开的链接');
 
   // 新建标签页并激活（保留当前标签）
   const tab = await chrome.tabs.create({ url: target, active: true });
+  if (tab.id == null) throw new Error('新标签页没有打开');
   try {
     await waitTabComplete(tab.id);
   } catch {
@@ -314,18 +383,18 @@ async function openJobChat(text, platform, url) {
 }
 
 // 等待新标签页加载完成（+ 少量沉淀时间给 SPA 渲染）
-function waitTabComplete(tabId, timeoutMs = 15000) {
+function waitTabComplete(tabId: number, timeoutMs = 15000): Promise<void> {
   return new Promise((resolve, reject) => {
     let done = false;
-    const finish = (err) => {
+    const finish = (err?: unknown) => {
       if (done) return;
       done = true;
       chrome.tabs.onUpdated.removeListener(listener);
       clearTimeout(timer);
       if (err) reject(err);
-      else setTimeout(resolve, 1500); // SPA 渲染沉淀
+      else setTimeout(() => resolve(), 1500); // SPA 渲染沉淀
     };
-    const listener = (id, info) => {
+    const listener = (id: number, info: chrome.tabs.OnUpdatedInfo) => {
       if (id === tabId && info.status === 'complete') finish();
     };
     const timer = setTimeout(() => finish(new Error('页面加载超时')), timeoutMs);
@@ -335,15 +404,16 @@ function waitTabComplete(tabId, timeoutMs = 15000) {
   });
 }
 
-async function sendGreetingToChat(text, platform, url) {
+async function sendGreetingToChat(text: unknown, platform: unknown, url: unknown) {
   const content = String(text || '').trim();
   if (!content) throw new Error('招呼语为空');
 
-  const hostGlobs = platform && PLATFORM_META[platform]
-    ? PLATFORM_META[platform].hosts.map((host) => `*://${host}/*`)
+  const meta = platformMeta(platform);
+  const hostGlobs = meta
+    ? meta.hosts.map((host) => `*://${host}/*`)
     : ['*://*.zhipin.com/*'];
 
-  let tabs = [];
+  let tabs: chrome.tabs.Tab[] = [];
   try {
     tabs = await chrome.tabs.query({ url: hostGlobs });
   } catch {
@@ -354,14 +424,16 @@ async function sendGreetingToChat(text, platform, url) {
   }
 
   // 优先当前激活标签，其次最近使用
-  tabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  tabs.sort(byRecentActive);
 
   // 批量发送：把首选标签导航到目标岗位页，等页面就绪
   if (url) {
+    const target = String(url);
     const tab = tabs[0];
     try {
-      if (!sameJobPage(tab.url, url)) {
-        await navigateAndWait(tab.id, url);
+      if (!tab || tab.id == null) throw new Error('未找到可用的标签页');
+      if (!sameJobPage(tab.url, target)) {
+        await navigateAndWait(tab.id, target);
       }
       const res = await sendMessageWithRetry(tab.id, { type: MSG.SEND_GREETING, text: content });
       if (res && res.ok) return { ok: true, tabId: tab.id, mode: res.mode || 'dom' };
@@ -372,10 +444,11 @@ async function sendGreetingToChat(text, platform, url) {
   }
 
   // 单发：在已打开的标签里直接发（当前页应已是岗位/聊天页）
-  const errors = [];
+  const errors: string[] = [];
   for (const tab of tabs) {
+    if (tab.id == null) continue;
     try {
-      const res = await chrome.tabs.sendMessage(tab.id, { type: MSG.SEND_GREETING, text: content });
+      const res: ContentReply | undefined = await chrome.tabs.sendMessage(tab.id, { type: MSG.SEND_GREETING, text: content });
       if (res && res.ok) {
         try { await chrome.tabs.update(tab.id, { active: true }); } catch {}
         return { ok: true, tabId: tab.id, mode: res.mode || 'dom' };
@@ -390,29 +463,29 @@ async function sendGreetingToChat(text, platform, url) {
 }
 
 // 是否已在同一岗位页（避免重复导航）
-function sameJobPage(curUrl, targetUrl) {
+function sameJobPage(curUrl: string | undefined, targetUrl: string | undefined): boolean {
   if (!curUrl || !targetUrl) return false;
-  const id = (u) => {
+  const id = (u: string) => {
     const m = String(u).match(/job_detail\/([\w-]+)\.html/) || String(u).match(/\/job\/(\d+)/) || String(u).match(/\/(\d+)\.html/);
-    return m ? m[1] : null;
+    return m ? m[1] ?? null : null;
   };
   const a = id(curUrl), b = id(targetUrl);
   return !!a && a === b;
 }
 
 // 导航标签页并等待加载完成（+ 少量沉淀时间给 SPA 渲染）
-function navigateAndWait(tabId, url, timeoutMs = 15000) {
+function navigateAndWait(tabId: number, url: string, timeoutMs = 15000): Promise<void> {
   return new Promise((resolve, reject) => {
     let done = false;
-    const finish = (err) => {
+    const finish = (err?: unknown) => {
       if (done) return;
       done = true;
       chrome.tabs.onUpdated.removeListener(listener);
       clearTimeout(timer);
       if (err) reject(err);
-      else setTimeout(resolve, 1500); // SPA 渲染沉淀
+      else setTimeout(() => resolve(), 1500); // SPA 渲染沉淀
     };
-    const listener = (id, info) => {
+    const listener = (id: number, info: chrome.tabs.OnUpdatedInfo) => {
       if (id === tabId && info.status === 'complete') finish();
     };
     const timer = setTimeout(() => finish(new Error('页面加载超时')), timeoutMs);
@@ -422,11 +495,11 @@ function navigateAndWait(tabId, url, timeoutMs = 15000) {
 }
 
 // 向 content-script 发消息，带重试（导航后 content-script 可能尚未就绪）
-async function sendMessageWithRetry(tabId, msg, tries = 6, gap = 700) {
-  let lastErr = null;
+async function sendMessageWithRetry(tabId: number, msg: object, tries = 6, gap = 700): Promise<ContentReply> {
+  let lastErr: string | null = null;
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await chrome.tabs.sendMessage(tabId, msg);
+      const res: ContentReply | undefined = await chrome.tabs.sendMessage(tabId, msg);
       if (res) return res;
     } catch (e) {
       lastErr = e instanceof Error ? e.message : String(e);
@@ -438,7 +511,7 @@ async function sendMessageWithRetry(tabId, msg, tries = 6, gap = 700) {
 }
 
 // —— 简历抽取 ——
-async function extractResume(text) {
+async function extractResume(text: unknown) {
   const provider = await getActiveProvider();
   if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
   const settings = await loadSettings();
@@ -449,11 +522,11 @@ async function extractResume(text) {
 }
 
 // —— 匹配打分（单个） ——
-async function scoreOne(uid, jobArg, { force = false } = {}) {
+async function scoreOne(uid: unknown, jobArg: Job | null | undefined, { force = false }: { force?: boolean } = {}) {
   const provider = await getActiveProvider();
   if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
   const [profile, settings, jobs] = await Promise.all([loadProfile(), loadSettings(), loadJobs()]);
-  let job = jobs.find((j) => j.uid === uid) || jobArg;
+  let job: Job | undefined = jobs.find((j) => j.uid === uid) || jobArg || undefined;
   if (!job) throw new Error('岗位不存在');
 
   const hadDescription = hasJobDescription(job);
@@ -466,7 +539,8 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
     } catch {
       // 补抓中断时按空描述处理，不把空 JD 当成分析成功
     }
-    const fresh = (await loadJobs()).find((item) => item.uid === job.uid);
+    const jobUid = job.uid;
+    const fresh = (await loadJobs()).find((item) => item.uid === jobUid);
     if (fresh) job = hasJobDescription(fresh) ? fresh : { ...fresh, description: job.description };
   }
 
@@ -478,7 +552,7 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
   }
 
   const stored = (await loadJobs()).find((item) => item.uid === job.uid);
-  if (stored && !hasJobDescription(stored)) await patchJobDescription(job.uid, job.description);
+  if (stored && !hasJobDescription(stored)) await patchJobDescription(job.uid, job.description || '');
 
   const fp = profileFingerprint(profile, provider);
   const cache = await getMatchCache();
@@ -492,7 +566,7 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
     hasDescription: hasJobDescription(job),
   })) {
     const match = withProfileFp(cache[cacheKey], fp);
-    await setJobMatch(job.uid, match);
+    await setJobMatch(job.uid, match ?? null);
     return match;
   }
 
@@ -510,7 +584,7 @@ async function scoreOne(uid, jobArg, { force = false } = {}) {
 
 // —— 简历定制建议（按岗位 JD，不落库） ——
 // 只返回建议给前端会话内展示，不写入岗位库/画像/缓存，符合「简历数据仅本会话使用」。
-async function tailorResume(uid, jobArg) {
+async function tailorResume(uid: unknown, jobArg: Job | null | undefined) {
   const provider = await getActiveProvider();
   if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
   const [profile, settings, jobs] = await Promise.all([loadProfile(), loadSettings(), loadJobs()]);
@@ -524,7 +598,7 @@ async function tailorResume(uid, jobArg) {
 }
 
 // —— 沟通建议改写（不落库，失败不回退到本地模板或用户原文） ——
-async function suggestReply(msg = {}) {
+async function suggestReply(msg: RuntimeMessage = {}) {
   const provider = await getActiveProvider();
   if (!provider) throw new Error('尚未配置 AI 供应商，请先到设置页添加');
   const ask = String(msg.instruction || '').trim();
@@ -550,17 +624,17 @@ async function suggestReply(msg = {}) {
 }
 
 // —— 匹配打分（批量，串行限速） ——
-async function scoreBatch(uids, { force = false } = {}) {
-  const list = Array.isArray(uids) ? uids : [];
+async function scoreBatch(uids: unknown, { force = false }: { force?: boolean } = {}) {
+  const list: unknown[] = Array.isArray(uids) ? uids : [];
   const jobs = await loadJobs();
   const map = new Map(jobs.map((j) => [j.uid, j]));
-  const results = [];
+  const results: Array<{ uid: unknown; ok: boolean; score?: unknown; error?: string; incomplete?: unknown }> = [];
   for (const uid of list) {
-    const job = map.get(uid);
+    const job = map.get(String(uid));
     if (!job) continue;
     // 单个岗位补不到 JD 或打分失败只记在这一条上，后面的岗位继续。
     const item = await isolateCall(() => scoreOne(uid, job, { force }));
-    if (item.ok) results.push({ uid, ok: true, score: item.value.score });
+    if (item.ok) results.push({ uid, ok: true, score: item.value?.score });
     else results.push({ uid, ok: false, error: item.error, ...(item.incomplete ? { incomplete: item.incomplete } : {}) });
     await sleep(400); // 轻限速，避免供应商 429
   }
@@ -568,14 +642,14 @@ async function scoreBatch(uids, { force = false } = {}) {
   return results;
 }
 
-async function exportJobs(format) {
+async function exportJobs(format: unknown) {
   if (format === 'capture-log') {
     const log = await loadCaptureLog();
     return { format: 'json', content: captureLogJson(log), count: log.entries.length };
   }
   const jobs = await loadJobs();
   if (format === 'csv') {
-    const cols = ['platform', 'title', 'company', 'salaryText', 'city', 'district', 'experience', 'degree', 'companyIndustry', 'companyScale', 'url'];
+    const cols: (keyof Job)[] = ['platform', 'title', 'company', 'salaryText', 'city', 'district', 'experience', 'degree', 'companyIndustry', 'companyScale', 'url'];
     const head = cols.join(',');
     const rows = jobs.map((j) =>
       cols.map((c) => `"${String(j[c] ?? '').replace(/"/g, '""')}"`).join(','),
@@ -585,28 +659,28 @@ async function exportJobs(format) {
   return { format: 'json', content: JSON.stringify(jobs, null, 2), count: jobs.length };
 }
 
-function broadcast(type, payload) {
+function broadcast(type: string, payload: object) {
   chrome.runtime.sendMessage({ type, ...payload }).catch(() => {});
 }
-function sleep(ms) {
+function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
 // 空 JD：分析时才补。先点已打开列表里的卡片，等嗅探；仍空就刮当前页。
 // 抽屉没有岗位标识则拒绝这次正文。还是没有，再短开原岗位，串行，下一条至少隔 ENSURE_DESC_GAP_MS。
 // 点卡等待和短开各最多 ENSURE_DESC_TIMEOUT_MS；刮取最多 DETAIL_SCRAPE_ATTEMPTS 次。一条失败不抛到整批。
-const queueEnsure = createEnsureQueue((job, state) => runEnsureDescription(job, {
+const queueEnsure = createEnsureQueue((job: Job, state) => runEnsureDescription(job, {
   now: () => Date.now(),
   sleep,
   clickCard: clickJobCard,
   openUrl: openJobPage,
-  closeTab: (tabId) => chrome.tabs.remove(tabId),
+  closeTab: (tabId) => chrome.tabs.remove(Number(tabId)),
   waitForDescription: waitForJobDescription,
   scrapeDetail: scrapeEnsuredDetail,
   log: (result) => appendCaptureLog(ensureLogEntry(job.uid, result)),
 }, state));
 
-async function scrapeEnsuredDetail(tabId, job) {
+async function scrapeEnsuredDetail(tabId: TabId, job: Job): Promise<DetailScrape> {
   const outcome = await requestDetailScrape(tabId, jobKeyFromUid(job && job.uid));
   const text = outcome && outcome.text ? outcome.text : '';
   const reason = outcome && outcome.reason ? outcome.reason : '';
@@ -625,22 +699,22 @@ async function scrapeEnsuredDetail(tabId, job) {
   return { text: '', reason: reason || 'empty-or-mismatch' };
 }
 
-async function clickJobCard(job) {
+async function clickJobCard(job: Job) {
   const jobId = jobCardId(job);
   if (!jobId) return false;
-  const meta = PLATFORM_META[job.platform];
+  const meta = platformMeta(job.platform);
   const globs = meta ? meta.hosts.map((host) => `*://${host}/*`) : [];
-  let tabs = [];
+  let tabs: chrome.tabs.Tab[] = [];
   try {
     tabs = await chrome.tabs.query(globs.length ? { url: globs } : {});
   } catch {
     return false;
   }
-  tabs.sort((a, b) => (b.active ? 1 : 0) - (a.active ? 1 : 0) || (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  tabs.sort(byRecentActive);
   for (const tab of tabs) {
-    if (sameJobPage(tab.url, job.url)) continue;
+    if (tab.id == null || sameJobPage(tab.url, job.url)) continue;
     try {
-      const res = await chrome.tabs.sendMessage(tab.id, { type: MSG.FETCH_JOB_CARD, jobId });
+      const res: ContentReply | undefined = await chrome.tabs.sendMessage(tab.id, { type: MSG.FETCH_JOB_CARD, jobId });
       if (res && res.clicked) return { clicked: true, tabId: tab.id };
     } catch {
       // 这个标签没有内容脚本，试下一个
@@ -649,18 +723,18 @@ async function clickJobCard(job) {
   return false;
 }
 
-async function openJobPage(job) {
+async function openJobPage(job: Job) {
   const url = jobUrl(job);
   if (!url) return null;
-  let tabs = [];
+  let tabs: chrome.tabs.Tab[] = [];
   try { tabs = await chrome.tabs.query({}); } catch { tabs = []; }
   const existing = tabs.find((tab) => tab && tab.id != null && sameJobPage(tab.url, url));
-  if (existing) return { tabId: existing.id, close: false };
+  if (existing && existing.id != null) return { tabId: existing.id, close: false };
   const tab = await chrome.tabs.create({ url, active: false });
   return tab && tab.id != null ? { tabId: tab.id, close: true } : null;
 }
 
-async function waitForJobDescription(uid) {
+async function waitForJobDescription(uid: string): Promise<Job | null> {
   const deadline = Date.now() + ENSURE_DESC_TIMEOUT_MS;
   for (;;) {
     const list = await loadJobs();
@@ -674,8 +748,8 @@ async function waitForJobDescription(uid) {
 // 空描述点「打开原岗位」：前台打开后等嗅探写入。超时再让详情页刮可见 JD，只补已有 uid，不关标签。
 const DETAIL_SCRAPE_ATTEMPTS = 6;
 
-async function openOriginalJob(msg) {
-  const uid = String(msg && msg.uid || '');
+async function openOriginalJob(msg: RuntimeMessage) {
+  const uid = String((msg && msg.uid) || '');
   const jobs = await loadJobs();
   const stored = jobs.find((item) => item && item.uid === uid) || null;
   const url = jobUrl(stored || {}) || jobUrl({ url: msg && msg.url });
@@ -708,11 +782,11 @@ async function openOriginalJob(msg) {
   }
 }
 
-async function activateOriginalJobTab(url) {
-  let tabs = [];
+async function activateOriginalJobTab(url: string): Promise<chrome.tabs.Tab> {
+  let tabs: chrome.tabs.Tab[] = [];
   try { tabs = await chrome.tabs.query({}); } catch { tabs = []; }
   const existing = tabs.find((tab) => tab && tab.id != null && sameJobPage(tab.url, url));
-  if (existing) {
+  if (existing && existing.id != null) {
     try { await chrome.tabs.update(existing.id, { active: true }); } catch { /* 标签可能已关闭 */ }
     if (existing.windowId != null) {
       try { await chrome.windows.update(existing.windowId, { focused: true }); } catch { /* 无 windows 权限时标签仍会被激活 */ }
@@ -722,12 +796,12 @@ async function activateOriginalJobTab(url) {
   return chrome.tabs.create({ url, active: true });
 }
 
-async function requestDetailScrape(tabId, jobKey) {
+async function requestDetailScrape(tabId: TabId | null, jobKey: string): Promise<DetailScrape> {
   if (tabId == null || !jobKey) return { text: '', reason: 'no-tab' };
   let reason = 'empty';
   for (let attempt = 0; attempt < DETAIL_SCRAPE_ATTEMPTS; attempt++) {
     try {
-      const res = await chrome.tabs.sendMessage(tabId, { type: MSG.SCRAPE_JOB_DETAIL, jobKey });
+      const res: ContentReply | undefined = await chrome.tabs.sendMessage(Number(tabId), { type: MSG.SCRAPE_JOB_DETAIL, jobKey });
       if (res && res.mismatch) return { text: '', reason: res.reason || 'uid-mismatch' };
       const text = acceptDetailScrape({
         expectedKey: jobKey,
@@ -744,7 +818,7 @@ async function requestDetailScrape(tabId, jobKey) {
   return { text: '', reason };
 }
 
-async function writeDetailDescription(uid, description) {
+async function writeDetailDescription(uid: string, description: string): Promise<boolean> {
   const result = await patchJobDescription(uid, description);
   if (!result.patched) return false;
   broadcast(MSG.JOBS_UPDATED, { count: result.jobs.length, updated: 1 });

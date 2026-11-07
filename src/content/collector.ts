@@ -2,6 +2,45 @@
 // 追踪当前页面平台；提供 DOM 兜底抓取（当接口嗅探未命中时）；
 // 页面内显示一个极简的收录状态角标。
 (function () {
+  interface SnifferMessage {
+    source?: string;
+    type?: string;
+    platform?: string;
+    url?: string;
+    payload?: unknown;
+    reason?: string;
+    replay?: boolean;
+  }
+  interface CapturedMessage {
+    platform: string;
+    url?: string;
+    pageUrl: string;
+    payload: unknown;
+    hintJobId?: string;
+    hintRejected?: string;
+  }
+  interface PendingClick {
+    jobId: string;
+    at: number;
+  }
+  interface ScrapedCard {
+    jobId: string;
+    encryptJobId: string;
+    jobName: string;
+    salaryDesc: string;
+    cityName: string;
+    areaDistrict: string;
+    jobExperience: string;
+    jobDegree: string;
+    skills: string[];
+    jobLabels: string[];
+    welfareList: string[];
+    brandName: string;
+    brandIndustry: string;
+    brandScaleName: string;
+    brandStageName: string;
+  }
+
   const CHANNEL = 'job-helper:sniffer';
   const MSG = {
     JOBS_CAPTURED: 'JOBS_CAPTURED',
@@ -12,7 +51,7 @@
   };
 
   // 判断嗅探到的 URL 是「列表」还是「岗位详情/卡片」
-  function apiKind(urlStr) {
+  function apiKind(urlStr: string): 'list' | 'detail' {
     let path = '';
     try {
       path = new URL(urlStr, location.href).pathname;
@@ -25,17 +64,17 @@
   }
 
   // 与 platforms.jobKeyFromPageUrl / preferDetailJobKey 保持一致（内容脚本不能 import）。
-  function jobKeyFromPageUrl(pageUrl) {
+  function jobKeyFromPageUrl(pageUrl: unknown): string {
     const text = String(pageUrl || '');
     const matched = text.match(/job_detail\/([\w-]+)\.html/)
       || text.match(/[?&]encryptJobId=([\w-]+)/)
       || text.match(/[?&]jobId=([\w-]+)/)
       || text.match(/\/job\/(\d+)/)
       || text.match(/[?&]jobid=(\d+)/i);
-    return matched ? matched[1] : '';
+    return matched ? matched[1] ?? '' : '';
   }
 
-  function preferDetailJobKey(queryKey, pageKey, bodyKey) {
+  function preferDetailJobKey(queryKey: unknown, pageKey: unknown, bodyKey: unknown): string {
     const query = queryKey ? String(queryKey) : '';
     const page = pageKey ? String(pageKey) : '';
     const body = bodyKey ? String(bodyKey) : '';
@@ -45,8 +84,24 @@
     return body || page || '';
   }
 
+  function asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  }
+  function jobInfoOf(payload: unknown): Record<string, unknown> | null {
+    const root = asRecord(payload);
+    const envelope = root && asRecord(root.zpData || root.resultbody || root.resultBody);
+    if (!envelope) return null;
+    const job = asRecord(envelope.job);
+    const info = asRecord(envelope.jobInfo)
+      || asRecord(envelope.jobCard)
+      || asRecord(envelope.jobDetail)
+      || (job ? asRecord(job.item) : null)
+      || envelope;
+    return info;
+  }
+
   // 从详情请求里取出岗位标识（encryptJobId / jobId）
-  function jobKeyFromDetail(url, payload) {
+  function jobKeyFromDetail(url: string, payload: unknown): string | null {
     // 1) 优先请求 URL 上的查询参数
     let queryKey = '';
     try {
@@ -56,9 +111,7 @@
     // 2) 响应体。整页详情有时只有内部数字 id，这时用当前页 job_detail/<id> 对齐列表 uid。
     let bodyKey = '';
     try {
-      const zp = payload && (payload.zpData || payload.resultbody || payload.resultBody);
-      const detailObj = zp && zp.jobDetail && typeof zp.jobDetail === 'object' ? zp.jobDetail : null;
-      const info = zp && (zp.jobInfo || zp.jobCard || detailObj || (zp.job && zp.job.item) || zp);
+      const info = jobInfoOf(payload);
       if (info) {
         const k = info.encryptId || info.encryptJobId || info.jobId || info.jobid;
         if (k) bodyKey = String(k);
@@ -67,13 +120,13 @@
     return preferDetailJobKey(queryKey, jobKeyFromPageUrl(location.href), bodyKey) || null;
   }
 
-  function platformOfHost(host) {
+  function platformOfHost(host: string): string | null {
     if (/(^|\.)zhipin\.com$/i.test(host)) return 'boss';
     return null;
   }
   const PLATFORM = platformOfHost(location.hostname);
 
-  function send(type, extra) {
+  function send(type: string, extra: object) {
     try {
       chrome.runtime.sendMessage({ type, ...extra }).catch(() => {});
     } catch {}
@@ -81,13 +134,11 @@
 
   let captured = 0;
   // 点列表卡片后的短时间里，详情包若只带回数字 id，用这次点击的 encrypt id 对齐岗位库。
-  let pendingClick = null;
-  function bodyKeyFromPayload(payload) {
+  let pendingClick: PendingClick | null = null;
+  function bodyKeyFromPayload(payload: unknown): string {
     try {
-      const zp = payload && (payload.zpData || payload.resultbody || payload.resultBody);
-      const detailObj = zp && zp.jobDetail && typeof zp.jobDetail === 'object' ? zp.jobDetail : null;
-      const info = zp && (zp.jobInfo || zp.jobCard || detailObj || (zp.job && zp.job.item) || zp);
-      if (!info || typeof info !== 'object') return '';
+      const info = jobInfoOf(payload);
+      if (!info) return '';
       const key = info.encryptId || info.encryptJobId || info.jobId || info.jobid;
       return key ? String(key) : '';
     } catch {
@@ -95,7 +146,7 @@
     }
   }
   // 另一条非数字 id 不消耗点卡 hint，也不把 hint 贴到那条响应上。
-  function takeDetailHint(payload) {
+  function takeDetailHint(payload: unknown): { hintJobId: string; hintRejected: string } {
     if (!pendingClick) return { hintJobId: '', hintRejected: '' };
     if (Date.now() - pendingClick.at > 8000) {
       pendingClick = null;
@@ -110,8 +161,8 @@
     return { hintJobId: hint, hintRejected: '' };
   }
   // 打开详情页时，同一次响应可能先被当场收到，又被 replay 再投递一次。短时间内同一 URL 只处理一遍。
-  const handledUrlAt = new Map();
-  function duplicateCapture(d) {
+  const handledUrlAt = new Map<string, number>();
+  function duplicateCapture(d: SnifferMessage): boolean {
     const key = `${d.platform}\n${d.url || ''}`;
     const now = Date.now();
     const prev = handledUrlAt.get(key);
@@ -127,7 +178,7 @@
   // —— 接收 sniffer 转发 ——
   window.addEventListener('message', (ev) => {
     if (ev.source !== window) return;
-    const d = ev.data;
+    const d = ev.data as SnifferMessage | null;
     if (!d || d.source !== CHANNEL || d.type === 'replay-request') return;
     if (d.type === 'sniff-drop') {
       if (d.reason === 'non-json' && d.platform) {
@@ -139,15 +190,15 @@
     // 当场收到的照常处理。重放只补「当时还没人听」的那次，避免同一响应入库两遍。
     const seen = duplicateCapture(d);
     if (d.replay && seen) return;
-    const capturedMsg = { platform: d.platform, url: d.url, pageUrl: location.href, payload: d.payload };
-    if (apiKind(d.url) === 'detail') {
+    const capturedMsg: CapturedMessage = { platform: d.platform, url: d.url, pageUrl: location.href, payload: d.payload };
+    if (apiKind(d.url || '') === 'detail') {
       // 点开某个岗位：上报「当前岗位」，让面板实时切换
-      const jobKey = jobKeyFromDetail(d.url, d.payload);
+      const jobKey = jobKeyFromDetail(d.url || '', d.payload);
       if (jobKey) send(MSG.CURRENT_JOB, { platform: d.platform, jobKey });
       // 详情响应同样丢给归一化：命中列表结构则收录，否则被安全忽略。
       // 列表抽屉不改 URL，数字 id 靠刚才点的卡片对齐，不另发站点请求。
       const hint = takeDetailHint(d.payload);
-      const captured = { ...capturedMsg };
+      const captured: CapturedMessage = { ...capturedMsg };
       if (hint.hintJobId) captured.hintJobId = hint.hintJobId;
       if (hint.hintRejected) captured.hintRejected = hint.hintRejected;
       send(MSG.JOBS_CAPTURED, captured);
@@ -165,14 +216,14 @@
   } catch {}
 
   // —— 识别当前详情页岗位标识 & 是否聊天页 ——
-  function detectJobKey() {
+  function detectJobKey(): string | null {
     if (PLATFORM !== 'boss') return null;
     // 详情页：/job_detail/<encryptId>.html；地理列表页详情抽屉不改 URL，识别不到属正常
     const m = location.href.match(/job_detail\/([\w-]+)\.html/) || location.href.match(/[?&]jobId=([\w-]+)/);
-    return m ? m[1] : null;
+    return m ? m[1] ?? null : null;
   }
   // 是否处于沟通/聊天页（用于 UI 提示「可直接发送」）
-  function detectChat() {
+  function detectChat(): boolean {
     if (PLATFORM !== 'boss') return false;
     const u = location.href.toLowerCase();
     return /\/chat|\/geek\/chat|zhipin\.com\/web\/geek\/chat/.test(u) || !!document.querySelector('.chat-input, .conversation-message, #chat-input');
@@ -204,18 +255,22 @@
   // 受设置项 showBadge 控制。内容脚本不打包，不能 import constants.js，
   // 这里的键名必须与 STORAGE_KEYS.settings 保持一致。
   const SETTINGS_KEY = 'jobHelperSettingsV1';
-  let badgeEl = null;
-  let badgeTimer = null;
+  let badgeEl: HTMLElement | null = null;
+  let badgeTimer: ReturnType<typeof setTimeout> | null = null;
   let badgeAllowed = true; // 与 defaultSettings().showBadge 一致：未保存过设置时显示
-  function applyBadgeSetting(settings) {
-    badgeAllowed = !(settings && settings.showBadge === false);
+  function clearTimer(timer: ReturnType<typeof setTimeout> | null) {
+    if (timer != null) clearTimeout(timer);
+  }
+  function applyBadgeSetting(settings: unknown) {
+    const config = settings as { showBadge?: boolean } | null | undefined;
+    badgeAllowed = !(config && config.showBadge === false);
     if (!badgeAllowed && badgeEl) {
-      clearTimeout(badgeTimer);
+      clearTimer(badgeTimer);
       badgeEl.remove();
       badgeEl = null;
     }
   }
-  let badgeSettingReady = Promise.resolve();
+  let badgeSettingReady: Promise<unknown> = Promise.resolve();
   try {
     badgeSettingReady = chrome.storage.local
       .get(SETTINGS_KEY)
@@ -223,10 +278,11 @@
       .catch(() => {});
     // 在设置页切换后立即生效，不用刷新招聘网站页面
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && changes[SETTINGS_KEY]) applyBadgeSetting(changes[SETTINGS_KEY].newValue);
+      const change = changes[SETTINGS_KEY];
+      if (area === 'local' && change) applyBadgeSetting(change.newValue);
     });
   } catch {}
-  function ensureBadge() {
+  function ensureBadge(): HTMLElement {
     if (badgeEl) return badgeEl;
     badgeEl = document.createElement('div');
     badgeEl.className = 'jobhelper-capture-badge';
@@ -242,9 +298,10 @@
     badgeSettingReady.then(() => {
       if (!badgeAllowed) return;
       const el = ensureBadge();
-      el.querySelector('.jh-text').textContent = `已收录 ${captured} 次`;
+      const label = el.querySelector('.jh-text');
+      if (label) label.textContent = `已收录 ${captured} 次`;
       el.classList.add('jh-active');
-      clearTimeout(badgeTimer);
+      clearTimer(badgeTimer);
       badgeTimer = setTimeout(() => el.classList.remove('jh-active'), 1600);
     });
   }
@@ -263,14 +320,14 @@
     }
   }
 
-  function txt(el, sel) {
+  function txt(el: Element, sel: string): string {
     const n = el.querySelector(sel);
-    return n ? n.textContent.trim() : '';
+    return n ? String(n.textContent || '').trim() : '';
   }
 
-  function scrapeBoss() {
-    const cards = document.querySelectorAll('.job-card-wrap, .job-card-wrapper, li.job-card-box');
-    const out = [];
+  function scrapeBoss(): ScrapedCard[] {
+    const cards = document.querySelectorAll<HTMLElement>('.job-card-wrap, .job-card-wrapper, li.job-card-box');
+    const out: ScrapedCard[] = [];
     cards.forEach((c) => {
       const jobName = txt(c, '.job-name') || txt(c, '.job-title');
       if (!jobName) return;
@@ -283,7 +340,7 @@
         areaDistrict: '',
         jobExperience: '',
         jobDegree: '',
-        skills: Array.from(c.querySelectorAll('.tag-list li, .job-card-footer .tag-list li')).map((x) => x.textContent.trim()),
+        skills: Array.from(c.querySelectorAll('.tag-list li, .job-card-footer .tag-list li')).map((x) => String(x.textContent || '').trim()),
         jobLabels: [],
         welfareList: [],
         brandName: txt(c, '.company-name') || txt(c, '.boss-name'),
@@ -303,7 +360,7 @@
   //  一键发送招呼语：DOM 自动化（等价于用户手动在聊天框打字并点发送）
   //  安全：仅在识别到聊天输入框时才填入；找不到就报错，绝不误填到搜索框。
   // ============================================================
-  function cssAttr(value) {
+  function cssAttr(value: unknown): string {
     const text = String(value || '');
     try {
       if (typeof CSS !== 'undefined' && CSS && typeof CSS.escape === 'function') return CSS.escape(text);
@@ -312,7 +369,7 @@
   }
 
   // 点列表里对应的卡片，让站点自己去拉详情。不拼接口、不带令牌。
-  function findJobCardLink(jobId) {
+  function findJobCardLink(jobId: unknown): HTMLElement | null {
     const id = String(jobId || '').trim();
     if (!id) return null;
     const safe = cssAttr(id);
@@ -323,37 +380,38 @@
       `a[href*="jobId=${safe}"]`,
     ];
     for (const sel of selectors) {
-      let nodes = [];
-      try { nodes = document.querySelectorAll(sel); } catch { nodes = []; }
+      let nodes: HTMLElement[] = [];
+      try { nodes = Array.from(document.querySelectorAll<HTMLElement>(sel)); } catch { nodes = []; }
       for (const el of nodes) {
         if (isVisible(el)) return el;
       }
     }
-    let card = null;
-    try { card = document.querySelector(`[data-jobid="${safe}"]`); } catch { card = null; }
+    let card: HTMLElement | null = null;
+    try { card = document.querySelector<HTMLElement>(`[data-jobid="${safe}"]`); } catch { card = null; }
     if (!card) return null;
-    const inner = card.matches && card.matches('a') ? card : card.querySelector('a[href]');
+    const inner = card.matches && card.matches('a') ? card : card.querySelector<HTMLElement>('a[href]');
     const target = inner || card;
     return isVisible(target) ? target : null;
   }
 
   // 详情页可见 JD。只在后台等待嗅探超时后点名，不进列表 DOM 兜底，也不发站点接口。
   // 最短 20 字与 ensureDescription.cleanDetailText 的 DETAIL_TEXT_MIN 一致。
-  function elementText(el) {
+  function elementText(el: Element | null | undefined): string {
     if (!el) return '';
-    const raw = typeof el.innerText === 'string' && el.innerText.trim() ? el.innerText : el.textContent;
+    const node = el as HTMLElement;
+    const raw = typeof node.innerText === 'string' && node.innerText.trim() ? node.innerText : el.textContent;
     return String(raw || '').replace(/\u00a0/g, ' ').trim();
   }
 
-  function detailDescriptionSelectors() {
+  function detailDescriptionSelectors(): string[] {
     if (PLATFORM !== 'boss') return [];
     return ['.job-sec-text', '.job-detail-section .job-sec-text', '.job-detail .job-sec-text'];
   }
 
-  function longestVisibleText(nodes) {
+  function longestVisibleText(nodes: ArrayLike<Element> | null | undefined): string {
     let best = '';
     const list = nodes && typeof nodes.length === 'number' ? nodes : [];
-    for (const el of list) {
+    for (const el of Array.from(list)) {
       if (!isVisible(el)) continue;
       const text = elementText(el);
       if (text.length > best.length) best = text;
@@ -361,10 +419,10 @@
     return best;
   }
 
-  function scrapeByHeading() {
-    let heads = [];
+  function scrapeByHeading(): string {
+    let heads: Element[] = [];
     try {
-      heads = document.querySelectorAll('h1, h2, h3, h4, .job-sec-title, .t1, .title');
+      heads = Array.from(document.querySelectorAll('h1, h2, h3, h4, .job-sec-title, .t1, .title'));
     } catch {
       heads = [];
     }
@@ -381,11 +439,11 @@
     return '';
   }
 
-  function scrapeVisibleJobDetail() {
+  function scrapeVisibleJobDetail(): string {
     let best = '';
     for (const sel of detailDescriptionSelectors()) {
-      let nodes = [];
-      try { nodes = document.querySelectorAll(sel); } catch { nodes = []; }
+      let nodes: Element[] = [];
+      try { nodes = Array.from(document.querySelectorAll(sel)); } catch { nodes = []; }
       const text = longestVisibleText(nodes);
       if (text.length > best.length) best = text;
     }
@@ -432,7 +490,7 @@
     return true; // 异步响应
   });
 
-  function isVisible(el) {
+  function isVisible(el: Element | null | undefined): boolean {
     if (!el) return false;
     const r = el.getBoundingClientRect();
     if (r.width < 40 || r.height < 12) return false;
@@ -441,16 +499,16 @@
   }
 
   // 定位聊天输入框：优先各平台已知选择器，再退化到「可见的大号可编辑元素」启发式
-  function findChatInput() {
+  function findChatInput(): HTMLElement | null {
     const known = PLATFORM === 'boss'
       ? ['#chat-input', '.chat-input', '.conversation-editor [contenteditable]', '.chat-editor [contenteditable]', 'textarea.input-area']
       : ['.im-input textarea', '.message-input textarea', '[class*="chat-input"] textarea', '.im-editor [contenteditable]', 'textarea[placeholder*="消息"]', 'textarea[placeholder*="聊"]'];
     for (const sel of known) {
-      const el = document.querySelector(sel);
+      const el = document.querySelector<HTMLElement>(sel);
       if (el && isVisible(el)) return el;
     }
     // 启发式兜底：页面里可见、可编辑、位于视口下半部、面积较大的编辑区
-    const cands = Array.from(document.querySelectorAll('textarea, [contenteditable=""], [contenteditable="true"]'))
+    const cands = Array.from(document.querySelectorAll<HTMLElement>('textarea, [contenteditable=""], [contenteditable="true"]'))
       .filter(isVisible)
       .filter((el) => {
         const r = el.getBoundingClientRect();
@@ -462,23 +520,23 @@
       const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
       return (rb.top - ra.top) || (rb.width - ra.width);
     });
-    return cands[0];
+    return cands[0] ?? null;
   }
 
   // 找「开始/继续沟通」按钮：岗位详情页/列表抽屉里点它会（整页）跳转到聊天页。
   // 优先用真机实测确认的稳定 class；文字匹配作兜底（class 改版时仍能命中）。
-  function findStartChatButton() {
+  function findStartChatButton(): HTMLElement | null {
     if (PLATFORM === 'boss') {
       // 实测：列表页抽屉 = a.op-btn-chat；独立详情页 = a.btn-startchat
       for (const sel of ['a.op-btn-chat', 'a.btn-startchat', '.op-btn-chat', '.btn-startchat']) {
-        const el = document.querySelector(sel);
+        const el = document.querySelector<HTMLElement>(sel);
         if (el && isVisible(el)) return el;
       }
     }
     const re = PLATFORM === 'boss'
       ? /立即沟通|继续沟通|马上沟通|开始聊天/
       : /立即沟通|继续沟通|在线沟通|聊一聊|投递并沟通/;
-    const nodes = Array.from(document.querySelectorAll('a, button, [role="button"], .btn, .op-btn, .btn-startchat, .start-chat'));
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('a, button, [role="button"], .btn, .op-btn, .btn-startchat, .start-chat'));
     return nodes
       .filter(isVisible)
       .find((b) => {
@@ -488,23 +546,23 @@
   }
 
   // 轮询等待某元素出现（用于等按钮/输入框在 SPA 里渲染出来）
-  async function waitFor(fn, maxMs, gap = 300) {
+  async function waitFor<T>(fn: () => T | null | undefined, maxMs: number, gap = 300): Promise<T | null> {
     const t0 = Date.now();
     for (;;) {
       const v = fn();
-      if (v) return v;
+      if (v) return v as T;
       if (Date.now() - t0 >= maxMs) return null;
       await new Promise((r) => setTimeout(r, gap));
     }
   }
 
   // 只尝试打开沟通，不自动填写或发送。
-  async function fillAndSend(text) {
+  async function fillAndSend(text: string): Promise<{ ok: boolean; error?: string; mode?: string; note?: string }> {
     const content = text.trim();
     if (!content) return { ok: false, error: '招呼语为空' };
 
     // 情形 A：已在聊天页，直接填（收紧到 detectChat，避免详情页启发式兜底误命中可编辑元素）
-    let input = detectChat() ? findChatInput() : null;
+    const input = detectChat() ? findChatInput() : null;
     if (input) {
       return { ok: false, error: '无法核对当前会话与岗位是否一致，请核对后粘贴招呼语' };
     }
@@ -528,17 +586,18 @@
   //  作为「岗位还新鲜/在招」的近似信号，把 HR 在线的岗位排到最前。
   //  纯前端重排已渲染的卡片，不发额外请求、不改数据。
   // ============================================================
-  const bossOnlineMap = new Map(); // encryptJobId -> bossOnline(bool)
+  const bossOnlineMap = new Map<string, boolean>(); // encryptJobId -> bossOnline(bool)
   let freshOn = false; // 排序开关
-  let reapplyTimer = null;
-  const originalIndex = new WeakMap(); // 卡片元素 -> 初始 DOM 次序，用于关闭时还原
+  let reapplyTimer: ReturnType<typeof setTimeout> | null = null;
+  const originalIndex = new WeakMap<Element, number>(); // 卡片元素 -> 初始 DOM 次序，用于关闭时还原
 
-  function recordBossOnline(payload) {
+  function recordBossOnline(payload: unknown) {
     try {
-      const zp = payload && payload.zpData;
+      const root = asRecord(payload);
+      const zp = root && asRecord(root.zpData);
       const list = zp && (zp.jobList || zp.recommendJobList);
       if (!Array.isArray(list)) return;
-      for (const j of list) {
+      for (const j of list as Array<Record<string, unknown> | null>) {
         const id = j && (j.encryptJobId || j.jobId);
         if (id) bossOnlineMap.set(String(id), !!j.bossOnline);
       }
@@ -547,7 +606,7 @@
 
   function scheduleReapplyFresh() {
     if (PLATFORM !== 'boss') return;
-    clearTimeout(reapplyTimer);
+    clearTimer(reapplyTimer);
     reapplyTimer = setTimeout(() => {
       ensureFreshButton();
       if (freshOn) applyFreshSort();
@@ -555,38 +614,39 @@
   }
 
   // 找装所有岗位卡片的列表容器（推荐页 ul.rec-job-list；搜索页兜底）
-  function findJobListContainer() {
+  function findJobListContainer(): Element | null {
     const known = document.querySelector('ul.rec-job-list, .job-list-box, .search-job-result ul, .job-list-container ul');
     if (known) return known;
     // 兜底：含最多卡片的公共父
     const cards = document.querySelectorAll('.job-card-wrap, li.job-card-box, .job-card-wrapper');
     if (!cards.length) return null;
-    const count = new Map();
+    const count = new Map<Element, number>();
     cards.forEach((c) => {
-      const p = c.closest('li') ? c.closest('li').parentElement : c.parentElement && c.parentElement.parentElement;
+      const li = c.closest('li');
+      const p = li ? li.parentElement : c.parentElement && c.parentElement.parentElement;
       if (p) count.set(p, (count.get(p) || 0) + 1);
     });
-    let best = null, n = 0;
+    let best: Element | null = null, n = 0;
     count.forEach((v, k) => { if (v > n) { n = v; best = k; } });
     return best;
   }
 
   // 列表容器里，每个「岗位行」= 容器的直接子元素
-  function getJobRows(container) {
+  function getJobRows(container: Element | null): Element[] {
     if (!container) return [];
     return Array.from(container.children).filter((row) => row.querySelector('.job-card-wrap, .job-card-box, a[href*="job_detail"]'));
   }
 
-  function rowEncryptId(row) {
+  function rowEncryptId(row: Element): string | null {
     const a = row.querySelector('a[href*="job_detail"]');
     if (!a) return null;
-    const m = a.getAttribute('href').match(/job_detail\/([\w-]+)\.html/);
-    return m ? m[1] : null;
+    const m = (a.getAttribute('href') || '').match(/job_detail\/([\w-]+)\.html/);
+    return m ? m[1] ?? null : null;
   }
   // 该行 HR 是否在线：先查接口捕获，再退化到 DOM 上的在线标记
-  function rowOnline(row) {
+  function rowOnline(row: Element): boolean {
     const id = rowEncryptId(row);
-    if (id && bossOnlineMap.has(id)) return bossOnlineMap.get(id);
+    if (id && bossOnlineMap.has(id)) return !!bossOnlineMap.get(id);
     return !!row.querySelector('.online-tag, [class*="online"]');
   }
 
@@ -621,7 +681,7 @@
   }
 
   // 给在线岗位行加一个小标记，便于一眼识别
-  function markFreshRows(rows) {
+  function markFreshRows(rows: Element[]) {
     rows.forEach((row) => {
       if (rowOnline(row)) row.classList.add('jh-fresh-row');
       else row.classList.remove('jh-fresh-row');
@@ -629,7 +689,7 @@
   }
 
   // —— 注入按钮 ——
-  let freshBtn = null;
+  let freshBtn: HTMLElement | null = null;
   function ensureFreshButton() {
     if (PLATFORM !== 'boss') return;
     if (freshBtn && document.contains(freshBtn)) return;
@@ -658,7 +718,7 @@
   // 定位筛选栏锚点：返回一个「插入基准元素」，按钮插到它前面。
   // 依 2026-09 真机 DOM：筛选栏 = .c-filter-condition.filter-condition-inner，
   // 末端是 a.clear-search-btn(「清空」)——插在它前面正好落在筛选项右侧。
-  function findFilterBarAnchor() {
+  function findFilterBarAnchor(): Element | null {
     const clear = document.querySelector('.clear-search-btn');
     if (clear && isVisible(clear)) return clear;
     const inner = document.querySelector('.c-filter-condition.filter-condition-inner, .filter-condition-inner, .c-filter-condition');
@@ -668,14 +728,14 @@
     }
     // 退化：找一个含多个筛选项文字的容器，返回其最后一个子节点作锚
     const kw = ['薪资待遇', '工作经验', '学历要求', '公司行业', '公司规模'];
-    let best = null, score = 0;
-    document.querySelectorAll('div,ul,section').forEach((d) => {
-      if (d.children.length < 3 || d.children.length > 16) return;
+    let best: Element | null = null, score = 0;
+    for (const d of Array.from(document.querySelectorAll('div,ul,section'))) {
+      if (d.children.length < 3 || d.children.length > 16) continue;
       const t = d.textContent || '';
-      if (t.length > 600) return;
+      if (t.length > 600) continue;
       const s = kw.filter((k) => t.indexOf(k) >= 0).length;
       if (s > score) { score = s; best = d; }
-    });
+    }
     return best && score >= 3 ? best.lastElementChild : null;
   }
 
