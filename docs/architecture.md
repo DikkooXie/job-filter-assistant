@@ -104,7 +104,7 @@ BOSS 页面 ──(fetch/XHR 响应)──▶ sniffer ──postMessage──▶
 **侧栏 `pages/sidepanel/`**
 
 - `SidepanelApp.tsx`：编排。加载岗位库、监听广播、管理当前岗位、批量分析、确认弹层。
-- `views.tsx`：列表行、详情、筛选抽屉、批量细条、队列抽屉等视图（1341 行，P6 拆分）。
+- `views.tsx`：列表行、详情与筛选等视图；`BatchViews.tsx`：批量进度条与队列抽屉。其余视图仍待按职责拆分。
 - 纯规则（无存储、无消息，便于单测）：`browseModel.ts`（列表/详情展示规则）、`batchQueue.ts`（批量队列状态机）、`commTab.ts`（沟通页节点规则）、`confirmQueue.ts`（确认弹层队列）、`librarySource.ts`。
 - `CommTab.tsx`（沟通页）、`ConfirmDialog.tsx`（基于 shadcn AlertDialog）。
 - 样式：`browse.css`（2142 行，P6 拆分）。
