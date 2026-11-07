@@ -37,7 +37,7 @@
   --color-jp-line: var(--jp-line); --color-jp-field: var(--jp-field);
   --color-jp-secondary: var(--jp-secondary); --color-jp-muted: var(--jp-muted);
   --color-jp-inset: var(--jp-inset); --color-jp-ink: var(--jp-ink);
-  --color-jp-surface: var(--jp-surface); --color-jp-line-strong: var(--jp-line-strong); --color-jp-summary: var(--jp-summary);
+  --color-jp-surface: var(--jp-surface); --color-jp-surface-2: var(--jp-surface-2); --color-jp-line-strong: var(--jp-line-strong); --color-jp-summary: var(--jp-summary);
   --color-jp-accent: var(--jp-accent); --color-jp-on-accent: var(--jp-on-accent); --color-jp-confirm-del: var(--jp-confirm-del);
   --color-jp-accent-soft: var(--jp-accent-soft); --color-jp-accent-line: var(--jp-accent-line); --color-jp-switch: var(--jp-switch);
   --color-jp-danger: var(--jp-danger); --color-jp-danger-soft: var(--jp-danger-soft);

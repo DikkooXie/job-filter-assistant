@@ -309,7 +309,7 @@ test('侧栏底栏改为工作台入口和智能分析', () => {
   assert.doesNotMatch(views, /本轮不可选|tag:\s*'后续'|disabled:\s*true/);
   assert.match(views, /后续同类可不提示/);
   assert.match(views, /找到 \$\{freshCount\} 个新岗位/);
-  assert.match(views, /job-new/);
+  assert.match(views, />NEW<\/span>/);
   assert.match(sidepanel, /OPEN_OPTIONS/);
   assert.match(sidepanel, /analysisUsesForce\(mode\)/);
   assert.match(sidepanel, /analysisTargets\(checked, mode, fingerprint\)/);
@@ -330,11 +330,13 @@ test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () =>
   const root = ROOT;
   const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
-  assert.match(browse, /\.continuous-list\s*\{[^}]*gap:\s*10px/);
+  const app = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
+  assert.match(app, /className="flex flex-col gap-2\.5 p-2\.5"/);
   assert.match(browse, /\.analysis\s*\{[^}]*background:\s*var\(--jp-inset\)/);
   assert.match(browse, /\.analysis\s*\{[^}]*border:\s*0/);
   assert.doesNotMatch(browse, /\.analysis\s*\{[^}]*border-top/);
-  assert.doesNotMatch(browse, /\.job-row\s*\{[^}]*border-bottom/);
+  assert.match(views, /'job-row min-w-0 rounded-\[10px\] border px-3/);
+  assert.doesNotMatch(views, /job-row[^']*border-b\b/);
   assert.match(views, /className=\{`analysis/);
   assert.doesNotMatch(views, /flow-link/);
 });

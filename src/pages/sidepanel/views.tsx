@@ -537,6 +537,17 @@ interface JobRowProps {
   onDislike: () => void;
 }
 
+// 列表卡片。注意 browse.css 的基础重置（未分层）会盖过普通工具类：按钮的字体、颜色、背景要加 `!`。
+// 标题按钮继承面板字号（13px）——旧样式里写的 14px 实际被重置覆盖，从未生效，这里按真实效果保留。
+const rowTint = 'bg-[color-mix(in_srgb,var(--jp-ink)_4%,var(--jp-surface-2))]';
+const salaryClass = 'shrink-0 whitespace-nowrap text-control leading-[1.65] font-semibold text-jp-accent';
+const starClass = 'ml-auto inline-flex size-6 shrink-0 items-center justify-center rounded-[4px] hover:!bg-jp-inset [&_svg]:!size-3.5';
+const metaClass = cn(
+  'mt-px flex min-w-0 flex-wrap text-[11px] text-jp-muted',
+  "[&>span:not(:last-child)]:after:mx-[5px] [&>span:not(:last-child)]:after:opacity-70 [&>span:not(:last-child)]:after:content-['·']",
+);
+const textActionClass = 'inline-flex min-h-7 items-center gap-[3px] !text-hint !text-jp-accent hover:enabled:underline hover:enabled:underline-offset-3 disabled:opacity-48';
+
 export function JobRow({ job, checked, returned, isNew, progressStatus, queueCard, onToggle, onOpen, onStar, onDelete, onDislike }: JobRowProps) {
   const gap = descriptionGap(job);
   const grade = gap ? null : analysisGrade(job.match);
@@ -546,23 +557,35 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
   const skills = job.skills?.length ? job.skills : (job.tags || []);
 
   return (
-    <article ref={scopeRef} className={`job-row${returned ? ' just-viewed' : ''}${isNew ? ' is-new' : ''}${confirming ? ' is-confirming' : ''}`} data-job-uid={job.uid}>
-      <div className="row-top">
-        <input type="checkbox" aria-label={`选择 ${job.company || ''} ${job.title || '岗位'}`} checked={checked} onChange={onToggle} />
-        <button type="button" className="job-title" onClick={() => onOpen(job.uid, 'info')}>
+    <article
+      ref={scopeRef}
+      className={cn(
+        // job-row / is-confirming 仍是分析区与操作区展开规则（browse.css）的挂钩类。
+        'job-row min-w-0 rounded-[10px] border px-3 pt-3 pb-2.5',
+        confirming && 'is-confirming',
+        returned ? 'bg-jp-accent-soft' : confirming ? rowTint : 'bg-jp-surface-2 hover:bg-[color-mix(in_srgb,var(--jp-ink)_4%,var(--jp-surface-2))]',
+        isNew ? 'border-[rgba(240,180,41,.55)]' : returned || confirming ? 'border-jp-accent-line' : 'border-jp-line hover:border-jp-accent-line',
+        confirming ? 'shadow-[0_0_0_1px_var(--jp-accent-soft)]' : 'hover:shadow-[0_0_0_1px_var(--jp-accent-soft)]',
+      )}
+      data-job-uid={job.uid}
+    >
+      <div className="flex min-w-0 items-start gap-2.5">
+        <input type="checkbox" className="mt-1 size-[15px] shrink-0 accent-[#2dd4bf]" aria-label={`选择 ${job.company || ''} ${job.title || '岗位'}`} checked={checked} onChange={onToggle} />
+        {/* job-title 是返回列表时恢复焦点用的查询挂钩（SidepanelApp）。 */}
+        <button type="button" className="job-title min-w-0 flex-1 text-left [overflow-wrap:anywhere] hover:underline hover:underline-offset-3" onClick={() => onOpen(job.uid, 'info')}>
           {job.title || '未命名岗位'}
-          {isNew && <span className="job-new">NEW</span>}
+          {isNew && <span className="ml-1.5 inline-block align-[1px] text-[10px] font-bold tracking-[.04em] text-[#f0b429]">NEW</span>}
         </button>
-        {job.salaryText && <span className="salary">{job.salaryText}</span>}
+        {job.salaryText && <span className={salaryClass}>{job.salaryText}</span>}
       </div>
-      <div className="row-body">
-        <div className="company-row">
-          <span className="company">{job.company || '公司未填写'}</span>
-          <span className="source">{platformLabel(job.platform)}</span>
-          {returned && <span className="viewed-cue">刚看过</span>}
+      <div className="ml-[25px] min-w-0">
+        <div className="mt-[3px] flex min-h-[23px] min-w-0 items-center gap-[7px]">
+          <span className="min-w-0 text-hint text-jp-secondary [overflow-wrap:anywhere]">{job.company || '公司未填写'}</span>
+          <span className="shrink-0 whitespace-nowrap rounded-[3px] border border-jp-line-strong px-1 text-[10px] leading-4 text-jp-muted">{platformLabel(job.platform)}</span>
+          {returned && <span className="shrink-0 whitespace-nowrap text-[10px] text-jp-accent">刚看过</span>}
           <button
             type="button"
-            className={`star${job.star ? ' on' : ''}`}
+            className={cn(starClass, job.star && '!text-jp-accent')}
             aria-pressed={!!job.star}
             aria-label={`${job.star ? '取消收藏' : '收藏'} ${job.company || job.title || ''}`}
             onClick={onStar}
@@ -570,11 +593,13 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
             <Star aria-hidden="true" fill={job.star ? 'currentColor' : 'none'} />
           </button>
         </div>
-        <div className="job-meta">
+        <div className={metaClass}>
           {[ [job.city, job.district].filter(Boolean).join('·'), job.experience, job.degree ].filter(Boolean).map((item) => <span key={item}>{item}</span>)}
         </div>
         {skills.length > 0 && (
-          <ul className="skills" aria-label="岗位技能">{skills.slice(0, 6).map((skill) => <li key={skill}>{skill}</li>)}</ul>
+          <ul className="mt-2 flex min-w-0 list-none flex-wrap gap-1.5" aria-label="岗位技能">
+            {skills.slice(0, 6).map((skill) => <li key={skill} className="rounded-[4px] bg-jp-field px-[7px] py-0.5 text-[11px] leading-[18px] text-jp-secondary">{skill}</li>)}
+          </ul>
         )}
         <div className={`analysis${grade ? '' : ' bare'}${queueCard ? ` queue-${queueCard.kind}` : ''}`}>
           <div className="analysis-top">
@@ -1033,7 +1058,7 @@ export function JobDetail({
             <>
               <div className="detail-title-line">
                 <h2 ref={titleRef} tabIndex={-1}>{job?.title || '未命名岗位'}</h2>
-                {job?.salaryText && <span className="salary">{job.salaryText}</span>}
+                {job?.salaryText && <span className={salaryClass}>{job.salaryText}</span>}
               </div>
               <p>
                 {[job?.company, [job?.city, job?.district].filter(Boolean).join(' · '), job?.experience, job?.degree].filter(Boolean).join(' · ')}
@@ -1087,7 +1112,7 @@ export function JobDetail({
                 </>
               )}
               {sub === 'resume' && (
-                !hasProfile ? <p>简历建议基于个人画像生成。<button type="button" className="text-action" onClick={onProfileSettings}>前往设置完善画像</button></p>
+                !hasProfile ? <p>简历建议基于个人画像生成。<button type="button" className={textActionClass} onClick={onProfileSettings}>前往设置完善画像</button></p>
                   : (
                       <>
                         <div className="section-head">
@@ -1224,7 +1249,7 @@ export function ModelNotice({ onOpenSettings, onDismiss }: { onOpenSettings: () 
   return (
     <div className="mx-4 mt-2 flex shrink-0 items-center gap-2 rounded-lg border border-jp-line bg-jp-field py-[7px] pr-2 pl-3 text-hint leading-[1.5] text-jp-secondary" role="status">
       <span>尚未配置模型接口。</span>
-      <button type="button" className="text-action ml-auto" onClick={onOpenSettings}>前往设置</button>
+      <button type="button" className={cn(textActionClass, 'ml-auto')} onClick={onOpenSettings}>前往设置</button>
       <button type="button" className="inline-flex size-7 items-center justify-center rounded-md text-jp-muted hover:!bg-jp-inset hover:!text-jp-ink" aria-label="关闭提示" onClick={onDismiss}><X aria-hidden="true" /></button>
     </div>
   );

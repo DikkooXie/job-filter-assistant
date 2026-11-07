@@ -239,103 +239,11 @@
   outline: 2px solid var(--jp-accent);
   outline-offset: 2px;
 }
-.job-panel .text-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  min-height: 28px;
-  font-size: 12px;
-  color: var(--jp-accent);
-  background: transparent;
-  border: 0;
-}
-.job-panel .text-action.danger { color: var(--jp-danger); }
-.job-panel .text-action:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
-.job-panel .text-action:disabled { opacity: .48; }
 
 .list-scroll { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; }
-.continuous-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
-.job-row {
-  padding: 12px 12px 10px;
-  border: 1px solid var(--jp-line);
-  border-radius: 10px;
-  background: var(--jp-surface-2);
-  min-width: 0;
-}
-.job-row:hover,
-.job-row.is-confirming {
-  background: color-mix(in srgb, var(--jp-ink) 4%, var(--jp-surface-2));
-  border-color: var(--jp-accent-line);
-  box-shadow: 0 0 0 1px var(--jp-accent-soft);
-}
-.job-row.just-viewed { background: var(--jp-accent-soft); border-color: var(--jp-accent-line); }
-.job-row.is-new { border-color: rgba(240, 180, 41, .55); }
-.job-new {
-  display: inline-block;
-  margin-left: 6px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  color: #f0b429;
-  vertical-align: 1px;
-}
-.row-top { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
-.row-top > input { margin-top: 4px; width: 15px; height: 15px; flex-shrink: 0; }
-.job-title {
-  text-align: left;
-  font-size: 14px;
-  line-height: 1.5;
-  font-weight: 620;
-  overflow-wrap: anywhere;
-  min-width: 0;
-  flex: 1;
-  color: var(--jp-ink);
-}
-.job-title:hover { text-decoration: underline; text-underline-offset: 3px; }
-.salary { color: var(--jp-accent); font-size: 13px; line-height: 1.65; white-space: nowrap; font-weight: 600; flex-shrink: 0; }
-.row-body { margin-left: 25px; min-width: 0; }
-.company-row { display: flex; gap: 7px; align-items: center; margin-top: 3px; min-height: 23px; min-width: 0; }
-.company { color: var(--jp-secondary); font-size: 12px; overflow-wrap: anywhere; min-width: 0; }
-.source {
-  color: var(--jp-muted);
-  background: transparent;
-  border: 1px solid var(--jp-line-strong);
-  font-size: 10px;
-  line-height: 16px;
-  padding: 0 4px;
-  border-radius: 3px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.viewed-cue { font-size: 10px; color: var(--jp-accent); white-space: nowrap; flex-shrink: 0; }
-.star {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--jp-muted);
-  border-radius: 4px;
-}
-.star svg { width: 14px; height: 14px; }
-.star.on { color: var(--jp-accent); }
-.star:hover:not(:disabled) { background: var(--jp-inset); }
-.job-meta { color: var(--jp-muted); font-size: 11px; margin-top: 1px; display: flex; flex-wrap: wrap; min-width: 0; }
-.job-meta > span:not(:last-child)::after { content: "·"; margin: 0 5px; opacity: .7; }
 .detail-content .pre { white-space: pre-wrap; }
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .section-head h3 { margin: 0; }
-.skills { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.skills li {
-  font-size: 11px;
-  line-height: 18px;
-  color: var(--jp-secondary);
-  background: var(--jp-field);
-  border-radius: 4px;
-  padding: 2px 7px;
-}
 .analysis {
   margin-top: 10px;
   padding: 8px 10px 7px;
@@ -684,7 +592,6 @@
 .selection-bar.is-selecting { background: var(--jp-surface); }
 .select-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 .select-all input { width: 16px; height: 16px; margin: 0; accent-color: #2dd4bf; }
-.job-panel .row-top > input { accent-color: #2dd4bf; }
 .selected-count { color: var(--jp-muted); font-size: 12px; font-weight: 500; }
 .selection-actions {
   margin-left: auto;

@@ -764,7 +764,7 @@ export default function Sidepanel() {
                 {profileScore < 40 && <p className="px-4 pt-2 text-hint text-jp-secondary"><button type="button" className="!text-jp-accent" onClick={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
                 {list.length === 0
                   ? <SurfaceState kind="nomatch" viewChanged={viewChanged} onReset={resetView} />
-                  : <div className="continuous-list">{list.map((item) => (
+                  : <div className="flex flex-col gap-2.5 p-2.5">{list.map((item) => (
                     <JobRow
                       key={item.uid}
                       job={item}
