@@ -3,8 +3,8 @@
 import type { FilterResult, Job, JobFilters } from './types.js';
 
 // 对单个岗位应用筛选，返回 { keep, matchedInclude[], matchedExclude[], risks[], reasons[] }
-export function evaluateJob(job: Job, filters: JobFilters | null | undefined): FilterResult {
-  const f: Partial<JobFilters> = filters || {};
+export function evaluateJob(job: Job, filters: Partial<JobFilters> | null | undefined): FilterResult {
+  const f = filters || {};
   const hay = jobText(job);
   const result: FilterResult = { keep: true, matchedInclude: [], matchedExclude: [], risks: [], reasons: [] };
 
@@ -86,7 +86,7 @@ export function evaluateJob(job: Job, filters: JobFilters | null | undefined): F
 
 // 批量：评估结果挂在 _filter 上。
 // 开启过滤时只返回 keep 的岗位；关闭时全部返回，keep:false 的岗位带着命中原因供列表标注。
-export function applyFilters(jobs: readonly Job[], filters?: JobFilters | null): Job[] {
+export function applyFilters(jobs: readonly Job[], filters?: Partial<JobFilters> | null): Job[] {
   const enabled = !!(filters && filters.enabled);
   const out: Job[] = [];
   for (const j of jobs) {
@@ -97,7 +97,7 @@ export function applyFilters(jobs: readonly Job[], filters?: JobFilters | null):
 }
 
 // 自动打分的候选：过滤开启时跳过会被隐藏的岗位，关闭时全部打分。
-export function autoScoreUids(jobs: readonly Job[], filters?: JobFilters | null): string[] {
+export function autoScoreUids(jobs: readonly Job[], filters?: Partial<JobFilters> | null): string[] {
   return applyFilters(jobs, filters).map((j) => j.uid);
 }
 

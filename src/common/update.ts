@@ -94,7 +94,7 @@ export function normalizeUpdateChannel(value: unknown): UpdateChannel {
 }
 
 /** 稳定通道仍请求 /releases/latest；预览通道只拉最近 20 条发布列表。 */
-export function releaseRequest(channel: unknown): { channel: UpdateChannel; url: string } {
+export function releaseRequest(channel?: unknown): { channel: UpdateChannel; url: string } {
   const mode = normalizeUpdateChannel(channel);
   if (mode === 'preview') return { channel: 'preview', url: `${RELEASES_API}?per_page=20` };
   return { channel: 'stable', url: RELEASE_API };
