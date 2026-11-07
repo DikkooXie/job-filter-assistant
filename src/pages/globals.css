@@ -39,6 +39,7 @@
   --color-jp-inset: var(--jp-inset); --color-jp-ink: var(--jp-ink);
   --color-queue-surface: #151a21; --color-queue-ink: #e7edf0;
   --color-queue-overlay: rgba(15, 20, 25, .46);
+  --color-queue-track: #0f1419; --color-queue-accent: #2dd4bf; --color-queue-muted: #9baab4;
 }
 :root {
   --radius: .5rem; --background: oklch(.99 0 0); --foreground: oklch(.18 0 0);

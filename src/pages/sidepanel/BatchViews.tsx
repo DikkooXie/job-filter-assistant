@@ -105,13 +105,13 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
             <h2 id="queue-title">{model.head}</h2>
             <button type="button" className="queue-cancel" disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
           </div>
-          <div className="queue-bar" aria-hidden="true"><span style={{ width: `${Math.round(model.progress * 100)}%` }} /></div>
-          <p className="queue-summary">
+          <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-queue-track" aria-hidden="true"><span className="block h-full bg-queue-accent" style={{ width: `${Math.round(model.progress * 100)}%` }} /></div>
+          <p className="!mt-3 flex justify-between gap-2 text-hint text-queue-muted">
             <span>{model.summary}</span>
-            {model.estimate && <span className="queue-estimate">{model.estimate}</span>}
+            {model.estimate && <span className="whitespace-nowrap text-queue-accent">{model.estimate}</span>}
           </p>
         </header>
-        <div className="queue-chips" role="toolbar" aria-label="筛选队列">
+        <div className="mt-4 mb-3 flex shrink-0 gap-1.5 px-[14px]" role="toolbar" aria-label="筛选队列">
           <button type="button" className={`queue-chip${chip === 'all' ? ' is-on' : ''}`} aria-pressed={chip === 'all'} onClick={() => setChip('all')}>全部</button>
           <button type="button" className={`queue-chip${chip === 'running' ? ' is-on' : ''}`} aria-pressed={chip === 'running'} onClick={() => setChip('running')}>进行中</button>
           <button type="button" className={`queue-chip${model.failed.length ? ' is-failed' : ''}${chip === 'failed' ? ' is-on' : ''}`} aria-pressed={chip === 'failed'} onClick={() => setChip('failed')}>失败 {model.failed.length}</button>

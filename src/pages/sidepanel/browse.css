@@ -1667,18 +1667,6 @@
 /* #72 终锁：头行→进度条 12，进度条→统计 12，统计→pill 16，pill→列表 12。头区自身不再垫底，避免和 chips 外边距叠距。 */
 .queue-head h2 { font-size: 15px; font-weight: 650; color: #2dd4bf; }
 .queue-drawer .queue-cancel:disabled { opacity: .4; }
-.queue-bar { height: 3px; margin-top: 12px; border-radius: 999px; background: #0f1419; overflow: hidden; }
-.queue-bar > span { display: block; height: 100%; background: #2dd4bf; }
-.job-panel .queue-summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 12px;
-  color: #9baab4;
-  font-size: 12px;
-}
-.queue-estimate { color: #2dd4bf; white-space: nowrap; }
-.queue-chips { display: flex; gap: 6px; padding: 0 14px; margin-top: 16px; margin-bottom: 12px; flex-shrink: 0; }
 .job-panel .queue-chip {
   min-height: 26px;
   padding: 2px 10px;
