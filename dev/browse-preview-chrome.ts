@@ -1,11 +1,36 @@
-// 岗位浏览预览用的虚构数据。只由 extension-pages/sidepanel-browse-preview.jsx 加载，不进入扩展包。
-// 正式侧栏 extension-pages/sidepanel.jsx 不引用本文件；空库不会回落到这里的岗位。
+// 岗位浏览预览用的虚构数据。只由 extension-pages/sidepanel-browse-preview.tsx 加载，不进入扩展包。
+// 正式侧栏 extension-pages/sidepanel.tsx 不引用本文件；空库不会回落到这里的岗位。
 import { profileFingerprint } from '../src/common/profileFingerprint.js';
+import type { Job, Match, Profile } from '../src/common/types.js';
+
+// 侧栏发来的消息。预览只认用得到的字段。
+interface PreviewMessage {
+  type?: string;
+  uid?: string;
+  text?: string;
+  patch?: { privacy?: object; filters?: object; [key: string]: unknown };
+  profile?: Profile;
+  instruction?: unknown;
+}
+type Listener = (msg: object, sender: object, reply: () => void) => void;
+
+// 预览页暴露给浏览器自动化的调试入口。
+interface PreviewWindow {
+  chrome: unknown;
+  __previewOpened?: string;
+  __previewCapture?: (partial?: Partial<Job>) => Job;
+  __previewRemoveJob?: (uid: string) => void;
+  __previewAllowReads?: () => void;
+  __previewFail?: (uid: string, on?: boolean) => void;
+  __previewAutoQueue?: (uids: string[]) => void;
+  __previewState?: typeof state;
+}
+const previewWindow = window as unknown as PreviewWindow;
 
 const params = new URLSearchParams(location.search);
 const scenario = params.get('scenario') || 'normal';
 
-const jobs = [
+const jobs: Job[] = [
   { uid: 'boss:s1', platform: 'boss', jobId: 's1', title: '前端开发工程师', salaryText: '18–25K', salaryMinK: 18, salaryMaxK: 25, city: '深圳', district: '南山', experience: '应届', degree: '本科', skills: ['Vue 3', 'TypeScript', 'AI 应用'], tags: [], welfare: ['补充医疗'], company: '青禾科技', companyIndustry: '软件', companyScale: '100–499人', companyType: '民营', companyStage: 'A轮', hrName: '周宁', hrTitle: '招聘', description: '参与业务前端功能开发，维护组件与工程规范。', url: 'https://example.invalid/jobs/s1', savedAt: '2026-11-01T08:00:00.000Z', lastSeenAt: '2026-11-04T08:00:00.000Z', star: true, greetingDraft: '您好，我对贵司前端岗很感兴趣。近两年主要做 React / TypeScript，有中后台与可视化经验，期待进一步沟通。', match: { score: 92, verdict: 'strong', summary: 'Vue 与 TypeScript 要求吻合，有 AI 应用工程实践的加分项。', reasons: ['Vue 与 TypeScript 吻合'], gaps: [], risks: [], eligible: true, blockers: [], dims: { skill: 90, experience: 80, requirement: 88, location: 92 } } },
   { uid: 'boss:s2', platform: 'boss', jobId: 's2', title: 'AI 应用全栈工程师', salaryText: '20–30K', salaryMinK: 20, salaryMaxK: 30, city: '深圳', district: '福田', experience: '1–3年', degree: '本科', skills: ['React', 'Node.js', 'LLM'], tags: [], welfare: [], company: '远山智能', companyIndustry: '人工智能', companyScale: '20–99人', companyType: '民营', companyStage: '天使轮', hrName: '', hrTitle: '', description: '独立交付 AI 应用功能，和产品一起迭代。', url: 'https://example.invalid/jobs/s2', savedAt: '2026-11-01T07:00:00.000Z', lastSeenAt: '2026-11-04T07:00:00.000Z', star: false, match: { score: 84, verdict: 'good', summary: '技术方向契合，但独立交付经验要求高于应届岗位，建议在沟通中确认。', reasons: ['技术方向契合'], gaps: ['独立交付经验'], risks: ['要求独立交付，沟通时确认是否接受应届生'], eligible: true, blockers: [] } },
   { uid: 'boss:s3', platform: 'boss', jobId: 's3', title: 'Web 前端开发（校招）', salaryText: '15–22K', salaryMinK: 15, salaryMaxK: 22, city: '广州', district: '天河', experience: '应届', degree: '本科', skills: ['JavaScript', 'Vue', '工程化'], tags: [], welfare: [], company: '方舟网络', companyIndustry: '互联网', companyScale: '500–999人', companyType: '民营', companyStage: '', hrName: '陈敏', hrTitle: 'HR', description: '校招前端岗位，参与业务页面开发。', url: 'https://example.invalid/jobs/s3', savedAt: '2026-11-01T06:00:00.000Z', lastSeenAt: '2026-11-04T06:00:00.000Z', star: false, match: null },
@@ -16,7 +41,7 @@ const jobs = [
   { uid: 'boss:s8', platform: 'boss', jobId: 's8', title: '软件开发工程师（校招）', salaryText: '16–24K', salaryMinK: 16, salaryMaxK: 24, city: '深圳', district: '南山', experience: '应届', degree: '本科', skills: ['JavaScript', 'Java', 'SQL'], tags: [], welfare: [], company: '北辰数字', companyIndustry: '软件', companyScale: '500–999人', companyType: '民营', companyStage: '', hrName: '', hrTitle: '', description: '校招软件开发，包含前端与服务端协作。', url: 'https://example.invalid/jobs/s8', savedAt: '2026-11-01T01:00:00.000Z', lastSeenAt: '2026-11-04T01:00:00.000Z', star: false, match: { score: 80, verdict: 'good', summary: '工程实践要求匹配，Java 岗位职责比重需要沟通确认。', reasons: ['工程实践匹配'], gaps: ['Java 比重'], risks: [], eligible: true, blockers: [] } },
 ];
 
-const store = {
+const store: Record<string, unknown> = {
   'job-progress-v1:boss%3As4': { status: 'prepared', at: '2026-11-03T01:00:00.000Z' },
   'job-progress-v1:boss%3As6': { status: 'opened', at: '2026-11-03T02:00:00.000Z' },
   'job-progress-v1:boss%3As8': { status: 'sent', at: '2026-11-03T03:00:00.000Z' },
@@ -53,7 +78,7 @@ const store = {
     ],
   },
 };
-const listeners = [];
+const listeners: Listener[] = [];
 const scoreDelay = Number(params.get('scoreDelay') || 0);
 const state = {
   jobs: scenario === 'empty' ? [] : jobs.map((job) => (
@@ -93,9 +118,9 @@ for (const job of state.jobs) {
   else if (job.uid === 'boss:s4') job.match = { ...job.match, profileFp: 'stale-preview-fp' };
 }
 
-function broadcast(msg) { listeners.forEach((fn) => { try { fn(msg, {}, () => {}); } catch { /* 预览监听失败不影响页面 */ } }); }
+function broadcast(msg: object) { listeners.forEach((fn) => { try { fn(msg, {}, () => {}); } catch { /* 预览监听失败不影响页面 */ } }); }
 
-function respond(msg) {
+function respond(msg: PreviewMessage) {
   switch (msg.type) {
     case 'SETTINGS_GET': return state.settings;
     case 'SETTINGS_SAVE':
@@ -109,16 +134,16 @@ function respond(msg) {
     case 'ACTIVE_CONTEXT_REQUEST': return { platform: state.ctx.platform, url: state.ctx.url, jobKey: state.ctx.jobKey, isChat: state.ctx.isChat, platformName: 'BOSS直聘' };
     case 'AI_PROVIDERS_GET': return state.providers;
     case 'PROFILE_GET': return state.profile;
-    case 'PROFILE_SAVE': state.profile = msg.profile; return state.profile;
+    case 'PROFILE_SAVE': state.profile = msg.profile as typeof state.profile; return state.profile;
     case 'AI_MATCH_SCORE': {
-      if (state.failUids.has(msg.uid)) throw new Error('超时');
+      if (state.failUids.has(String(msg.uid))) throw new Error('超时');
       const current = state.jobs.find((job) => job.uid === msg.uid);
       if (current && !String(current.description || '').trim()) {
-        const blocked = { incomplete: 'missing-description', score: null, summary: '没有岗位描述，这次没有完成分析', at: '2026-11-04T00:00:00.000Z' };
+        const blocked: Match = { incomplete: 'missing-description', score: null, summary: '没有岗位描述，这次没有完成分析', at: '2026-11-04T00:00:00.000Z' };
         state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match: blocked } : job);
-        throw new Error(blocked.summary);
+        throw new Error(String(blocked.summary));
       }
-      const match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z', profileFp: previewFingerprint() };
+      const match: Match = { score: 82, verdict: 'good', eligible: true, blockers: [], dims: { skill: 80, experience: 70, requirement: 75, location: 90 }, reasons: ['虚构分析'], gaps: [], risks: [], summary: '这是预览用的虚构分析结果。', greetings: { short: '虚构短招呼', standard: '虚构标准招呼', detailed: '虚构长招呼' }, greeting: '虚构标准招呼', at: '2026-11-04T00:00:00.000Z', profileFp: previewFingerprint() };
       state.jobs = state.jobs.map((job) => job.uid === msg.uid ? { ...job, match } : job);
       return match;
     }
@@ -139,42 +164,42 @@ function respond(msg) {
   }
 }
 
-window.chrome = {
+previewWindow.chrome = {
   runtime: {
     lastError: null,
     id: 'browse-preview',
-    sendMessage(msg, cb) {
+    sendMessage(msg: PreviewMessage, cb?: (env: object) => void) {
       const latency = msg.type === 'AI_MATCH_SCORE' ? (scoreDelay || 20) : 20;
-      const finish = (env) => { if (typeof cb === 'function') setTimeout(() => cb(env), latency); };
+      const finish = (env: object) => { if (typeof cb === 'function') setTimeout(() => cb(env), latency); };
       if (msg.type === 'JOB_LIST_REQUEST' && state.hangReads) return undefined;
       if (msg.type === 'JOB_LIST_REQUEST' && state.failReads) return finish({ ok: false, error: '本地数据暂时无法读取' });
       try { finish({ ok: true, data: respond(msg) }); }
       catch (error) { finish({ ok: false, error: error instanceof Error ? error.message : String(error) }); }
       return undefined;
     },
-    onMessage: { addListener: (fn) => listeners.push(fn), removeListener: (fn) => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); } },
-    getURL: (path) => path,
+    onMessage: { addListener: (fn: Listener) => listeners.push(fn), removeListener: (fn: Listener) => { const index = listeners.indexOf(fn); if (index >= 0) listeners.splice(index, 1); } },
+    getURL: (path: string) => path,
   },
   storage: {
     local: {
-      get: async (keys) => {
+      get: async (keys?: string | string[] | null) => {
         if (!keys) return { ...store };
         const list = Array.isArray(keys) ? keys : [keys];
-        const out = {};
+        const out: Record<string, unknown> = {};
         list.forEach((key) => { if (key in store) out[key] = store[key]; });
         return out;
       },
-      set: async (items) => { Object.assign(store, items); },
+      set: async (items: Record<string, unknown>) => { Object.assign(store, items); },
     },
     onChanged: { addListener() {}, removeListener() {} },
   },
-  tabs: { create: (options) => { window.__previewOpened = options?.url || ''; return Promise.resolve({ id: 1 }); } },
+  tabs: { create: (options?: { url?: string }) => { previewWindow.__previewOpened = options?.url || ''; return Promise.resolve({ id: 1 }); } },
   downloads: { download: async () => 1 },
 };
 
-window.__previewCapture = (partial = {}) => {
+previewWindow.__previewCapture = (partial: Partial<Job> = {}) => {
   const uid = partial.uid || `boss:new-${Date.now()}`;
-  const job = {
+  const job: Job = {
     platform: 'boss',
     jobId: uid,
     title: '海外投放专员',
@@ -204,13 +229,13 @@ window.__previewCapture = (partial = {}) => {
   broadcast({ type: 'JOBS_UPDATED', added: 1 });
   return job;
 };
-window.__previewRemoveJob = (uid) => {
+previewWindow.__previewRemoveJob = (uid) => {
   state.jobs = state.jobs.filter((job) => job.uid !== uid);
   broadcast({ type: 'JOBS_UPDATED' });
 };
-window.__previewAllowReads = () => { state.failReads = false; state.hangReads = false; };
-window.__previewFail = (uid, on = true) => { if (on) state.failUids.add(uid); else state.failUids.delete(uid); };
-window.__previewAutoQueue = (uids) => broadcast({ type: 'JOBS_UPDATED', autoQueue: uids });
+previewWindow.__previewAllowReads = () => { state.failReads = false; state.hangReads = false; };
+previewWindow.__previewFail = (uid, on = true) => { if (on) state.failUids.add(uid); else state.failUids.delete(uid); };
+previewWindow.__previewAutoQueue = (uids) => broadcast({ type: 'JOBS_UPDATED', autoQueue: uids });
 const previewAuto = String(params.get('auto') || '').split(',').filter(Boolean);
 if (previewAuto.length) setTimeout(() => broadcast({ type: 'JOBS_UPDATED', autoQueue: previewAuto }), 600);
-window.__previewState = state;
+previewWindow.__previewState = state;

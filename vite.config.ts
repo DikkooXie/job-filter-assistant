@@ -2,7 +2,7 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { transform } from 'esbuild';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { isDevBuild, toDevManifest } from './src/common/build.js';
@@ -12,7 +12,7 @@ const pagesDir = resolve(projectDir, 'extension-pages');
 const outDir = resolve(projectDir, 'dist');
 
 // 本地构建默认标 dev；发版脚本以 JFA_RELEASE=1 构建，保留正式名称。
-async function markDevBuild(buildDir) {
+async function markDevBuild(buildDir: string) {
   if (process.env.JFA_RELEASE === '1') return;
   const path = resolve(buildDir, 'manifest.json');
   const manifest = JSON.parse(await readFile(path, 'utf8'));
@@ -26,7 +26,7 @@ async function markDevBuild(buildDir) {
 const COMPILED_DIRS = ['src/background', 'src/content', 'src/common'];
 const COPIED_DIRS = ['icons', 'src/vendor'];
 
-async function compileDir(sourceDir, targetDir) {
+async function compileDir(sourceDir: string, targetDir: string): Promise<void> {
   await mkdir(targetDir, { recursive: true });
   for (const entry of await readdir(sourceDir, { withFileTypes: true })) {
     const source = resolve(sourceDir, entry.name);
@@ -45,7 +45,7 @@ async function compileDir(sourceDir, targetDir) {
   }
 }
 
-function copyExtensionFiles() {
+function copyExtensionFiles(): Plugin {
   let buildDir = outDir;
   return {
     name: 'copy-extension-files',

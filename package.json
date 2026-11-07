@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "release": "tsx scripts/release.mjs"
+    "release": "tsx scripts/release.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.0",

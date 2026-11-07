@@ -6,7 +6,7 @@
 //   npm run release -- --prerelease --notes "预览说明"
 // 预览包：发之前把 manifest version 改成四段，且必须大于已安装版本（正式 1.0.3 → 预览 1.0.3.1）。
 // 不带 --prerelease 时行为与现网一致，会创建正式 Release。不要用它发预览，也不要为此把正式三段版本号抬高。
-import { execFileSync } from 'node:child_process';
+import { execFileSync, type ExecFileSyncOptions } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -16,9 +16,9 @@ const distDir = resolve(projectDir, 'dist');
 const outDir = resolve(projectDir, 'release');
 
 const args = process.argv.slice(2);
-const flag = (name) => args.includes(name);
-const option = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
-const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: 'inherit', cwd: projectDir, ...opts });
+const flag = (name: string) => args.includes(name);
+const option = (name: string): string | undefined => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+const run = (cmd: string, argv: string[], opts: ExecFileSyncOptions = {}) => execFileSync(cmd, argv, { stdio: 'inherit', cwd: projectDir, ...opts });
 
 const manifest = JSON.parse(readFileSync(resolve(projectDir, 'manifest.json'), 'utf8'));
 const version = manifest.version;
@@ -29,7 +29,7 @@ if (prerelease && !/^\d+(?:\.\d+){3}$/.test(version)) {
   throw new Error(`预览包请使用四段版本号，且必须大于已安装版本（例如正式版 1.0.3 发 1.0.3.1）。当前 manifest version 为 ${version}`);
 }
 
-const git = (...argv) => execFileSync('git', argv, { cwd: projectDir, encoding: 'utf8' }).trim();
+const git = (...argv: string[]) => execFileSync('git', argv, { cwd: projectDir, encoding: 'utf8' }).trim();
 if (!flag('--dry-run')) {
   if (git('status', '--porcelain')) throw new Error('工作区有未提交的改动，请先提交，保证发布内容与代码一致');
 }
@@ -71,7 +71,7 @@ run('gh', [
   '--target', head,
   '--title', tag,
   ...(prerelease ? ['--prerelease'] : []),
-  ...(notesFile ? ['--notes-file', notesFile] : ['--notes', notes]),
+  ...(notesFile ? ['--notes-file', notesFile] : ['--notes', notes || '']),
 ]);
 console.log(prerelease
   ? `\n已发布预览版 ${tag}。此发布不会改变 /releases/latest。在扩展里把更新通道切到「预览」后点「检查更新」。`

@@ -20,5 +20,5 @@
     "paths": { "@/*": ["./src/*"] },
     "types": ["node", "chrome"]
   },
-  "include": ["src", "scripts", "dev", "extension-pages", "vite.config.js"]
+  "include": ["src", "scripts", "dev", "extension-pages", "vite.config.ts"]
 }

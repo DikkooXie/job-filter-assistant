@@ -2150,7 +2150,7 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /updateChannel/);
   const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.tsx'), 'utf8');
   const updater = fs.readFileSync(path.join(root, 'src/extension/update.ts'), 'utf8');
-  const script = fs.readFileSync(path.join(root, 'scripts/release.mjs'), 'utf8');
+  const script = fs.readFileSync(path.join(root, 'scripts/release.ts'), 'utf8');
   assert.match(panel, /更新通道/);
   assert.match(panel, /\['stable', '稳定'\]/);
   assert.match(panel, /\['preview', '预览'\]/);
@@ -2363,7 +2363,7 @@ test('正式侧栏读取岗位库，不引用预览演示数据', () => {
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const entry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel.tsx'), 'utf8');
   const previewEntry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel-browse-preview.tsx'), 'utf8');
-  const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
+  const vite = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
   assert.match(sidepanel, /JOB_LIST_REQUEST/);
   assert.match(sidepanel, /jobsForLibrary/);
   assert.match(sidepanel, /onBrowseBoss=\{openBossBrowse\}/);
@@ -3596,7 +3596,7 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
     if (hits.length) offenders.push(`${path.relative(root, file)}: ${hits.join(', ')}`);
   }
   assert.deepEqual(offenders, []);
-  const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
+  const vite = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
   assert.doesNotMatch(vite, /src\/ui\/sidepanel\.js/);
   const sidepanel = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'SidepanelApp.tsx'), 'utf8');
   const comm = fs.readFileSync(path.join(srcDir, 'pages', 'sidepanel', 'CommTab.tsx'), 'utf8');
