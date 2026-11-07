@@ -44,7 +44,7 @@ function QueueSection({ id, title, count, open, onToggle, children }: {
         <span>{title}</span>
         <span className="queue-section-meta">{count}<ChevronUp aria-hidden="true" /></span>
       </button>
-      {open && <div className="queue-section-body">{children}</div>}
+      {open && <div className="flex flex-col gap-1.5 pb-2">{children}</div>}
     </section>
   );
 }
@@ -119,27 +119,27 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
         <div className="min-h-0 flex-1 overflow-auto px-[14px] pb-2">
           {chip !== 'failed' && (
             <QueueSection id="running" title="进行中" count={view.running.length} open={open.running} onToggle={() => toggle('running')}>
-              {view.running.length === 0 && <p className="queue-empty">没有进行中的岗位</p>}
+              {view.running.length === 0 && <p className="text-hint text-queue-muted">没有进行中的岗位</p>}
               {view.running.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
             </QueueSection>
           )}
           {chip !== 'running' && (chip === 'failed' || view.failed.length > 0) && (
             <QueueSection id="failed" title="失败" count={view.failed.length} open={open.failed} onToggle={() => toggle('failed')}>
-              {view.failed.length === 0 && <p className="queue-empty">没有失败的岗位</p>}
+              {view.failed.length === 0 && <p className="text-hint text-queue-muted">没有失败的岗位</p>}
               {view.failed.map((item) => <QueueJob key={item.uid} item={item} batch={batch} failed onRetry={onRetry} />)}
             </QueueSection>
           )}
           {chip === 'all' && (
             <QueueSection id="queued" title="排队" count={model.queued} open={open.queued} onToggle={() => toggle('queued')}>
               {view.queuedPreview.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
-              {view.queuedHidden > 0 && <p className="queue-more" data-queue-hidden={view.queuedHidden}>还有 {view.queuedHidden} 条</p>}
-              {model.queued === 0 && <p className="queue-empty">没有排队的岗位</p>}
+              {view.queuedHidden > 0 && <p className="text-hint text-queue-muted" data-queue-hidden={view.queuedHidden}>还有 {view.queuedHidden} 条</p>}
+              {model.queued === 0 && <p className="text-hint text-queue-muted">没有排队的岗位</p>}
             </QueueSection>
           )}
           {chip === 'all' && (
             <QueueSection id="done" title="已完成" count={model.done.length} open={open.done} onToggle={() => toggle('done')}>
               {view.done.map((item) => <QueueJob key={item.uid} item={item} batch={batch} />)}
-              {model.done.length === 0 && <p className="queue-empty">还没有完成的岗位</p>}
+              {model.done.length === 0 && <p className="text-hint text-queue-muted">还没有完成的岗位</p>}
             </QueueSection>
           )}
         </div>
