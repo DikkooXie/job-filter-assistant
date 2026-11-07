@@ -18,7 +18,7 @@ import AiTab from './AiTab.js';
 import FiltersTab from './FiltersTab.js';
 import GeneralTab from './GeneralTab.js';
 import type { ConfirmRequest, Notification, SettingsPatch } from './types.js';
-import './shell.css';
+import './theme.css';
 
 type ImportMode = 'resume' | 'paste' | 'json';
 
@@ -136,7 +136,7 @@ export default function Options() {
   });
 
   if (!settings || !profile) {
-    return <div className="settings-loading" role={notice?.error ? 'alert' : 'status'}>{notice?.message || '正在加载设置…'}</div>;
+    return <div className="min-h-screen p-12 text-ink-2" role={notice?.error ? 'alert' : 'status'}>{notice?.message || '正在加载设置…'}</div>;
   }
   const score = scoreProfile(profile);
   const title = SETTINGS_PAGES.find((item) => item.id === page)?.label || '个人画像';
@@ -150,6 +150,6 @@ export default function Options() {
       </Tabs>
     </SettingsShell>
     <Dialog open={!!confirm} onOpenChange={(open: boolean) => { if (!open) setConfirm(null); }}><DialogContent><DialogHeader><DialogTitle>{confirm?.title}</DialogTitle><DialogDescription>{confirm?.body}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => setConfirm(null)}>取消</Button><Button variant="destructive" disabled={!!busy} onClick={() => action(async () => { setBusy('正在处理…'); try { await confirm?.run(); setConfirm(null); } finally { setBusy(''); } })}>确认</Button></DialogFooter></DialogContent></Dialog>
-    {busy && <div className="settings-busy" role="status" aria-live="polite"><p>{busy}</p></div>}
+    {busy && <div className="fixed inset-0 z-60 flex items-center justify-center bg-[color-mix(in_srgb,var(--s-page)_72%,var(--s-ink-1))]" role="status" aria-live="polite"><p className="m-0 rounded-xl bg-field px-6 py-5 text-ink-1 shadow-card">{busy}</p></div>}
   </>;
 }

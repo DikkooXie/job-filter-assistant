@@ -1,0 +1,57 @@
+/* 设置页的设计令牌（浅色 / 深色）和页面底色、字体。
+   变量只挂在 .settings-root（options.html 的 body）上，不写 :root，避免和浮窗、侧边栏共用的 globals.css 互相污染。深色跟随系统。
+   这里只放变量值；工具类名在 globals.css 的 @theme inline 里起，布局和组件样式全部写在 TSX 的 Tailwind 类名里。 */
+
+.settings-root {
+  color-scheme: light;
+  --s-page: #f1f2f0; --s-surface: #f1f2f0; --s-surface-2: #e9ecea; --s-inset: #e3e8e5; --s-field: #f6f7f5;
+  --s-border: rgba(20, 32, 38, .10); --s-border-strong: rgba(20, 32, 38, .16);
+  --s-ink-1: #16202a; --s-ink-2: #4b5865; --s-ink-3: #5e6b75;
+  --s-accent: #1c6b5e; --s-accent-soft: rgba(28, 107, 94, .09); --s-accent-line: rgba(28, 107, 94, .28); --s-on-accent: #f7fbfa;
+  --s-up: #1d7a4c; --s-down: #b23b48; --s-down-soft: rgba(178, 59, 72, .08); --s-warn: #94651a;
+  --s-btn-bg: #18232c; --s-btn-ink: #f7fafa; --s-focus: rgba(28, 107, 94, .22);
+  --s-switch-off: #c4cdd3;
+  --s-shadow: 0 1px 2px rgba(16, 28, 34, .05), 0 8px 24px -16px rgba(16, 28, 34, .22);
+
+  /* shadcn 变量映射到上面这组颜色。Select 等弹出层渲染在 body 下，也能继承。 */
+  --background: var(--s-page);
+  --foreground: var(--s-ink-1);
+  --card: var(--s-field);
+  --card-foreground: var(--s-ink-1);
+  --popover: var(--s-field);
+  --popover-foreground: var(--s-ink-1);
+  --primary: var(--s-btn-bg);
+  --primary-foreground: var(--s-btn-ink);
+  --secondary: var(--s-surface-2);
+  --secondary-foreground: var(--s-ink-1);
+  --muted: var(--s-inset);
+  --muted-foreground: var(--s-ink-3);
+  --accent: var(--s-surface-2);
+  --accent-foreground: var(--s-ink-1);
+  --destructive: var(--s-down);
+  --border: var(--s-border-strong);
+  --input: var(--s-border-strong);
+  --ring: var(--s-accent);
+
+  min-height: 100vh;
+  background: var(--s-page);
+  color: var(--s-ink-1);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-root {
+    color-scheme: dark;
+    --s-page: #161d22; --s-surface: #161d22; --s-surface-2: #1a2228; --s-inset: #1d262c; --s-field: #121a1f;
+    --s-border: rgba(214, 230, 238, .10); --s-border-strong: rgba(214, 230, 238, .16);
+    --s-ink-1: #e7edf0; --s-ink-2: #aebac3; --s-ink-3: #828f99;
+    --s-accent: #66c6b2; --s-accent-soft: rgba(102, 198, 178, .12); --s-accent-line: rgba(102, 198, 178, .32); --s-on-accent: #0d1a17;
+    --s-up: #5ec48c; --s-down: #e0818b; --s-down-soft: rgba(224, 129, 139, .1); --s-warn: #d5a75c;
+    --s-btn-bg: #e7edf0; --s-btn-ink: #10171b; --s-focus: rgba(102, 198, 178, .25);
+    --s-switch-off: #3b4750;
+    --s-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 12px 30px -20px rgba(0, 0, 0, .7);
+  }
+}

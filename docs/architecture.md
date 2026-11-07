@@ -95,11 +95,11 @@ BOSS 页面 ──(fetch/XHR 响应)──▶ sniffer ──postMessage──▶
 - 四个标签页：`ProfileTab.tsx`（画像与简历导入）、`AiTab.tsx`（模型接口）、`FiltersTab.tsx`（筛选条件）、`GeneralTab.tsx`（通用、隐私、数据管理、更新）。
 - `UpdatePanel.tsx`（关于与更新）、`ChangelogPage.tsx`（`#changelog`）。
 - 状态与工具：`useInitialSettings.ts`（首屏并发拉取三份数据）、`saveQueue.ts` + `useSaveQueue.ts`（防抖保存）、`useSettingsHash.ts` + `pageHash.ts`（hash 路由）、`aiState.ts`、`filterForm.ts`、`jobStats.ts`、`types.ts`。
-- 样式：正在从手写 CSS 换成 Tailwind 工具类（P6）。
-  - 令牌：颜色、阴影、字号的值在 `shell.css` 的 `.settings-root`（浅色 / 深色两套），`src/pages/globals.css` 的 `@theme inline` 只把它们起成工具类名（`bg-field`、`text-ink-3`、`text-body`……）；`wide:` 断点表示宽于 860px。
+- 样式：设置页布局与组件采用 Tailwind 工具类。
+  - 令牌：颜色和阴影的值在 `theme.css` 的 `.settings-root`（浅色 / 深色两套），`src/pages/globals.css` 的 `@theme inline` 定义字号并把变量映射成工具类名（`bg-field`、`text-ink-3`、`text-body`……）；`wide:` 断点表示宽于 860px。
   - 配方：`recipes.ts` 收两个以上标签页共用的类名组合（分组标题、说明文字、「标签 132px + 控件」字段行 `fieldGrid` / `fieldLabel` / `fieldHint`、按钮 `button()`、开关 `switchInput`、单选卡片 `choiceCard`）。只有一处用到的样式直接写在组件里。
   - 合并：类名统一用 `src/lib/cn.ts` 的 `cn()` 合并，它认识自定义字号令牌；直接用 `cn` 包会把 `text-body` 当颜色丢掉。
-  - 已转换：`GeneralTab.tsx`、`FiltersTab.tsx`、`AiTab.tsx`、`ProfileTab.tsx`、`UpdatePanel.tsx`（无残留 CSS）。尚未转换：`shell.css`（外壳、侧栏、令牌值）。
+  - 设置页外壳、更新日志及各标签页均使用工具类；`theme.css` 仅保留设置页作用域内的主题变量与基础字体。
 
 **侧栏 `pages/sidepanel/`**
 

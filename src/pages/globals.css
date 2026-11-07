@@ -14,10 +14,10 @@
   --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
 }
-/* 设置页令牌：值定义在 src/pages/options/shell.css 的 .settings-root（浅色 / 深色），这里只起工具类名。
+/* 设置页令牌：值定义在 src/pages/options/theme.css 的 .settings-root（浅色 / 深色），这里只起工具类名。
    例：bg-page、text-ink-2、border-line-strong、bg-brand-soft、shadow-card、shadow-focus、text-body。
    新增 --text-* 字号时，要同步登记到 src/lib/cn.ts 的 SIZE_TOKENS，否则 cn() 合并时会丢掉它。
-   wide: 是设置页的双栏断点（>860px），与 shell.css 里 max-width: 860px 的单栏规则对齐。 */
+   wide: 是设置页的双栏断点（>860px），与组件中 max-[860px]: 的单栏规则对齐。 */
 @theme {
   --breakpoint-wide: 861px;
 }

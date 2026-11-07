@@ -69,7 +69,6 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   const root = ROOT;
   const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.tsx'), 'utf8');
   const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.tsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.doesNotMatch(tab, /完整度/);
   assert.match(tab, /简历文件/);
   assert.match(tab, /粘贴文本/);
@@ -84,14 +83,14 @@ test('个人画像页去掉重复完整度，右栏保留缺失项', () => {
   assert.match(tab, /替换现有画像/);
   assert.match(shell, /aria-label="画像完整度"/);
   assert.match(shell, /score\.missing\.map/);
-  assert.match(css, /max-width:\s*1080px/);
-  assert.match(css, /max-width:\s*860px/);
+  assert.match(shell, /max-\[1080px\]:/);
+  assert.match(shell, /max-\[860px\]:/);
 });
 
 test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
   const root = ROOT;
   const html = fs.readFileSync(path.join(root, 'extension-pages/options.html'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'src/pages/options/theme.css'), 'utf8');
   const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
   const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.tsx'), 'utf8');
   assert.match(html, /<body class="settings-root">/);
@@ -269,7 +268,6 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   const shell = fs.readFileSync(path.join(root, 'src/pages/options/SettingsShell.tsx'), 'utf8');
   const logPage = fs.readFileSync(path.join(root, 'src/pages/options/ChangelogPage.tsx'), 'utf8');
   const options = fs.readFileSync(path.join(root, 'src/pages/options/OptionsApp.tsx'), 'utf8');
-  const shellCss = fs.readFileSync(path.join(root, 'src/pages/options/shell.css'), 'utf8');
   assert.match(shell, /检查更新/);
   assert.match(shell, /更新日志/);
   assert.match(shell, /onCheckUpdate/);
@@ -300,23 +298,12 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.doesNotMatch(logPage, /settings-log-scrim/);
   assert.match(options, /isChangelogHash\(location\.hash\) \|\| pageFromHash\(location\.hash\) !== 'general'/);
   assert.match(panel, /location\.hash === '#updated'/);
-  assert.doesNotMatch(shellCss, /settings-log-scrim/);
-  assert.doesNotMatch(shellCss, /settings-log-panel/);
-  assert.doesNotMatch(shellCss, /50vh/);
-  assert.match(shellCss, /padding:\s*18px 28px 14px/);
-  assert.match(shellCss, /margin:\s*0 0 8px/);
-  assert.match(shellCss, /margin:\s*4px 0 0/);
-  assert.match(shellCss, /margin-top:\s*28px/);
-  assert.match(shellCss, /padding:\s*18px 28px 20px/);
-  assert.match(shellCss, /padding-left:\s*18px/);
-  assert.match(shellCss, /margin-bottom:\s*22px/);
-  assert.match(shellCss, /gap:\s*8px 12px/);
-  assert.match(shellCss, /margin-bottom:\s*8px/);
-  assert.match(shellCss, /gap:\s*5px/);
-  assert.match(shellCss, /settings-tl-sec-head/);
-  assert.match(shellCss, /rotate\(90deg\)/);
-  assert.match(shellCss, /settings-tl-sec-body\[hidden\]/);
-  assert.match(shellCss, /settings-tl-features/);
+  assert.match(logPage, /px-7 pt-\[18px\] pb-3\.5/);
+  assert.match(logPage, /px-7 pt-\[18px\] pb-5/);
+  assert.match(logPage, /pl-\[18px\]/);
+  assert.match(logPage, /gap-x-3 gap-y-2/);
+  assert.match(logPage, /group-aria-expanded:rotate-90/);
+  assert.match(logPage, /hidden=\{hidden \|\| undefined\}/);
   assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
   assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);

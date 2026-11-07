@@ -9,9 +9,14 @@ import type { SaveStatus } from './saveQueue.js';
 import type { Notification } from './types.js';
 import { CHANGELOG_RETURN_KEY, SETTINGS_PAGES, changelogReturnTarget, formatSavedClock, isChangelogHash, nextNavIndex, sectionTargetId } from './pageHash.js';
 import ChangelogPage from './ChangelogPage.js';
+import { cn } from '../../lib/cn.js';
+import { focusRing } from './recipes.js';
+
+const versionLink = cn('cursor-pointer border-0 bg-transparent p-0 text-hint leading-[1.3] underline underline-offset-2', focusRing);
+const railMeta = 'm-0 text-hint leading-[1.6] text-ink-3';
 
 function Icon({ name }: { name: string }) {
-  const common = { viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
+  const common = { className: 'size-4 flex-none max-[860px]:hidden', viewBox: '0 0 16 16', 'aria-hidden': true, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
   if (name === 'profile') {
     return <svg {...common}><circle cx="8" cy="5.2" r="2.2" /><path d="M3.3 13.1c.7-2.2 2.5-3.3 4.7-3.3s4 1.1 4.7 3.3" /></svg>;
   }
@@ -46,26 +51,25 @@ function SaveStatusView({ status, onRetry }: SaveStatusViewProps) {
   if (!status || status.phase === 'idle') return null;
   const failed = status.phase === 'error';
   const saved = status.phase === 'saved';
-  const className = `save-status${saved ? ' is-saved' : ''}${failed ? ' is-error' : ''}`;
-  return <div className={className} role="status" aria-live="polite">
-    <span className="save-dot" aria-hidden="true" />
+  return <div className="inline-flex items-center gap-1.5 whitespace-nowrap text-hint leading-[1.4] text-ink-3" role="status" aria-live="polite">
+    <span className={cn('size-1.5 rounded-full bg-ink-3', saved && 'bg-ok', failed && 'bg-danger')} aria-hidden="true" />
     {status.phase === 'saving' && <span>保存中…</span>}
     {saved && <span>已自动保存 · {formatSavedClock(status.savedAt)}</span>}
-    {failed && <button type="button" className="save-retry" onClick={onRetry}>保存失败，重试</button>}
+    {failed && <button type="button" className={cn('cursor-pointer border-0 bg-transparent p-0 text-danger underline underline-offset-2', focusRing)} onClick={onRetry}>保存失败，重试</button>}
   </div>;
 }
 
 export function ProfileRail({ score }: { score: ProfileScore }) {
   const ratio = Math.max(0, Math.min(100, Number(score.score) || 0));
-  return <aside className="settings-rail" aria-label="画像完整度">
-    <div className="rail-card">
-      <div className="rail-title">完整度</div>
-      <div className="rail-score">{score.score}</div>
-      <p className="rail-meta">{score.completed} / {score.total} 项</p>
-      <div className="rail-meter" aria-hidden="true"><span style={{ width: `${ratio}%` }} /></div>
+  return <aside className="sticky top-[38px] max-[1080px]:static max-[1080px]:block max-[1080px]:[grid-row:1]" aria-label="画像完整度">
+    <div className="rounded-[14px] bg-surface p-5 shadow-card">
+      <div className="text-note leading-[1.4] font-semibold text-ink-2">完整度</div>
+      <div className="mt-2.5 mb-1.5 text-[30px] leading-none font-semibold tracking-[-.02em] text-ink-1">{score.score}</div>
+      <p className={railMeta}>{score.completed} / {score.total} 项</p>
+      <div className="my-3 h-1.5 overflow-hidden rounded-full bg-well" aria-hidden="true"><span className="block h-full bg-brand" style={{ width: `${ratio}%` }} /></div>
       {score.missing.length
-        ? <ul className="rail-missing">{score.missing.map((item) => <li key={item}>{item}</li>)}</ul>
-        : <p className="rail-meta">画像已相当完整</p>}
+        ? <ul className="m-0 mt-2 list-none p-0 max-[1080px]:grid max-[1080px]:[grid-template-columns:repeat(auto-fit,minmax(140px,1fr))] max-[1080px]:gap-x-4">{score.missing.map((item) => <li className="border-t border-line py-1.5 text-note leading-[1.45] text-ink-2" key={item}>{item}</li>)}</ul>
+        : <p className={railMeta}>画像已相当完整</p>}
     </div>
   </aside>;
 }
@@ -80,15 +84,15 @@ interface VersionRowProps {
 
 function VersionRow({ version, logOpen, onCheckUpdate, onOpenLog, logButtonRef }: VersionRowProps) {
   if (!version) return null;
-  return <div className={logOpen ? 'settings-version is-log' : 'settings-version'}>
-    <div className="settings-version-num">版本 {version}</div>
-    <div className="settings-version-links">
-      <button type="button" className="settings-version-check" onClick={onCheckUpdate}>检查更新</button>
-      <span className="settings-version-dot" aria-hidden="true">·</span>
+  return <div className="mt-auto border-t border-line pt-3.5 text-hint leading-[1.4] text-ink-3 max-[860px]:hidden">
+    <div>版本 {version}</div>
+    <div className="mt-[5px] flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <button type="button" className={cn(versionLink, logOpen ? 'font-normal text-ink-3 decoration-[color-mix(in_srgb,var(--s-ink-3)_35%,transparent)]' : 'font-medium text-brand decoration-brand-line')} onClick={onCheckUpdate}>检查更新</button>
+      <span className="text-[10px] text-ink-3 opacity-45" aria-hidden="true">·</span>
       <button
         ref={logButtonRef}
         type="button"
-        className="settings-version-log"
+        className={cn(versionLink, 'font-normal text-ink-3 decoration-[color-mix(in_srgb,var(--s-ink-3)_45%,transparent)] aria-[current=page]:font-semibold aria-[current=page]:text-brand aria-[current=page]:decoration-brand-line')}
         aria-current={logOpen ? 'page' : undefined}
         onClick={onOpenLog}
       >更新日志</button>
@@ -103,9 +107,9 @@ interface NoticeProps {
 
 function Notice({ notice, onDismiss }: NoticeProps) {
   if (!notice) return null;
-  return <div className={notice.error ? 'settings-notice is-error' : 'settings-notice'} role={notice.error ? 'alert' : 'status'}>
+  return <div className={cn('mb-6 flex items-start justify-between gap-3 rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-control leading-[1.5] text-ink-1', notice.error && 'bg-danger-soft text-danger')} role={notice.error ? 'alert' : 'status'}>
     <span>{notice.message}</span>
-    <button type="button" aria-label="关闭提示" onClick={onDismiss}>×</button>
+    <button type="button" className={cn('cursor-pointer flex-none border-0 bg-transparent px-0.5 py-0 leading-none text-inherit', focusRing)} aria-label="关闭提示" onClick={onDismiss}>×</button>
   </div>;
 }
 
@@ -157,15 +161,15 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
     {status?.phase === 'error' && <SaveStatusView status={status} onRetry={onRetry} />}
   </> : null;
 
-  return <div className="settings-shell" inert={busy ? true : undefined}>
-    <aside className="settings-sidebar">
-      <div className="settings-brand">
-        <img className="settings-brand-mark" src={markUrl} alt="" width={28} height={28} />
-        <span className="settings-brand-name">Offercome</span>
-        {dev && <span className="settings-dev">dev</span>}
+  return <div className="grid min-h-screen grid-cols-[248px_minmax(0,1fr)] bg-page max-[860px]:grid-cols-[minmax(0,1fr)]" inert={busy ? true : undefined}>
+    <aside className="sticky top-0 flex h-screen flex-col border-r border-line bg-page px-[18px] pt-[30px] pb-[22px] max-[860px]:z-[5] max-[860px]:h-auto max-[860px]:border-r-0 max-[860px]:border-b max-[860px]:p-0">
+      <div className="mb-[22px] flex items-center gap-2.5 max-[860px]:hidden">
+        <img className="block size-7 flex-none object-contain" src={markUrl} alt="" width={28} height={28} />
+        <span className="text-body leading-[1.3] font-semibold text-ink-1">Offercome</span>
+        {dev && <span className="flex-none rounded-[5px] border border-brand-line bg-brand-soft px-[5px] py-px text-[10.5px] leading-[1.4] font-semibold text-brand">dev</span>}
       </div>
-      <nav className="settings-nav" aria-label="设置页面" onKeyDown={onNavKeyDown}>
-        {SETTINGS_PAGES.map((item) => <a key={item.id} href={`#${item.id}`} aria-current={!logOpen && page === item.id ? 'page' : undefined}>
+      <nav className="flex flex-col gap-1 max-[860px]:w-full max-[860px]:flex-row max-[860px]:overflow-x-auto max-[860px]:px-2.5 max-[860px]:py-2" aria-label="设置页面" onKeyDown={onNavKeyDown}>
+        {SETTINGS_PAGES.map((item) => <a className={cn('flex min-h-[34px] items-center gap-2 rounded-lg px-2.5 py-[9px] text-body leading-[1.2] text-ink-2 no-underline hover:bg-surface-2 hover:text-ink-1 aria-[current=page]:bg-well aria-[current=page]:font-semibold aria-[current=page]:text-ink-1 max-[860px]:flex-none max-[860px]:whitespace-nowrap', focusRing)} key={item.id} href={`#${item.id}`} aria-current={!logOpen && page === item.id ? 'page' : undefined}>
           <Icon name={item.id} />
           <span>{item.label}</span>
         </a>)}
@@ -174,19 +178,19 @@ export default function SettingsShell({ page, hash, title, status, onRetry, vers
     </aside>
     {logOpen
       ? <ChangelogPage channel={updateChannel} version={version} onBack={backFromLog} banner={banner} />
-      : <div className="settings-main">
-        <div className={page === 'profile' ? 'settings-frame is-profile' : 'settings-frame'}>
-          <header className="settings-header">
-            <div className="settings-heading">
-              <h1>{title}</h1>
-              {lead && <p className="settings-lead">{lead}</p>}
+      : <div className="min-w-0 px-12 pt-12 pb-24 max-[860px]:px-[18px] max-[860px]:pt-6 max-[860px]:pb-20">
+        <div className={cn('max-w-[760px]', page === 'profile' && 'max-w-[1140px]')}>
+          <header className="mb-8 flex items-center justify-between gap-4 border-b border-line pb-4 max-[860px]:flex-col max-[860px]:items-start max-[860px]:gap-2">
+            <div className="min-w-0">
+              <h1 className="m-0 text-[26px] leading-[1.3] font-semibold tracking-[-.015em] text-ink-1">{title}</h1>
+              {lead && <p className="mt-1 text-control leading-[1.6] text-ink-3">{lead}</p>}
             </div>
             <SaveStatusView status={status} onRetry={onRetry} />
           </header>
           <Notice notice={notice} onDismiss={onDismissNotice} />
           {page === 'profile'
-            ? <div className="settings-columns"><div className="settings-page">{children}</div>{rail}</div>
-            : <div className="settings-page">{children}</div>}
+            ? <div className="grid grid-cols-[minmax(0,1fr)_296px] items-start gap-7 max-[1080px]:grid-cols-[minmax(0,1fr)]"><div>{children}</div>{rail}</div>
+            : <div>{children}</div>}
         </div>
       </div>}
   </div>;
