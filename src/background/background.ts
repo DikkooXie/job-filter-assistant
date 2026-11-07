@@ -101,7 +101,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   try {
     await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   } catch {}
-  // 扩展内更新完成后重新打开设置页（标记由 src/ui/update.js 写入）
+  // 扩展内更新完成后重新打开设置页（标记由 src/extension/update.ts 写入）
   try {
     const { reopenAfterUpdate } = await chrome.storage.local.get('reopenAfterUpdate');
     if (reopenAfterUpdate) {

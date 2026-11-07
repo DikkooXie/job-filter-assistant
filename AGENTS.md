@@ -19,38 +19,51 @@ Chrome / Edge 扩展（Manifest V3）：浏览 BOSS直聘 时被动收录岗位�
 ```bash
 npm run build     # 构建到 dist/，开发产物名称带 · dev；发布脚本使用正式名称
 npm run dev       # Vite 开发服务器（只方便调样式，扩展能力需要构建后加载 dist/）
-npm test          # 逻辑测试：node scripts/test_logic.mjs
+npm test          # 逻辑测试：tsx scripts/test.ts；只跑部分：npm test -- update ensure
+npm run typecheck # tsc --noEmit，严格模式，全仓零错误
+npm run lint      # ESLint
 npm run release   # 打包发布，需先确认 build 通过
 ```
 
-验证界面改动的标准流程：`npm run build` → 浏览器扩展管理页对已加载的 `dist/` 点「重新加载」→ 打开设置页截图。改完跑一次 `npm test`。
+验证界面改动的标准流程：`npm run build` → 浏览器扩展管理页对已加载的 `dist/` 点「重新加载」→ 打开设置页截图。改完跑一遍 `npm run typecheck`、`npm run lint`、`npm test`、`npm run build`，CI（`.github/workflows/checks.yml`）也按这个顺序检查。
 
 ## 必须遵守的硬约束
 
 - **存储字段不能改名或改结构**。设置的 key 是 `STORAGE_KEYS.settings`，画像、岗位、AI 接口各有自己的 key。用户已经有数据，改名会直接丢数据。
-- **`showBadge` 字段被内容脚本硬编码读取**。`src/content/` 下的文件不经过打包（被原样复制），不能 `import` 常量文件，所以键名是字面量写死的。改这个字段名必须同时改内容脚本。
+- **`showBadge` 字段被内容脚本硬编码读取**。`src/content/` 下的文件是 TypeScript，但构建时逐个单独转译成同名 `.js`、不与其他模块打包，产物路径固定（manifest 指向它们）；它们作为普通内容脚本运行，不能 `import` 常量文件，所以键名是字面量写死的。改这个字段名必须同时改内容脚本。
 - **不引入代码分割、不改构建输出文件名**。构建产物用固定文件名（`assets/[name].js`，无哈希），扩展内自动更新靠覆盖同名文件完成；加哈希会让每次发版都残留旧文件。
 - **后台消息类型名不变**：`SETTINGS_GET/SAVE`、`PROFILE_GET/SAVE/CLEAR`、`AI_PROVIDERS_GET/SAVE`、`AI_PROVIDER_TEST/MODELS`、`AI_RESUME_EXTRACT`、`JOB_LIST_REQUEST`、`JOB_EXPORT_REQUEST`、`JOB_CLEAR_REQUEST`。界面重构不应该新增或改名消息。
-- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖。保存失败且没有更新的编辑时，按原间隔重新排队。页面隐藏、`pagehide`、`beforeunload` 时立即发出未保存内容，不能只靠组件卸载。实现在 `src/pages/options/saveQueue.js`。
+- **保存节奏**：设置 200ms、画像 600ms、AI 接口 500ms 防抖。保存失败且没有更新的编辑时，按原间隔重新排队。页面隐藏、`pagehide`、`beforeunload` 时立即发出未保存内容，不能只靠组件卸载。实现在 `src/pages/options/saveQueue.ts`。
 - **更新流程里有一处不能动的顺序**：点击安装后必须立即弹出文件夹选择窗口（保留用户点击手势），中间不能先 `await` 其他异步操作。
+
+## 代码约定
+
+- 全仓 TypeScript 严格模式（含 `noUncheckedIndexedAccess`）。不写 `any`，不用 `@ts-ignore` / `@ts-nocheck` / `@ts-expect-error`。测试里需要不完整的样本时，用 `scripts/tests/harness.ts` 的 `partialJob`，或 `as unknown as T` 并在旁边写明原因。
+- 相对导入写 `.js` 后缀（TypeScript 会解析到同名 `.ts` / `.tsx`）；写 `.ts` 后缀会报 TS5097。
+- 只支持 BOSS直聘。不要恢复 51job 等其他平台的分支；历史设置里的 `mode: 'qcwy'` 在 `mergeSettings` 中归一到 `auto`。
 
 ## 现有模块速查
 
-`src/` 按「谁在用」分层：`common/` 纯逻辑（不碰 DOM、不直接碰 chrome API），`extension/` 扩展 API 适配，`background/`、`content/` 是扩展运行时脚本，`pages/` 是三个 React 页面，`components/ui/` 是 shadcn 组件，`vendor/` 是第三方产物。
+`src/` 按「谁在用」分层：`common/` 纯逻辑（不碰 DOM；只有 `jobsStore` / `settingsStore` / `captureLog` 这类存储模块读写 `chrome.storage`），`extension/` 扩展 API 适配，`background/`、`content/` 是扩展运行时脚本，`pages/` 是三个 React 页面，`components/ui/` 是 shadcn 组件，`vendor/` 是第三方产物。
 
-- `src/pages/options/` — 设置页（React）：`OptionsApp.jsx` 是框架与业务编排，四个标签页、共享控件、初始加载及保存队列同目录。入口是 `extension-pages/options.html`，构建后由 `dist/options.html` 加载。
-- `src/pages/options/UpdatePanel.jsx` — 设置页里的「关于与更新」。
-- `src/pages/sidepanel/` — 侧栏：`SidepanelApp.jsx` 编排，`views.jsx` 视图、`browseModel.js` 列表/详情模型、`batchQueue.js` 批量队列、`commTab.js` 沟通页。
-- `src/pages/popup/PopupApp.jsx` — 工具栏浮窗。
-- `src/common/constants.js` — 存储 key、消息类型、默认设置与默认筛选条件。
-- `src/common/profile.js` — 画像结构、清洗、合并、完整度评分（11 项）。
-- `src/common/ai/providers.js` — 4 种协议、预设供应商、清洗与校验。
-- `src/common/text.js` — 文本小工具（分隔字符串转数组等）。
-- `src/extension/messages.js` — 页面 → background 的消息发送与超时处理。
-- `src/extension/update.js` — 扩展内更新（下载、校验、覆盖安装）。
-- `src/extension/resumeParser.js` — PDF / DOCX 解析。
-- `src/components/ui/` — shadcn/ui 组件。
-- `scripts/test_logic.mjs` — 唯一的测试入口，只测逻辑，不测界面。内容脚本用 `vm` 加桩测试。
+- `src/pages/options/` — 设置页（React）：`OptionsApp.tsx` 是框架与业务编排，四个标签页（`ProfileTab` / `AiTab` / `FiltersTab` / `GeneralTab`）、共享控件、初始加载及保存队列同目录。入口是 `extension-pages/options.html`，构建后由 `dist/options.html` 加载。
+- `src/pages/options/UpdatePanel.tsx` — 设置页里的「关于与更新」；`ChangelogPage.tsx` 是 `#changelog` 更新日志。
+- `src/pages/sidepanel/` — 侧栏：`SidepanelApp.tsx` 编排，`views.tsx` 视图、`browseModel.ts` 列表/详情模型、`batchQueue.ts` 批量队列、`CommTab.tsx` + `commTab.ts` 沟通页、`confirmQueue.ts` + `ConfirmDialog.tsx` 确认弹层。
+- `src/pages/popup/PopupApp.tsx` — 工具栏浮窗。
+- `src/common/types.ts` — 共享的数据类型（岗位、设置、画像、AI 接口等），只有类型，构建后不产出文件。
+- `src/common/constants.ts` — 存储 key、消息类型、默认设置与默认筛选条件。
+- `src/common/platforms.ts` — BOSS直聘 接口识别、岗位归一化与 uid 规则。
+- `src/common/profile.ts` — 画像结构、清洗、合并、完整度评分（11 项）。
+- `src/common/ai/` — `providers.ts` 4 种协议与预设供应商，`client.ts` 请求，`prompts.ts` 提示词与结果清洗，`privacy.ts` 脱敏。
+- `src/common/text.ts` — 文本小工具（分隔字符串转数组等）。
+- `src/extension/messages.ts` — 页面 → background 的消息发送与超时处理。
+- `src/extension/update.ts` — 扩展内更新（下载、校验、覆盖安装）；纯逻辑在 `src/common/update.ts`。
+- `src/extension/resumeParser.ts` — PDF / DOCX 解析。
+- `src/background/background.ts`、`src/content/collector.ts`、`src/content/sniffer.ts` — 扩展运行时脚本。
+- `src/components/ui/` — shadcn/ui 组件（`.tsx`），`cn` 来自官方 `cn` 包。
+- `scripts/test.ts` — 唯一的测试入口，只测逻辑，不测界面。用例按领域放在 `scripts/tests/*.test.ts`，共用 `scripts/tests/harness.ts`；内容脚本先用 esbuild 转译，再用 `vm` 加桩测试。
+
+详细的目录、数据流和执行细节见 `docs/architecture.md`。
 
 ## 安全与提交规矩
 

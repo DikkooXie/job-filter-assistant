@@ -1,5 +1,5 @@
 // 扩展内更新的纯逻辑：版本比较、GitHub Release 解析、安装包校验。
-// 不依赖 chrome.* / DOM，可直接在 Node 下单测（scripts/test_logic.mjs）。
+// 不依赖 chrome.* / DOM，可直接在 Node 下单测（scripts/tests/update.test.ts）。
 import type { UpdateChannel } from './types.js';
 
 export const RELEASE_REPO = 'DikkooXie/job-filter-assistant';

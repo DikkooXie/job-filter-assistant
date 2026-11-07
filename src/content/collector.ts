@@ -498,11 +498,9 @@
     return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
   }
 
-  // 定位聊天输入框：优先各平台已知选择器，再退化到「可见的大号可编辑元素」启发式
+  // 定位聊天输入框：优先 BOSS 已知选择器，再退化到「可见的大号可编辑元素」启发式
   function findChatInput(): HTMLElement | null {
-    const known = PLATFORM === 'boss'
-      ? ['#chat-input', '.chat-input', '.conversation-editor [contenteditable]', '.chat-editor [contenteditable]', 'textarea.input-area']
-      : ['.im-input textarea', '.message-input textarea', '[class*="chat-input"] textarea', '.im-editor [contenteditable]', 'textarea[placeholder*="消息"]', 'textarea[placeholder*="聊"]'];
+    const known = ['#chat-input', '.chat-input', '.conversation-editor [contenteditable]', '.chat-editor [contenteditable]', 'textarea.input-area'];
     for (const sel of known) {
       const el = document.querySelector<HTMLElement>(sel);
       if (el && isVisible(el)) return el;
@@ -526,16 +524,12 @@
   // 找「开始/继续沟通」按钮：岗位详情页/列表抽屉里点它会（整页）跳转到聊天页。
   // 优先用真机实测确认的稳定 class；文字匹配作兜底（class 改版时仍能命中）。
   function findStartChatButton(): HTMLElement | null {
-    if (PLATFORM === 'boss') {
-      // 实测：列表页抽屉 = a.op-btn-chat；独立详情页 = a.btn-startchat
-      for (const sel of ['a.op-btn-chat', 'a.btn-startchat', '.op-btn-chat', '.btn-startchat']) {
-        const el = document.querySelector<HTMLElement>(sel);
-        if (el && isVisible(el)) return el;
-      }
+    // 实测：列表页抽屉 = a.op-btn-chat；独立详情页 = a.btn-startchat
+    for (const sel of ['a.op-btn-chat', 'a.btn-startchat', '.op-btn-chat', '.btn-startchat']) {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (el && isVisible(el)) return el;
     }
-    const re = PLATFORM === 'boss'
-      ? /立即沟通|继续沟通|马上沟通|开始聊天/
-      : /立即沟通|继续沟通|在线沟通|聊一聊|投递并沟通/;
+    const re = /立即沟通|继续沟通|马上沟通|开始聊天/;
     const nodes = Array.from(document.querySelectorAll<HTMLElement>('a, button, [role="button"], .btn, .op-btn, .btn-startchat, .start-chat'));
     return nodes
       .filter(isVisible)

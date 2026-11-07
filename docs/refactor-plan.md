@@ -1,9 +1,18 @@
 # 重构计划：只做 BOSS + 架构梳理 + 全项目 TypeScript
 
-状态：P1、P2 已完成（195 通过 / 0 失败，构建通过）；P3 起未开始
+状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 未开始
+当前：`npm run typecheck` 零错误、`npm run lint` 零警告、`npm test` 195 通过 / 0 失败、`npm run build` 通过
 分支：`refactor/codebase-cleanup`（基于 `dev`，两者均已推送 `personal`）
 基线：`adbf521`，`npm test` 198 通过 / 0 失败，`npm run build` 通过
 P1+P2 后：`npm test` 195 通过 / 0 失败（删除 4 个 51job 专属用例、新增 1 个「未注册平台返回空」用例，另把 8 处跨平台用例改写为 BOSS 数据）
+
+| 阶段 | 提交 | 说明 |
+| --- | --- | --- |
+| P1 + P2 | `66938a9` | 删除旧版 UI，收敛为只支持 BOSS |
+| P3 目录 | `7e370bd` | `src/` 按职责分层，`git mv` 保留重命名 |
+| P4 工具 | `2d3d5df` | TypeScript / tsx / ESLint / Prettier，构建支持 TS 运行时脚本 |
+| P5 类型化 | `153bbd8` → `d691883` | common → extension → options → sidepanel/popup → content/background → shadcn/入口 → 脚本，每层一个提交 |
+| P4 测试 | `8add971` | `test_logic.mjs` 拆成 `scripts/tests/` 下 12 个 TS 套件 |
 
 ## 提交节奏（已与用户确认）
 
@@ -41,7 +50,7 @@ P1+P2 后：`npm test` 195 通过 / 0 失败（删除 4 个 51job 专属用例�
 
 - 根目录 `popup.html`、`sidepanel.html`（与 `extension-pages/` 重复且指向旧 JS）。
 - `src/ui/popup.js`、`src/ui/sidepanel.js`、`src/ui/design.css`、`src/ui/popup.css`、`src/ui/sidepanel.css`。
-- `dev/popup.html`、`dev/sidepanel.html`、`dev/mock-chrome.js`（旧预览入口）；保留 `dev/browse-preview-chrome.js`，它被 `extension-pages/sidepanel-browse-preview.jsx` 引用。
+- `dev/popup.html`、`dev/sidepanel.html`、`dev/mock-chrome.js`（旧预览入口）；保留 `dev/browse-preview-chrome.js`，它被 `extension-pages/sidepanel-browse-preview.jsx` 引用（现为 `dev/browse-preview-chrome.ts` 与 `.tsx` 入口）。
 - `src/ui/ui-common.js` 中只剩旧页面使用的 `h` / `esc` / `toast` / `debounce`，以及无人使用的 `fromList` / `verdictLabel`；`send` / `toList` 迁入新位置（见 P3 目录方案）。
 
 注意：`cn` 依赖**保留**。此前梳理时只搜了 `src/react` 与 `extension-pages`，误判为未使用；实际 `src/components/ui/` 的 10 个 shadcn 组件都 `import { cn } from 'cn'`（shadcn 官方的 Tailwind 类名合并包）。
@@ -62,11 +71,13 @@ P1+P2 后：`npm test` 195 通过 / 0 失败（删除 4 个 51job 专属用例�
 - 平台筛选（`view.platform` + 侧栏「平台」分段控件）一并移除；`filterVisibleJobs` 仍保留可选的 `platform` 参数（有用例覆盖），便于以后接入新平台。
 - 侧栏/CSV 的平台标签对非 `boss` 的历史数据显示「其他平台」；旧 `qcwy` 岗位数据在存储里原样保留，不迁移、不删除，只是不再新增。
 - `src/common/settingsStore.js` 的 `mergeSettings` 把历史 `mode: 'qcwy'` 归一到 `auto`，存储键与结构不变。
-- `dev/browse-preview-chrome.js` 的虚构岗位全部改为 BOSS，预览页与正式界面一致。
+- `dev/browse-preview-chrome.js`（现 `.ts`）的虚构岗位全部改为 BOSS，预览页与正式界面一致。
 
 验收：BOSS 收录、归一化、筛选、打分相关用例全部保留并通过（195 通过 / 0 失败）；界面不再出现 51job 选项；`npm run build` 通过。
 
-### P3 架构梳理（目录与模块边界）
+### P3 架构梳理（目录与模块边界，已完成）
+
+下文路径是搬迁前的旧路径，保留作记录。未完成项：`views.tsx`（现 1341 行）与 `browse.css` 的拆分，移到 P6 随样式改造一起做，避免同一批文件改两次。
 
 目标结构（`src/` 下按「谁在用」分层，而不是按技术类型堆叠）：
 
@@ -90,13 +101,17 @@ src/
 - `views.jsx`（1165 行）按列表 / 详情 / 弹层拆分；`browse.css`（2142 行）随组件拆分。
 - 路径别名统一用 `@/`，避免 `../../` 深度相对路径。
 
-### P4 测试与工程化
+### P4 测试与工程化（已完成）
+
+测试入口现为 `scripts/test.ts`，套件为 build / platforms / profile / filters / ai / update / badge / saveQueue / options / sidepanel / ensure / confirm。Prettier 已配置（`npm run format`），但尚未对全仓统一格式化，避免与 P6 的大改动冲突。
 
 - `scripts/test_logic.mjs`（3692 行）拆成 `scripts/tests/` 下按领域划分的套件（platforms / profile / filters / prompts / update / saveQueue / sidepanel…），保留 `npm test` 单入口与全部用例。
 - 引入 ESLint + Prettier，配置与现有代码风格对齐（单引号、分号、2 空格），先只对新增/改动文件强制，再统一格式化。
 - CI：`.github/workflows/checks.yml` 增加 `dev`、`refactor/**` 触发分支与 lint / 类型检查步骤。
 
-### P5 TypeScript 迁移
+### P5 TypeScript 迁移（已完成）
+
+实际落点：测试走「`esbuild` 把 TS 源转成 JS 再交给 `vm`」（`scripts/tests/harness.ts` 的 `runtimeScript`），不依赖构建顺序；全程未用 `any` 与类型抑制注释，也没有留下 `TODO(ts)`。迁移中只放宽了两处函数签名：`filters.ts` 接受 `Partial<JobFilters>`，`releaseRequest` 渠道参数可省略，行为不变。
 
 - 依赖：`typescript`，脚本运行用 `tsx`（`npm test`、`npm run release` 直接跑 `.ts`，不需要预编译）。
 - `tsconfig.json`：`strict: true`、`noUncheckedIndexedAccess: true`、`moduleResolution: bundler`、别名 `@/*`；React 页面用 `.tsx`。
@@ -114,6 +129,7 @@ src/
 
 ## 验证清单（每阶段）
 
+- [ ] `npm run typecheck`、`npm run lint` 通过
 - [ ] `npm test` 全过
 - [ ] `npm run build` 通过
 - [ ] `dist/` 加载扩展，BOSS 列表页收录 → 侧栏出现岗位 → 单条分析 → 导出，路径可用

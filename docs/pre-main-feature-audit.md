@@ -2,6 +2,20 @@
 
 基线：`feat/vite-ui-roadmap` @ `c55ca331`（本单分支 `agent/issue-83` 与之相同）。对照日期 2026-11-04。只读代码、规格和 GitHub issue / PR，没有改功能，没有合 `main`，没有打 Release，没有改 `README.md`（与 #82 并行）。
 
+> **路径说明（2026-11-07 补）**：本文是 `c55ca331` 时的快照，证据里的路径没有改写。之后 `refactor/codebase-cleanup` 搬迁了目录并迁到 TypeScript，对照如下：
+>
+> | 体检时路径 | 现在 |
+> | --- | --- |
+> | `src/react/settings/*.jsx` | `src/pages/options/*.tsx` |
+> | `src/react/options.jsx` | `src/pages/options/OptionsApp.tsx` |
+> | `src/react/sidepanel.jsx` | `src/pages/sidepanel/SidepanelApp.tsx` |
+> | `src/react/sidepanel/views.jsx`、`browseModel.js` | `src/pages/sidepanel/views.tsx`、`browseModel.ts` |
+> | `src/common/*.js`、`src/background/*.js`、`src/content/*.js` | 同目录同名 `.ts` |
+> | `vite.config.js`、`scripts/release.mjs` | `vite.config.ts`、`scripts/release.ts` |
+> | `src/ui/*`、根目录 `sidepanel.html` / `popup.html`、`dev/sidepanel.html`、`dev/mock-chrome.js` | 已删除（P2-7 的双入口问题随之消失） |
+>
+> 51job（前程无忧）支持已移除，下文涉及它的验证项不再适用。
+
 没有在已登录的 BOSS直聘 / 前程无忧上点过收录、打分或「打开原岗位」。下面凡写「真机未验」，都是这个缺口，不是推断线上已经坏了。
 
 分级：
