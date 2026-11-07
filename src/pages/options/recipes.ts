@@ -27,6 +27,15 @@ export const fieldLabel = 'text-control leading-normal font-medium text-ink-2 wi
 /** 字段下方说明。 */
 export const fieldHint = `${hint} mt-1.5 block`;
 
+/** 标签输入框外框：看起来是一个输入框，里面排已添加的标签和真正的 input。 */
+export const tagBox = 'flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-field px-2 py-1.5 text-ink-1 focus-within:border-brand focus-within:shadow-focus';
+
+/** 标签输入框里的一枚标签；删除按钮各页自己写。 */
+export const tagChip = 'inline-flex h-6 items-center rounded-md bg-well pr-0.5 pl-2 text-note leading-none text-ink-1';
+
+/** 标签输入框里真正打字的 input，无边框，至少留 8 个字宽。 */
+export const tagInput = 'h-6 min-w-[8em] flex-[1_1_8em] border-0 bg-transparent p-0 text-body text-ink-1 outline-none placeholder:text-ink-3';
+
 /**
  * 设置页按钮。默认描边款；primary 深色实心，ghost 无边框，danger 红字描边。
  *

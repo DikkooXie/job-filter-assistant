@@ -758,6 +758,13 @@
   .settings-rail {
     position: static;
     display: block;
+    grid-row: 1;
+  }
+
+  .rail-missing {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    column-gap: 16px;
   }
 }
 

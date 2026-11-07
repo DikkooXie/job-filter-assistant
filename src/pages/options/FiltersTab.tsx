@@ -5,18 +5,13 @@ import { cn } from '../../lib/cn.js';
 import { commitTags, filterSettingsPatch, parseSalaryMinK, removeLastTag } from './filterForm.js';
 import type { Settings } from '../../common/types.js';
 import type { UpdateSettings } from './types.js';
-import { fieldGrid, fieldHint, fieldLabel, focusRing, groupTitle, hint, rowTitle, switchInput } from './recipes.js';
+import { fieldGrid, fieldHint, fieldLabel, focusRing, groupTitle, hint, rowTitle, switchInput, tagBox, tagChip, tagInput } from './recipes.js';
 
 /** 分组：组与组之间一条分隔线，第一组贴顶。 */
 const group = 'mt-[30px] border-t border-line pt-7 first:mt-0 first:border-t-0 first:pt-0';
 
 /** 一组字段纵向排列。 */
 const fields = 'flex flex-col gap-[11px]';
-
-/** 标签输入框外框：看起来是一个输入框，里面排已添加的标签和真正的 input。 */
-const tagBox = 'flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-field px-2 py-1.5 text-ink-1 focus-within:border-brand focus-within:shadow-focus';
-
-const chip = 'inline-flex h-6 items-center rounded-md bg-well pr-0.5 pl-2 text-note leading-none text-ink-1';
 
 /** 去掉数字输入框右侧的上下箭头。 */
 const noSpinner = '[-moz-appearance:textfield] [&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:[-webkit-appearance:none] [&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:[-webkit-appearance:none]';
@@ -40,13 +35,13 @@ function TagEditor({ label, value = [], onChange, tone, hint: note }: TagEditorP
     <span className={fieldLabel}>{label}</span>
     <div>
       <div className={tagBox}>
-        {value.map((item, index) => <span key={`${item}-${index}`} className={cn(chip, tone === 'risk' && 'bg-danger-soft text-danger')}>
+        {value.map((item, index) => <span key={`${item}-${index}`} className={cn(tagChip, tone === 'risk' && 'bg-danger-soft text-danger')}>
           {item}
           <button type="button" className={cn('inline-grid size-[18px] cursor-pointer place-items-center rounded-sm bg-transparent text-[14px] leading-none text-inherit', focusRing)} aria-label={`删除 ${item}`} onClick={() => onChange(value.filter((_, n) => n !== index))}>×</button>
         </span>)}
         <input
           aria-label={label}
-          className="h-6 min-w-[8em] flex-[1_1_8em] border-0 bg-transparent p-0 text-body text-ink-1 outline-none placeholder:text-ink-3"
+          className={tagInput}
           placeholder={value.length ? '' : '回车添加'}
           value={input}
           onChange={(event: ChangeEvent<HTMLInputElement>) => setInput(event.target.value)}

@@ -573,23 +573,22 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {
-  const root = ROOT;
-  const profile = fs.readFileSync(path.join(root, 'src/pages/options/profile.css'), 'utf8');
-  const tab = fs.readFileSync(path.join(root, 'src/pages/options/ProfileTab.tsx'), 'utf8');
-  assert.match(profile, /\.paste-box\s*\{[^}]*border-radius:\s*14px/);
-  assert.match(profile, /\.paste-box \.area-input\s*\{[^}]*padding:\s*14px 14px 16px/);
-  assert.match(profile, /\.paste-bar\s*\{/);
-  assert.match(profile, /\.paste-submit\s*\{[^}]*background:\s*var\(--s-accent\)/);
-  const pasteStart = tab.indexOf('className="paste-box"');
+  const tab = fs.readFileSync(path.join(ROOT, 'src/pages/options/ProfileTab.tsx'), 'utf8');
+  const pasteStart = tab.indexOf("mode === 'paste'");
   const pasteEnd = tab.indexOf('dropzone', pasteStart);
-  const paste = tab.slice(pasteStart, pasteEnd);
   assert.ok(pasteStart > 0 && pasteEnd > pasteStart);
-  assert.ok(paste.includes('paste-bar'));
+  const paste = tab.slice(pasteStart, pasteEnd);
+  // 外框：14px 圆角，聚焦时整框描边；文本框和底栏都在框内。
+  assert.match(paste, /^[^\n]*rounded-\[14px\][^\n]*focus-within:border-brand/);
+  const textarea = paste.indexOf('<textarea');
+  const bar = paste.indexOf('border-t border-line bg-well');
+  assert.ok(textarea > 0 && bar > textarea);
+  assert.match(paste.slice(textarea, bar), /px-3\.5 pt-3\.5 pb-4/);
   assert.ok(paste.includes('{paste.length} 字'));
   assert.ok(paste.includes('清空'));
-  assert.ok(paste.includes('抽取画像'));
-  assert.ok(paste.indexOf('textarea') < paste.indexOf('paste-bar'));
-  assert.ok(paste.indexOf('paste-bar') < paste.indexOf('抽取画像'));
+  assert.ok(bar < paste.indexOf('抽取画像'));
+  // 「抽取画像」是品牌色实心按钮。
+  assert.match(tab, /const pasteSubmit = cn\([^;]*bg-brand[^;]*text-on-brand/);
 });
 
 test('批量进度细条不占主钮，队列只露前几条并区分自动', () => {
