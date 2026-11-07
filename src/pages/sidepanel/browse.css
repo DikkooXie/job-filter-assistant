@@ -272,93 +272,16 @@
 .exclusion strong { font-size: 10px; font-weight: 600; }
 .exclusion span { font-size: 11px; color: var(--jp-secondary); overflow-wrap: anywhere; }
 
-.selection-bar {
-  flex-shrink: 0;
-  border-top: 1px solid var(--jp-line-strong);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px 12px;
-  min-height: 58px;
-  background: var(--jp-surface);
-  min-width: 0;
-  flex-wrap: wrap;
-}
-.selection-bar.is-selecting { background: var(--jp-surface); }
-.select-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-.select-all input { width: 16px; height: 16px; margin: 0; accent-color: #2dd4bf; }
-.selected-count { color: var(--jp-muted); font-size: 12px; font-weight: 500; }
-.selection-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-}
-.selection-bar > .workbench-btn { margin-left: auto; flex: 1; max-width: 210px; }
-.selection-actions .workbench-btn { flex: 1; min-width: 0; }
-.job-panel .workbench-btn {
-  height: 38px;
-  border-radius: 9px;
-  font-size: 13px;
-  font-weight: 650;
-  box-shadow: 0 0 0 2px rgba(45, 212, 191, .25);
-}
-.job-panel .workbench-btn svg { width: 14px; height: 14px; }
-.selection-bar .jp-btn-primary,
 .analyze-sheet .jp-btn-primary {
   background: #2dd4bf;
   border-color: #2dd4bf;
   color: #0f1419;
 }
-.selection-bar .jp-btn-primary:hover:not(:disabled),
 .analyze-sheet .jp-btn-primary:hover:not(:disabled) {
   background: #5eead4;
   border-color: #5eead4;
   color: #0f1419;
 }
-.job-panel .ghost-icon {
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--jp-line-strong);
-  border-radius: 9px;
-  background: var(--jp-surface-2);
-  color: var(--jp-secondary);
-}
-.job-panel .ghost-icon:hover:not(:disabled) { color: var(--jp-ink); background: var(--jp-inset); }
-.job-panel .ghost-icon.is-active { color: var(--jp-ink); background: var(--jp-inset); }
-.job-panel .ghost-icon:disabled { opacity: .48; }
-.more-wrap { position: relative; flex-shrink: 0; }
-.more-menu {
-  position: absolute;
-  left: 0;
-  bottom: 46px;
-  z-index: 20;
-  min-width: 132px;
-  padding: 6px;
-  background: var(--jp-surface);
-  border: 1px solid var(--jp-line-strong);
-  border-radius: 10px;
-  box-shadow: var(--jp-shadow);
-}
-.job-panel .more-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  border-radius: 7px;
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--jp-danger);
-}
-.job-panel .more-item:hover { background: var(--jp-danger-soft); }
 .sheet-handle {
   width: 36px;
   height: 4px;

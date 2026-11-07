@@ -891,32 +891,38 @@ export function ListFooter({
     };
   }, [menuOpen, onToggleMenu]);
   return (
-    <footer className={`selection-bar${selecting ? ' is-selecting' : ''}`}>
-      <label className="select-all">
+    // selection-bar 类名保留：SidepanelApp 用它测量底部浮条高度。
+    <footer className="selection-bar flex min-h-[58px] min-w-0 shrink-0 flex-wrap items-center gap-2 border-t border-jp-line-strong bg-jp-surface px-3 pt-2.5 pb-3">
+      <label className="inline-flex shrink-0 items-center gap-2 text-[13px] font-medium whitespace-nowrap">
         <input
           type="checkbox"
           aria-label="全选"
+          className="m-0 size-4 accent-[#2dd4bf]"
           checked={allSelected}
           disabled={!total}
           ref={(element) => { if (element) element.indeterminate = indeterminate; }}
           onChange={onToggleAll}
         />
         <span>全选</span>
-        {selecting && <span className="selected-count">已选 {selectedCount}</span>}
+        {selecting && <span className="text-[12px] font-medium text-jp-muted">已选 {selectedCount}</span>}
       </label>
       {selecting ? (
-        <div className="selection-actions">
-          <div className="more-wrap" ref={menuRef}>
+        <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1.5">
+          <div className="relative shrink-0" ref={menuRef}>
             {menuOpen && (
-              <div className="more-menu" role="menu" aria-label="更多操作">
-                <button type="button" role="menuitem" className="more-item" onClick={onDeleteSelected}>
+              <div
+                className="absolute bottom-[46px] left-0 z-20 min-w-[132px] rounded-[10px] border border-jp-line-strong bg-jp-surface p-1.5 shadow-[var(--jp-shadow)]"
+                role="menu"
+                aria-label="更多操作"
+              >
+                <button type="button" role="menuitem" className={moreItemClass} onClick={onDeleteSelected}>
                   <Trash2 aria-hidden="true" />删除
                 </button>
               </div>
             )}
             <button
               type="button"
-              className={`ghost-icon${menuOpen ? ' is-active' : ''}`}
+              className={cn(ghostIconClass, menuOpen && ghostIconActive)}
               aria-label="更多"
               aria-expanded={menuOpen}
               aria-haspopup="menu"
@@ -925,21 +931,29 @@ export function ListFooter({
               <MoreHorizontal aria-hidden="true" />
             </button>
           </div>
-          <button type="button" className="ghost-icon" aria-label="导出已选岗位" title="导出" onClick={onExportSelected}>
+          <button type="button" className={ghostIconClass} aria-label="导出已选岗位" title="导出" onClick={onExportSelected}>
             <Download aria-hidden="true" />
           </button>
-          <button type="button" className="jp-btn jp-btn-primary workbench-btn" onClick={onAnalyze}>
+          <button type="button" className={cn(workbenchBtnClass, 'min-w-0 flex-1')} onClick={onAnalyze}>
             智能分析<ChevronRight aria-hidden="true" />
           </button>
         </div>
       ) : (
-        <button type="button" className="jp-btn jp-btn-primary workbench-btn" onClick={onWorkbench}>
+        <button type="button" className={cn(workbenchBtnClass, 'ml-auto max-w-[210px] flex-1')} onClick={onWorkbench}>
           进入工作台<ChevronRight aria-hidden="true" />
         </button>
       )}
     </footer>
   );
 }
+
+// 底栏按钮。browse.css 里 .job-panel button 的重置（border / background / padding / font / color）
+// 与 .jp-btn 系列都未分层，会压过工具类，所以被它们设置过的属性要加 !。
+const ghostIconClass = 'inline-flex size-[38px] shrink-0 items-center justify-center rounded-[9px] !border !border-jp-line-strong !bg-jp-surface-2 !text-jp-secondary enabled:hover:!bg-jp-inset enabled:hover:!text-jp-ink';
+const ghostIconActive = '!bg-jp-inset !text-jp-ink';
+const moreItemClass = 'flex w-full items-center gap-2 rounded-[7px] !px-2.5 !py-[9px] !text-[13px] !font-[550] !text-jp-danger hover:!bg-jp-danger-soft';
+// 主按钮沿用 jp-btn 骨架（内边距、焦点环），换成底栏的青绿配色与 38px 高度。
+const workbenchBtnClass = 'jp-btn jp-btn-primary h-[38px] !rounded-[9px] !text-[13px] !font-[650] shadow-[0_0_0_2px_rgba(45,212,191,.25)] !border-[#2dd4bf] !bg-[#2dd4bf] !text-[#0f1419] enabled:hover:!border-[#5eead4] enabled:hover:!bg-[#5eead4] [&_svg]:!size-3.5';
 
 interface AnalyzeChoice {
   id: string;
