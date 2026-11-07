@@ -1,4 +1,7 @@
-/* 岗位侧栏。变量只挂在 .job-panel，不写到 :root，避免污染设置页和浮窗。 */
+/* 岗位侧栏。变量只挂在 .job-panel，不写到 :root，避免污染设置页和浮窗。
+   业务样式都在 TSX 的类名常量里（`views.tsx`、`BatchViews.tsx`、`CommTab.tsx`、`buttons.ts`），
+   这里只保留工具类表达不了的部分：`--jp-*` 令牌、`.job-panel` 的未分层重置、字体、
+   sonner 容器（第三方组件的 data 属性选择器）、以及 sheet-up / batch-spin 关键帧。 */
 /*! Space Grotesk © 2020 The Space Grotesk Project Authors, SIL OFL 1.1. License: fonts/OFL.txt */
 @font-face {
   font-family: "Space Grotesk";
@@ -191,54 +194,6 @@
 .job-panel :focus-visible { outline: 2px solid var(--jp-accent); outline-offset: 2px; }
 .job-panel ::placeholder { color: var(--jp-muted); opacity: 1; }
 .job-panel svg { width: 16px; height: 16px; flex-shrink: 0; }
-
-.job-panel .jp-btn {
-  border: 1px solid var(--jp-line-strong);
-  border-radius: 6px;
-  min-height: 32px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-weight: 550;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  background: var(--jp-field);
-  color: var(--jp-ink);
-  white-space: nowrap;
-}
-.job-panel .jp-btn:hover:not(:disabled) {
-  background: var(--jp-inset);
-  color: var(--jp-ink);
-  border-color: var(--jp-muted);
-}
-.job-panel .jp-btn-primary {
-  background: var(--jp-accent);
-  color: var(--jp-on-accent);
-  border-color: var(--jp-accent);
-}
-.job-panel .jp-btn-primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--jp-accent) 88%, var(--jp-ink));
-  color: var(--jp-on-accent);
-  border-color: color-mix(in srgb, var(--jp-accent) 88%, var(--jp-ink));
-}
-.job-panel .jp-btn-danger {
-  background: transparent;
-  color: var(--jp-danger);
-  border-color: color-mix(in srgb, var(--jp-danger) 32%, transparent);
-}
-.job-panel .jp-btn-danger:hover:not(:disabled) {
-  background: var(--jp-danger-soft);
-  color: var(--jp-danger);
-  border-color: color-mix(in srgb, var(--jp-danger) 32%, transparent);
-}
-.job-panel .jp-btn:disabled {
-  opacity: .48;
-}
-.job-panel .jp-btn:focus-visible {
-  outline: 2px solid var(--jp-accent);
-  outline-offset: 2px;
-}
 
 @keyframes sheet-up {
   from { transform: translateY(16px); }

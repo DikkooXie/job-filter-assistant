@@ -17,6 +17,7 @@ import type { TailorSuggestion } from '../../common/ai/prompts.js';
 import type { AIProvider, Job, Profile, Settings } from '../../common/types.js';
 import { BOSS_BROWSE_URL, jobsForLibrary } from './librarySource.js';
 import { BatchStrip, QueueDrawer } from './BatchViews.js';
+import { btn } from './buttons.js';
 import { AnalyzeSheet, DislikeSheet, FilterSheet, JobDetail, JobRow, ListFooter, ListHeader, ModelNotice, SurfaceState } from './views.jsx';
 import type { SuggestRequest } from './CommTab.jsx';
 import { ConfirmDialogHost } from './ConfirmDialog.jsx';
@@ -683,7 +684,7 @@ export default function Sidepanel() {
       {showListChrome && s.readError && (
         <div className="flex shrink-0 items-center gap-2 bg-jp-danger-soft px-4 py-2 text-hint text-jp-danger" role="alert">
           <span className="min-w-0 flex-1">岗位读取失败：{s.readError}</span>
-          <button type="button" className="jp-btn" onClick={reload}>重新加载</button>
+          <button type="button" className={btn} onClick={reload}>重新加载</button>
         </div>
       )}
       {s.modelNotice && (

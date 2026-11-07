@@ -107,7 +107,7 @@ BOSS 页面 ──(fetch/XHR 响应)──▶ sniffer ──postMessage──▶
 - `views.tsx`：列表行、详情与筛选等视图；`BatchViews.tsx`：批量进度条与队列抽屉。其余视图仍待按职责拆分。
 - 纯规则（无存储、无消息，便于单测）：`browseModel.ts`（列表/详情展示规则）、`batchQueue.ts`（批量队列状态机）、`commTab.ts`（沟通页节点规则）、`confirmQueue.ts`（确认弹层队列）、`librarySource.ts`。
 - `CommTab.tsx`（沟通页）、`ConfirmDialog.tsx`（基于 shadcn AlertDialog）。
-- 样式：业务样式全部写在组件顶部的类名常量里（`views.tsx`、`BatchViews.tsx`、`CommTab.tsx`、`ConfirmDialog.tsx`），条件样式用 `cn()` 合并；令牌来自 `globals.css` 的 `@theme inline`（`jp-*` 工具类）。`browse.css` 只剩 `--jp-*` 变量、`.job-panel` 的**未分层**重置（button/input/textarea/svg/p/h）、`.jp-btn*`、sonner 容器与 `.batch-spin` 关键帧。未分层重置会压过工具类，所以侧栏里按钮、输入框、`<p>` 外边距、SVG 尺寸的工具类要带 `!`。
+- 样式：业务样式全部写在组件顶部的类名常量里（`views.tsx`、`BatchViews.tsx`、`CommTab.tsx`、`ConfirmDialog.tsx`），按钮的基础配方在 `buttons.ts`（`btn` / `btnPrimary`），条件样式用 `cn()` 合并；令牌来自 `globals.css` 的 `@theme inline`（`jp-*` 工具类）。`browse.css` 只剩 `--jp-*` 变量、`.job-panel` 的**未分层**重置（button/input/textarea/svg/p/h）、sonner 容器与 `.batch-spin` 关键帧。未分层重置会压过工具类，所以侧栏里按钮、输入框、`<p>` 外边距、SVG 尺寸的工具类要带 `!`。
 
 **浮窗 `pages/popup/PopupApp.tsx`**：显示当前页识别状态和岗位数，开关自动收录，打开侧栏/设置。
 

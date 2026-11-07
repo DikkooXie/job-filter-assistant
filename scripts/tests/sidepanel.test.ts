@@ -548,7 +548,7 @@ test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
   assert.doesNotMatch(sidepanel, /removeSelected|确定删除岗位「/);
   // 删除待确认时，收藏 / 打开原岗位 / 不喜欢都收成 0 宽并不可点。
   assert.match(views, /const actCollapsedClass = '[^']*!max-w-0[^']*pointer-events-none'/);
-  assert.match(bar, /'jp-btn jp-btn-primary min-w-0 flex-auto[^']*', confirming && actCollapsedClass/);
+  assert.match(bar, /cn\(btn, btnPrimary, 'min-w-0 flex-auto[^']*', confirming && actCollapsedClass/);
   assert.match(bar, /cn\(actIconClass, actIconDetail, confirming \? actCollapsedClass : actIconHover/);
   assert.match(views, /const actIconDetail = '[^']*min-w-9 max-w-9/);
   assert.match(bar, /<DeleteRowButton detail /);
@@ -713,7 +713,7 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.doesNotMatch(browse, /\.batch-strip\s*\{|\.queue-chip|\.queue-job\b|\.queue-section/);
   assert.match(batchViews, /h-\[52%\] max-h-\[52%\]/);
   assert.match(batchViews, /min-h-0 flex-1 overflow-auto px-\[14px\] pb-2/);
-  assert.match(batchViews, /queue-head shrink-0 px-\[14px\]/);
+  assert.match(batchViews, /<header className="shrink-0 px-\[14px\]">/);
   assert.match(batchViews, /mt-3 h-\[3px\] overflow-hidden rounded-full bg-queue-track/);
   assert.match(batchViews, /!mt-3 flex justify-between gap-2 text-hint text-queue-muted/);
   assert.match(batchViews, /mt-4 mb-3 flex shrink-0 gap-1\.5 px-\[14px\]/);

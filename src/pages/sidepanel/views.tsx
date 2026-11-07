@@ -7,6 +7,7 @@ import type { Job } from '../../common/types.js';
 import { analysisGrade, analysisSummary, descriptionGap, exclusionReasons, flowEntryLabel, flowStatusLabel, jobDescriptionText, platformLabel, riskLines, warningZone } from './browseModel.js';
 import type { AnalysisGrade, BrowseView } from './browseModel.js';
 import type { CardCopy } from './batchQueue.js';
+import { btn, btnPrimary } from './buttons.js';
 import { CommTab } from './CommTab.jsx';
 import type { SuggestRequest } from './CommTab.jsx';
 import type { CommState } from './commTab.js';
@@ -253,7 +254,7 @@ const sheetClass = 'w-full max-h-[calc(100%-36px)] overflow-auto rounded-t-[10px
 const sheetHandleClass = 'mx-auto mb-3 h-1 w-9 rounded-[2px] bg-jp-line-strong';
 const sheetSubClass = '!mt-1.5 !text-[12px] leading-[1.45] !text-jp-muted';
 const sheetContextClass = '!mt-3 rounded-lg border border-jp-line bg-jp-field px-2.5 py-2 text-[11px] leading-[1.4] text-jp-muted [&_strong]:font-semibold [&_strong]:text-jp-summary';
-const sheetActionButtonClass = 'jp-btn !h-10 !rounded-lg !text-[13px] !font-[650]';
+const sheetActionButtonClass = cn(btn, '!h-10 !rounded-lg !text-[13px] !font-[650]');
 const sheetTealButtonClass = '!border-[#2dd4bf] !bg-[#2dd4bf] !text-[#0f1419] enabled:hover:!border-[#5eead4] enabled:hover:!bg-[#5eead4] enabled:hover:!text-[#0f1419]';
 
 function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }: AcceptRiskSheetProps) {
@@ -293,7 +294,7 @@ function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }: Acce
         <textarea id="accept-risk-note" rows={4} value={draft} onChange={(event) => onDraft(event.target.value)} />
         <div className="mt-4 flex gap-2.5">
           <button type="button" className={cn(sheetActionButtonClass, "!flex-[0_0_96px]")} onClick={onClose}>取消</button>
-          <button type="button" className={cn(sheetActionButtonClass, "jp-btn-primary !flex-1")} disabled={saving || !draft.trim()} onClick={onSave}>{saving ? '写入中…' : '写入画像'}</button>
+          <button type="button" className={cn(sheetActionButtonClass, btnPrimary, '!flex-1')} disabled={saving || !draft.trim()} onClick={onSave}>{saving ? '写入中…' : '写入画像'}</button>
         </div>
       </section>
     </div>
@@ -364,7 +365,7 @@ export function DislikeSheet({ job, saving, onClose, onSave }: DislikeSheetProps
         {error && <p className="!mt-2 !text-[12px] !text-jp-danger" role="alert">{error}</p>}
         <div className="mt-4 flex gap-2.5">
           <button type="button" className={cn(sheetActionButtonClass, "!flex-[0_0_96px]")} disabled={saving} onClick={onClose}>取消</button>
-          <button type="button" className={cn(sheetActionButtonClass, "jp-btn-primary !flex-1", sheetTealButtonClass)} disabled={saving || !draft.trim()} onClick={submit}>确认写入</button>
+          <button type="button" className={cn(sheetActionButtonClass, btnPrimary, '!flex-1', sheetTealButtonClass)} disabled={saving || !draft.trim()} onClick={submit}>确认写入</button>
         </div>
       </section>
     </div>
@@ -723,7 +724,7 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
 }
 
 /* 操作行（列表卡片与详情底栏共用）。
-   `!` 用来盖过 browse.css 里 .job-panel button / svg 和 .jp-btn 的未分层规则。 */
+   `!` 用来盖过 browse.css 里 .job-panel button / svg 的未分层规则。 */
 // 列表操作区：卡片悬停、键盘聚焦或删除待确认时展开（grid-rows 0fr → 1fr）。
 const rowActionsClass = cn(
   'grid grid-rows-[0fr] overflow-hidden opacity-0 [transition:grid-template-rows_180ms_ease,opacity_180ms_ease,margin-top_180ms_ease]',
@@ -853,7 +854,7 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
       <div className={cn(actionsRowClass(confirming === 'delete'), 'flex-auto pt-0')}>
         <button
           type="button"
-          className={cn('jp-btn jp-btn-primary min-w-0 flex-auto overflow-hidden !h-9 !rounded-lg !text-[13px] !font-[650]', confirming && actCollapsedClass)}
+          className={cn(btn, btnPrimary, 'min-w-0 flex-auto overflow-hidden !h-9 !rounded-lg !text-[13px] !font-[650]', confirming && actCollapsedClass)}
           data-row-action="open"
           disabled={!job.url}
           aria-hidden={confirming ? true : undefined}
@@ -972,13 +973,13 @@ export function ListFooter({
   );
 }
 
-// 底栏按钮。browse.css 里 .job-panel button 的重置（border / background / padding / font / color）
-// 与 .jp-btn 系列都未分层，会压过工具类，所以被它们设置过的属性要加 !。
+// 底栏按钮。`.job-panel button` 的重置（border / background / padding / font / color）未分层，
+// 会压过普通工具类，所以被它设置过的属性都带 !。
 const ghostIconClass = 'inline-flex size-[38px] shrink-0 items-center justify-center rounded-[9px] !border !border-jp-line-strong !bg-jp-surface-2 !text-jp-secondary enabled:hover:!bg-jp-inset enabled:hover:!text-jp-ink';
 const ghostIconActive = '!bg-jp-inset !text-jp-ink';
 const moreItemClass = 'flex w-full items-center gap-2 rounded-[7px] !px-2.5 !py-[9px] !text-[13px] !font-[550] !text-jp-danger hover:!bg-jp-danger-soft';
-// 主按钮沿用 jp-btn 骨架（内边距、焦点环），换成底栏的青绿配色与 38px 高度。
-const workbenchBtnClass = 'jp-btn jp-btn-primary h-[38px] !rounded-[9px] !text-[13px] !font-[650] shadow-[0_0_0_2px_rgba(45,212,191,.25)] !border-[#2dd4bf] !bg-[#2dd4bf] !text-[#0f1419] enabled:hover:!border-[#5eead4] enabled:hover:!bg-[#5eead4] [&_svg]:!size-3.5';
+// 主按钮沿用 btn 骨架（内边距、焦点环），换成底栏的青绿配色与 38px 高度。
+const workbenchBtnClass = cn(btn, btnPrimary, 'h-[38px] !rounded-[9px] !text-[13px] !font-[650] shadow-[0_0_0_2px_rgba(45,212,191,.25)] !border-[#2dd4bf] !bg-[#2dd4bf] !text-[#0f1419] enabled:hover:!border-[#5eead4] enabled:hover:!bg-[#5eead4] [&_svg]:!size-3.5');
 
 interface AnalyzeChoice {
   id: string;
@@ -1050,8 +1051,8 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }: { selectedCoun
           ))}
         </div>
         <div className="mt-3 flex gap-2">
-          <button type="button" className={"jp-btn !min-h-[38px] !rounded-[9px]"} onClick={onClose}>取消</button>
-          <button type="button" className={cn("jp-btn jp-btn-primary !min-h-[38px] !flex-1 !rounded-[9px]", sheetTealButtonClass)} onClick={() => onStart(mode)}>开始分析</button>
+          <button type="button" className={cn(btn, '!min-h-[38px] !rounded-[9px]')} onClick={onClose}>取消</button>
+          <button type="button" className={cn(btn, btnPrimary, '!min-h-[38px] !flex-1 !rounded-[9px]', sheetTealButtonClass)} onClick={() => onStart(mode)}>开始分析</button>
         </div>
       </section>
     </div>
@@ -1089,7 +1090,7 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
         <CircleAlert className={surfaceIconClass} aria-hidden="true" />
         <h2 className={surfaceTitleClass}>岗位读取失败</h2>
         <p className={surfaceCopyClass}>{message || '本地数据暂时无法读取，请重试。'}</p>
-        <button type="button" className="jp-btn jp-btn-primary mt-[22px]" onClick={onRetry}>重新加载</button>
+        <button type="button" className={cn(btn, btnPrimary, 'mt-[22px]')} onClick={onRetry}>重新加载</button>
       </div>
     );
   }
@@ -1098,7 +1099,7 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
       <div className={surfaceStateClass}>
         <h2 className={surfaceTitleClass}>还没有收录岗位</h2>
         <p className={surfaceCopyClass}>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。</p>
-        <button type="button" className="jp-btn jp-btn-primary mt-[22px]" onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
+        <button type="button" className={cn(btn, btnPrimary, 'mt-[22px]')} onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
       </div>
     );
   }
@@ -1107,7 +1108,7 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
       <Search className={surfaceIconClass} aria-hidden="true" />
       <h2 className={surfaceTitleClass}>没有符合条件的岗位</h2>
       <p className={surfaceCopyClass}>试试其他关键词，或重置视图条件。这不是读取失败。</p>
-      {viewChanged && <button type="button" className="jp-btn mt-[22px]" onClick={onReset}>重置视图</button>}
+      {viewChanged && <button type="button" className={cn(btn, 'mt-[22px]')} onClick={onReset}>重置视图</button>}
     </div>
   );
 }
@@ -1261,7 +1262,7 @@ export function JobDetail({
                       <>
                         <div className="flex items-center justify-between gap-2">
                           <h3 className={detailH3}>简历定制建议</h3>
-                          <button type="button" className="jp-btn jp-btn-primary" disabled={tailoring} onClick={onTailor}>{tailoring ? '生成中…' : advice ? '重新生成' : '生成建议'}</button>
+                          <button type="button" className={cn(btn, btnPrimary)} disabled={tailoring} onClick={onTailor}>{tailoring ? '生成中…' : advice ? '重新生成' : '生成建议'}</button>
                         </div>
                         <p className={finePrint}>只给建议，不改原简历，也不写入岗位库。</p>
                         {tailoring && !advice && <p className={detailCopy}>正在生成建议…</p>}
@@ -1274,7 +1275,7 @@ export function JobDetail({
                               <>
                                 <h3 className={detailH3}>自我评价草稿</h3>
                                 <p className={cn(detailCopy, 'whitespace-pre-wrap')}>{advice.summaryDraft}</p>
-                                <button type="button" className="jp-btn" onClick={() => onCopy(advice.summaryDraft)}>复制草稿</button>
+                                <button type="button" className={btn} onClick={() => onCopy(advice.summaryDraft)}>复制草稿</button>
                               </>
                             )}
                             {([['经历改写建议', advice.bulletSuggestions], ['投递提醒', advice.tips]] as Array<[string, string[]]>).map(([title, values]) => values.length > 0 && (
@@ -1380,8 +1381,8 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }: {
             </div>
           </fieldset>
           <div className="mt-2 flex flex-wrap justify-end gap-2">
-            <button type="button" className="jp-btn" onClick={onReset}>重置视图</button>
-            <button type="button" className="jp-btn jp-btn-primary" onClick={onClose}>查看 {shown} 个岗位</button>
+            <button type="button" className={btn} onClick={onReset}>重置视图</button>
+            <button type="button" className={cn(btn, btnPrimary)} onClick={onClose}>查看 {shown} 个岗位</button>
           </div>
         </div>
       </section>

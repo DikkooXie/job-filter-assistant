@@ -136,7 +136,7 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
     <div className="absolute inset-0 z-[12] flex items-end bg-queue-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="flex h-[52%] max-h-[52%] min-h-0 w-full flex-col rounded-t-[16px] bg-queue-surface text-queue-ink shadow-[0_-12px_32px_rgba(0,0,0,.28)] [animation:sheet-up_220ms_ease]" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
         <div className="mx-auto mt-2.5 mb-3 h-1 w-9 rounded-[2px] bg-jp-line-strong" aria-hidden="true" />
-        <header className="queue-head shrink-0 px-[14px]">
+        <header className="shrink-0 px-[14px]">
           <div className="flex items-center justify-between gap-2">
             <h2 id="queue-title" className="text-section font-[650] text-queue-accent">{model.head}</h2>
             <button type="button" className={cn(tealButton, 'disabled:opacity-40')} disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
