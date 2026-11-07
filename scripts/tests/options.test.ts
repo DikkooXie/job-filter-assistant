@@ -154,7 +154,9 @@ test('筛选页不渲染月薪上限，保存仍走字段合并', () => {
   assert.match(tab, /包含任一/);
   assert.match(tab, /公司与城市/);
   assert.match(tab, /薪资与要求/);
-  assert.match(tab, /is-risk/);
+  // 风险词标签用红色底，和普通标签区分。
+  assert.match(tab, /tone="risk"/);
+  assert.match(tab, /tone === 'risk' && 'bg-danger-soft text-danger'/);
   assert.match(tab, /岗位最高薪资低于这个数就不显示/);
   assert.match(tab, /只在岗位上标注提醒，筛选关闭时也生效/);
   assert.match(tab, /value="filters"/);
