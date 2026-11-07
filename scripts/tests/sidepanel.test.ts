@@ -414,6 +414,28 @@ test('详情分析 Tab 回吃匹配块，岗位不再挂警示墙', () => {
   assert.doesNotMatch(browse, /\.detail-warn|\.analysis-empty|\.reanalyze/);
 });
 
+test('详情头部、正文与空/加载/错误状态改用工具类，旧 CSS 规则已删除', () => {
+  const root = ROOT;
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
+  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
+  const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
+  // 复合样式收在 views.tsx 的常量里，而不是留在 CSS。
+  for (const name of ['detailContentClass', 'detailH3', 'detailSecH3', 'detailCopy', 'bulletList', 'bulletItem', 'dimRow', 'dimNumber', 'detailTabClass', 'surfaceStateClass', 'surfaceTitleClass', 'surfaceIconClass']) {
+    assert.match(views, new RegExp(`const ${name} = `), name);
+  }
+  // .fine-print 的字号、颜色、上边距都被特异性更高的规则压掉，实际等同正文段落。
+  assert.match(views, /const finePrint = detailCopy;/);
+  assert.match(views, /className=\{detailContentClass\}/);
+  assert.match(views, /className=\{detailTabClass\}/);
+  assert.match(views, /className=\{surfaceStateClass\}/);
+  assert.match(views, /aria-selected:after:bg-jp-accent/);
+  assert.match(views, /font-\['JetBrains_Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace\]/);
+  // 列表滚动区也换成工具类。
+  assert.match(sidepanel, /className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain"/);
+  assert.doesNotMatch(sidepanel, /className="list-scroll"/);
+  assert.doesNotMatch(browse, /\.surface-state|\.skeletons|\.detail-wrap|\.job-detail|\.detail-heading|\.detail-title-line|\.detail-tabs|\.detail-content|\.dims|\.dim-|\.facts|\.tags|\.bullet-list|\.detail-sec|\.fine-print|\.list-scroll/);
+});
+
 test('列表项方案 E 把打招呼放在分析块外面，未分析只有文案', () => {
   const root = ROOT;
   const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');

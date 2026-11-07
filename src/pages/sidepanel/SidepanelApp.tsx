@@ -760,7 +760,7 @@ export default function Sidepanel() {
         : surface === 'error' ? <SurfaceState kind="error" message={s.loadError} onRetry={reload} />
           : surface === 'empty' ? <SurfaceState kind="empty" onBrowseBoss={openBossBrowse} />
             : (
-              <div className="list-scroll" ref={listRef} onScroll={onListScroll}>
+              <div className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain" ref={listRef} onScroll={onListScroll}>
                 {profileScore < 40 && <p className="px-4 pt-2 text-hint text-jp-secondary"><button type="button" className="!text-jp-accent" onClick={() => send(MSG.OPEN_OPTIONS, { page: 'profile' })}>画像完整度 {profileScore}%，完善后 AI 匹配更准</button></p>}
                 {list.length === 0
                   ? <SurfaceState kind="nomatch" viewChanged={viewChanged} onReset={resetView} />

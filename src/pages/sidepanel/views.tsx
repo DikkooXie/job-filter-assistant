@@ -23,16 +23,16 @@ const DIM_KEYS = ['skill', 'experience', 'requirement', 'location'] as const;
 
 function Tags({ values }: { values?: string[] | null }) {
   if (!values?.length) return null;
-  return <div className="tags">{values.map((value, index) => <span key={`${value}-${index}`}>{value}</span>)}</div>;
+  return <div className="flex flex-wrap gap-1.5">{values.map((value, index) => <span className="rounded-[4px] bg-jp-surface-2 px-1.5 py-0.5 text-[11px] text-jp-secondary" key={`${value}-${index}`}>{value}</span>)}</div>;
 }
 
 function Facts({ rows }: { rows: Array<[string, string | number | null | undefined]> }) {
   const visible = rows.filter(([, value]) => value);
   if (!visible.length) return null;
   return (
-    <dl className="facts">
+    <dl className="m-0 grid grid-cols-2 gap-x-3 gap-y-2.5">
       {visible.map(([label, value]) => (
-        <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+        <div className="min-w-0" key={label}><dt className="text-[11px] text-jp-muted">{label}</dt><dd className="mt-0.5 text-[13px] [overflow-wrap:anywhere]">{value}</dd></div>
       ))}
     </dl>
   );
@@ -52,6 +52,21 @@ const gradeHover = 'group-hover/main:!text-jp-accent';
 const scoreClass = 'shrink-0 !font-score !text-[20px] !font-bold !leading-none tracking-[-0.04em] !tabular-nums';
 const analysisBox = (bare: boolean) => cn('mt-2.5 min-w-0 rounded-md bg-jp-inset px-2.5', bare ? 'py-2' : 'pt-2 pb-[7px]');
 const analysisTop = (bare: boolean) => cn('flex min-w-0 items-center gap-2.5', bare ? 'justify-start' : 'justify-between');
+
+// 详情正文：`.job-panel` 的未分层重置（h3 / p 外边距为 0、button 无内边距）会压过普通工具类，所以这几处带 `!`。
+const detailContentClass = 'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain px-4 pt-[17px] pb-[22px]';
+const detailH3 = '!mt-5 !mb-[7px] !text-[12px] !font-[650] first:!mt-0';
+const detailSec = 'mt-[18px]';
+const detailSecH3 = '!mt-0 !mb-2.5 !text-[13px] !font-[650]';
+const detailCopy = 'text-[12px] text-jp-secondary leading-[1.8] [overflow-wrap:anywhere]';
+const detailMuted = 'text-[12px] text-jp-muted leading-[1.8] [overflow-wrap:anywhere]';
+const bulletList = 'm-0 flex list-none flex-col gap-2 p-0';
+const bulletItem = 'relative pl-3.5 text-jp-summary leading-[1.5] before:absolute before:left-0 before:top-[0.55em] before:size-[5px] before:rounded-full before:bg-jp-accent before:content-[""]';
+const dimRow = 'grid grid-cols-[64px_1fr_28px] items-center gap-2';
+const dimNumber = "text-right font-['JetBrains_Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace] text-[12px] font-semibold text-jp-summary tabular-nums";
+// 源码里 .fine-print 的 11px / muted / 10px 上边距都被特异性更高的 `.detail-content p` 与 `.job-panel p { margin: 0 }` 压掉，实际就是普通正文段落。
+const finePrint = detailCopy;
+const detailTabClass = 'relative whitespace-nowrap !px-0 !pt-2 !pb-[9px] !text-[12px] !text-jp-secondary aria-selected:!font-semibold aria-selected:!text-jp-accent aria-selected:after:absolute aria-selected:after:inset-x-0 aria-selected:after:-bottom-px aria-selected:after:h-0.5 aria-selected:after:bg-jp-accent aria-selected:after:content-[""]';
 
 function GradeMarks({ grade, large = false }: { grade: AnalysisGrade; large?: boolean }) {
   return (
@@ -80,7 +95,7 @@ function WarnChip({ kind, label }: { kind: 'warn' | 'filter'; label: string }) {
   );
 }
 
-// 详情摘要在 .detail-content 里：那里的 h3 / p 规则（未分层）会盖过工具类，外边距、字号、行高、颜色要加 `!`。
+// 详情摘要在 .detail-content 里：标题沿用正文 h3 的字号与外边距，段落覆盖成两行摘要。
 const summarySection = 'mt-4';
 const summaryCopy = 'line-clamp-2 !mt-2 !text-hint !leading-[1.45] !text-jp-summary';
 const summaryFoot = 'mt-2.5 flex items-center justify-between gap-2';
@@ -92,7 +107,7 @@ function JobSummaryCard({ job, onOpenAnalysis }: { job: Job; onOpenAnalysis: () 
   if (gap || !summary.grade) {
     return (
       <section className={summarySection}>
-        <h3 className="!mb-2">分析摘要</h3>
+        <h3 className={cn(detailH3, '!mb-2')}>分析摘要</h3>
         <div className={analysisBox(true)}>
           <div className={analysisTop(true)}>
             <span className={cn(gradeClass, gap ? gradeGap : gradeMuted)}>{gap ? gap.label : '尚未分析'}</span>
@@ -108,7 +123,7 @@ function JobSummaryCard({ job, onOpenAnalysis }: { job: Job; onOpenAnalysis: () 
   const { grade } = summary;
   return (
     <section className={summarySection}>
-      <h3 className="!mb-2">分析摘要</h3>
+      <h3 className={cn(detailH3, '!mb-2')}>分析摘要</h3>
       <div className={analysisBox(false)}>
         <div className={analysisTop(false)}>
           <div className="inline-flex min-w-0 items-center gap-2">
@@ -150,7 +165,7 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) 
   return (
     <>
       {gap ? (
-        <p className="text-[12px] text-jp-muted">{gap.detail}</p>
+        <p className={detailMuted}>{gap.detail}</p>
       ) : summary.grade ? (
         <>
           <div className="rounded-[10px] border border-jp-line bg-jp-surface-2 px-3.5 pt-3.5 pb-3">
@@ -164,46 +179,46 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) 
                 <span className="font-score text-[14px] font-semibold tracking-[-0.02em] text-jp-muted">/100</span>
               </div>
             </div>
-            {summary.summary && <p className="!mt-3 !text-[13px] !leading-normal !text-jp-summary">{summary.summary}</p>}
+            {summary.summary && <p className="!mt-3 !text-[13px] !leading-normal !text-jp-summary [overflow-wrap:anywhere]">{summary.summary}</p>}
           </div>
           {dims.length > 0 && (
-            <div className="dims">
+            <div className="mt-4 flex flex-col gap-2.5">
               {dims.map(([key, value]) => (
-                <div className="dim" key={key}>
-                  <span className="dim-lab">{DIM_LABELS[key]}</span>
-                  <div className="dim-track" role="meter" aria-label={DIM_LABELS[key]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}>
-                    <div className={value < 40 ? 'dim-fill low' : 'dim-fill'} style={{ width: `${value}%` }} />
+                <div className={dimRow} key={key}>
+                  <span className="text-[12px] text-jp-muted">{DIM_LABELS[key]}</span>
+                  <div className="h-1.5 overflow-hidden rounded-[3px] bg-jp-seg-empty" role="meter" aria-label={DIM_LABELS[key]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}>
+                    <div className={cn('h-full rounded-[3px] bg-jp-accent', value < 40 && 'opacity-75')} style={{ width: `${value}%` }} />
                   </div>
-                  <span className="dim-n">{value}</span>
+                  <span className={dimNumber}>{value}</span>
                 </div>
               ))}
             </div>
           )}
           {match?.eligible === false && blockers.length > 0 && (
-            <section className="detail-sec">
-              <h3>存在硬性门槛</h3>
-              <ul className="bullet-list gap">{blockers.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            <section className={detailSec}>
+              <h3 className={detailSecH3}>存在硬性门槛</h3>
+              <ul className={bulletList}>{blockers.map((item, index) => <li className={cn(bulletItem, 'before:bg-jp-muted')} key={index}>{item}</li>)}</ul>
             </section>
           )}
           {reasons.length > 0 && (
-            <section className="detail-sec">
-              <h3>契合点</h3>
-              <ul className="bullet-list">{reasons.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            <section className={detailSec}>
+              <h3 className={detailSecH3}>契合点</h3>
+              <ul className={bulletList}>{reasons.map((item, index) => <li className={bulletItem} key={index}>{item}</li>)}</ul>
             </section>
           )}
           {gaps.length > 0 && (
-            <section className="detail-sec">
-              <h3>差距 / 需补齐</h3>
-              <ul className="bullet-list gap">{gaps.map((item, index) => <li key={index}>{item}</li>)}</ul>
+            <section className={detailSec}>
+              <h3 className={detailSecH3}>差距 / 需补齐</h3>
+              <ul className={bulletList}>{gaps.map((item, index) => <li className={cn(bulletItem, 'before:bg-jp-muted')} key={index}>{item}</li>)}</ul>
             </section>
           )}
         </>
       ) : (
-        <p className="text-[12px] text-jp-muted">尚未分析</p>
+        <p className={detailMuted}>尚未分析</p>
       )}
       {!gap && risks.length > 0 && (
-        <section className="detail-sec">
-          <h3>风险提示</h3>
+        <section className={detailSec}>
+          <h3 className={detailSecH3}>风险提示</h3>
           <div className="rounded-lg border border-jp-line bg-jp-field px-1.5 py-1">
             {risks.map((line) => (
               <div className="group/risk flex items-start gap-[7px] rounded-md bg-transparent px-1.5 py-2 text-[12px] leading-[1.4] text-jp-grade-mid hover:bg-[var(--jp-lift)] focus-within:bg-[var(--jp-lift)] [&+&]:border-t [&+&]:border-jp-line [&_svg]:!mt-px [&_svg]:!size-[13px]" key={line}>
@@ -1043,6 +1058,11 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }: { selectedCoun
   );
 }
 
+const surfaceStateClass = 'min-h-0 min-w-0 flex-1 overflow-auto px-7 pt-[72px] pb-7 text-center';
+const surfaceTitleClass = '!text-[15px] !font-semibold';
+const surfaceCopyClass = '!mt-2.5 text-[12px] text-jp-muted [overflow-wrap:anywhere]';
+const surfaceIconClass = '!mb-3.5 !size-[25px] text-jp-muted';
+
 export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onBrowseBoss }: {
   kind: 'loading' | 'error' | 'empty' | 'nomatch';
   message?: string | null;
@@ -1053,37 +1073,41 @@ export function SurfaceState({ kind, message, viewChanged, onRetry, onReset, onB
 }) {
   if (kind === 'loading') {
     return (
-      <div className="surface-state" role="status">
-        <h2>正在读取岗位</h2>
-        <div className="skeletons" aria-hidden="true"><i /><i /><i /></div>
+      <div className={surfaceStateClass} role="status">
+        <h2 className={surfaceTitleClass}>正在读取岗位</h2>
+        <div className="mt-7 grid gap-4 text-left" aria-hidden="true">
+          <i className="block h-[54px] rounded bg-jp-surface-2" />
+          <i className="block h-[54px] w-[85%] rounded bg-jp-surface-2" />
+          <i className="block h-[54px] w-[70%] rounded bg-jp-surface-2" />
+        </div>
       </div>
     );
   }
   if (kind === 'error') {
     return (
-      <div className="surface-state" role="alert">
-        <CircleAlert className="surface-icon" aria-hidden="true" />
-        <h2>岗位读取失败</h2>
-        <p>{message || '本地数据暂时无法读取，请重试。'}</p>
-        <button type="button" className="jp-btn jp-btn-primary" onClick={onRetry}>重新加载</button>
+      <div className={surfaceStateClass} role="alert">
+        <CircleAlert className={surfaceIconClass} aria-hidden="true" />
+        <h2 className={surfaceTitleClass}>岗位读取失败</h2>
+        <p className={surfaceCopyClass}>{message || '本地数据暂时无法读取，请重试。'}</p>
+        <button type="button" className="jp-btn jp-btn-primary mt-[22px]" onClick={onRetry}>重新加载</button>
       </div>
     );
   }
   if (kind === 'empty') {
     return (
-      <div className="surface-state">
-        <h2>还没有收录岗位</h2>
-        <p>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。</p>
-        <button type="button" className="jp-btn jp-btn-primary" onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
+      <div className={surfaceStateClass}>
+        <h2 className={surfaceTitleClass}>还没有收录岗位</h2>
+        <p className={surfaceCopyClass}>打开 BOSS 直聘的岗位浏览页，看到的岗位会自动收录到这里。</p>
+        <button type="button" className="jp-btn jp-btn-primary mt-[22px]" onClick={onBrowseBoss}>去 BOSS 直聘浏览</button>
       </div>
     );
   }
   return (
-    <div className="surface-state">
-      <Search className="surface-icon" aria-hidden="true" />
-      <h2>没有符合条件的岗位</h2>
-      <p>试试其他关键词，或重置视图条件。这不是读取失败。</p>
-      {viewChanged && <button type="button" className="jp-btn" onClick={onReset}>重置视图</button>}
+    <div className={surfaceStateClass}>
+      <Search className={surfaceIconClass} aria-hidden="true" />
+      <h2 className={surfaceTitleClass}>没有符合条件的岗位</h2>
+      <p className={surfaceCopyClass}>试试其他关键词，或重置视图条件。这不是读取失败。</p>
+      {viewChanged && <button type="button" className="jp-btn mt-[22px]" onClick={onReset}>重置视图</button>}
     </div>
   );
 }
@@ -1159,39 +1183,39 @@ export function JobDetail({
     next?.focus();
   };
   return (
-    <div className="detail-wrap">
-      <section className="job-detail">
-        <header className="detail-heading">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <section className="flex h-full w-full min-w-0 flex-col">
+        <header className="min-w-0 shrink-0 px-4 pt-[13px] pb-[14px]">
           <div className="mb-3 flex items-center justify-between gap-2">
-            <button type="button" className="back !mb-0" onClick={onBack}><ArrowLeft aria-hidden="true" />岗位库</button>
+            <button type="button" className="inline-flex min-h-[26px] items-center gap-1.5 [&_svg]:!size-3.5" onClick={onBack}><ArrowLeft aria-hidden="true" />岗位库</button>
             {dev && <span className={devMarkClass}>dev</span>}
           </div>
           {mode !== 'job' ? (
             <>
               <h2 tabIndex={-1}>{mode === 'removed' ? '岗位已不在列表中' : '未匹配到当前页面'}</h2>
-              <p>{mode === 'removed' ? '它可能刚被删除或清出岗位库。返回后可以从列表继续。' : '在 BOSS直聘打开岗位详情后，再点当前岗位。'}</p>
+              <p className="!mt-[5px] text-[11px] text-jp-muted [overflow-wrap:anywhere]">{mode === 'removed' ? '它可能刚被删除或清出岗位库。返回后可以从列表继续。' : '在 BOSS直聘打开岗位详情后，再点当前岗位。'}</p>
             </>
           ) : (
             <>
-              <div className="detail-title-line">
-                <h2 ref={titleRef} tabIndex={-1}>{job?.title || '未命名岗位'}</h2>
+              <div className="flex min-w-0 items-start gap-3.5">
+                <h2 ref={titleRef} tabIndex={-1} className="min-w-0 flex-1 text-[16px] font-[620] leading-[1.6] [overflow-wrap:anywhere] focus:!outline-none">{job?.title || '未命名岗位'}</h2>
                 {job?.salaryText && <span className={salaryClass}>{job.salaryText}</span>}
               </div>
-              <p>
+              <p className="!mt-[5px] text-[11px] text-jp-muted [overflow-wrap:anywhere]">
                 {[job?.company, [job?.city, job?.district].filter(Boolean).join(' · '), job?.experience, job?.degree].filter(Boolean).join(' · ')}
-                {followLive && <span className="follow-note"> · 跟随当前页面</span>}
+                {followLive && <span className="text-jp-accent"> · 跟随当前页面</span>}
               </p>
             </>
           )}
         </header>
         {mode === 'job' && job && (
           <>
-            <div className="detail-tabs" role="tablist" aria-label="岗位详情" onKeyDown={onTabsKey}>
+            <div className="flex min-w-0 shrink-0 gap-3.5 overflow-x-auto border-b border-jp-line px-4" role="tablist" aria-label="岗位详情" onKeyDown={onTabsKey}>
               {DETAIL_TABS.map(([key, label]) => (
-                <button type="button" key={key} role="tab" aria-selected={sub === key} tabIndex={sub === key ? 0 : -1} onClick={() => onSub(key)}>{label}</button>
+                <button type="button" className={detailTabClass} key={key} role="tab" aria-selected={sub === key} tabIndex={sub === key ? 0 : -1} onClick={() => onSub(key)}>{label}</button>
               ))}
             </div>
-            {sub !== 'flow' && <div className="detail-content" role="tabpanel">
+            {sub !== 'flow' && <div className={detailContentClass} role="tabpanel">
               {sub === 'info' && (
                 <>
                   <Facts rows={[
@@ -1201,12 +1225,15 @@ export function JobDetail({
                     ['学历', job.degree],
                     ['平台', job.platform === 'boss' ? 'BOSS直聘' : '其他平台'],
                   ]} />
-                  {(job.skills?.length || job.tags?.length || 0) > 0 && <><h3>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags || []).slice(0, 20)} /></>}
-                  {(job.welfare?.length ?? 0) > 0 && <><h3>福利</h3><Tags values={job.welfare?.slice(0, 20)} /></>}
-                  <h3>岗位描述</h3>
-                  <p className="pre desc-box">{jobDescriptionText(job)}</p>
+                  {(job.skills?.length || job.tags?.length || 0) > 0 && <><h3 className={detailH3}>技能 / 标签</h3><Tags values={(job.skills?.length ? job.skills : job.tags || []).slice(0, 20)} /></>}
+                  {(job.welfare?.length ?? 0) > 0 && <><h3 className={detailH3}>福利</h3><Tags values={job.welfare?.slice(0, 20)} /></>}
+                  <h3 className={detailH3}>岗位描述</h3>
+                  <p className={cn(detailCopy, 'whitespace-pre-wrap !mt-2 rounded-lg border border-jp-line bg-jp-inset px-3 pt-2.5 pb-[10px] !leading-[1.55] !text-jp-muted')}>{jobDescriptionText(job)}</p>
                   {exclusionReasons(job).length > 0 && (
-                    <div className="exclusion"><Filter aria-hidden="true" /><div><strong>开启过滤后将隐藏</strong><span>{exclusionReasons(job).join('；')}</span></div></div>
+                    <div className="mt-[9px] flex min-w-0 items-start gap-[7px] rounded-[5px] border border-jp-line-strong bg-jp-danger-soft px-2 pt-1.5 pb-[7px] text-jp-danger leading-[1.55]">
+                      <Filter aria-hidden="true" className="!mt-0.5 !size-[13px]" />
+                      <div className="flex min-w-0 flex-col gap-px"><strong className="text-[10px] font-semibold">开启过滤后将隐藏</strong><span className="text-[11px] text-jp-secondary [overflow-wrap:anywhere]">{exclusionReasons(job).join('；')}</span></div>
+                    </div>
                   )}
                   <JobSummaryCard job={job} onOpenAnalysis={() => onSub('match')} />
                 </>
@@ -1224,36 +1251,36 @@ export function JobDetail({
                     ['阶段', job.companyStage],
                     ['HR', [job.hrName, job.hrTitle].filter(Boolean).join(' · ')],
                   ]} />
-                  {![job.company, job.companyIndustry, job.companyScale, job.companyType, job.companyStage, job.hrName, job.hrTitle].some(Boolean) && <p>暂无公司信息。浏览岗位详情后，公开字段会补进岗位库。</p>}
-                  <p className="fine-print">公司信息来自岗位接口返回的公开字段，仅供参考。</p>
+                  {![job.company, job.companyIndustry, job.companyScale, job.companyType, job.companyStage, job.hrName, job.hrTitle].some(Boolean) && <p className={detailCopy}>暂无公司信息。浏览岗位详情后，公开字段会补进岗位库。</p>}
+                  <p className={finePrint}>公司信息来自岗位接口返回的公开字段，仅供参考。</p>
                 </>
               )}
               {sub === 'resume' && (
-                !hasProfile ? <p>简历建议基于个人画像生成。<button type="button" className={textActionClass} onClick={onProfileSettings}>前往设置完善画像</button></p>
+                !hasProfile ? <p className={detailCopy}>简历建议基于个人画像生成。<button type="button" className={textActionClass} onClick={onProfileSettings}>前往设置完善画像</button></p>
                   : (
                       <>
-                        <div className="section-head">
-                          <h3>简历定制建议</h3>
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className={detailH3}>简历定制建议</h3>
                           <button type="button" className="jp-btn jp-btn-primary" disabled={tailoring} onClick={onTailor}>{tailoring ? '生成中…' : advice ? '重新生成' : '生成建议'}</button>
                         </div>
-                        <p className="fine-print">只给建议，不改原简历，也不写入岗位库。</p>
-                        {tailoring && !advice && <p>正在生成建议…</p>}
+                        <p className={finePrint}>只给建议，不改原简历，也不写入岗位库。</p>
+                        {tailoring && !advice && <p className={detailCopy}>正在生成建议…</p>}
                         {advice && (
                           <>
                             {([['可突出的匹配点', advice.matchedSkills], ['建议对齐的岗位关键词', advice.keywordsToAlign], ['暂未体现', advice.missingSkills]] as Array<[string, string[]]>).map(([title, values]) => values.length > 0 && (
-                              <div key={title}><h3>{title}</h3><Tags values={values} /></div>
+                              <div key={title}><h3 className={detailH3}>{title}</h3><Tags values={values} /></div>
                             ))}
                             {advice.summaryDraft && (
                               <>
-                                <h3>自我评价草稿</h3>
-                                <p className="pre">{advice.summaryDraft}</p>
+                                <h3 className={detailH3}>自我评价草稿</h3>
+                                <p className={cn(detailCopy, 'whitespace-pre-wrap')}>{advice.summaryDraft}</p>
                                 <button type="button" className="jp-btn" onClick={() => onCopy(advice.summaryDraft)}>复制草稿</button>
                               </>
                             )}
                             {([['经历改写建议', advice.bulletSuggestions], ['投递提醒', advice.tips]] as Array<[string, string[]]>).map(([title, values]) => values.length > 0 && (
-                              <div key={title}><h3>{title}</h3><ul>{values.map((item, index) => <li key={index}>{item}</li>)}</ul></div>
+                              <div key={title}><h3 className={detailH3}>{title}</h3><ul className="pl-[18px]">{values.map((item, index) => <li className={detailCopy} key={index}>{item}</li>)}</ul></div>
                             ))}
-                            {advice.note && <p>{advice.note}</p>}
+                            {advice.note && <p className={detailCopy}>{advice.note}</p>}
                           </>
                         )}
                       </>
