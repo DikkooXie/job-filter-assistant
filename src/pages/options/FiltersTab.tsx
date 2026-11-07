@@ -5,21 +5,13 @@ import { cn } from '../../lib/cn.js';
 import { commitTags, filterSettingsPatch, parseSalaryMinK, removeLastTag } from './filterForm.js';
 import type { Settings } from '../../common/types.js';
 import type { UpdateSettings } from './types.js';
-import { focusRing, groupTitle, hint, rowTitle, switchInput } from './recipes.js';
+import { fieldGrid, fieldHint, fieldLabel, focusRing, groupTitle, hint, rowTitle, switchInput } from './recipes.js';
 
 /** 分组：组与组之间一条分隔线，第一组贴顶。 */
 const group = 'mt-[30px] border-t border-line pt-7 first:mt-0 first:border-t-0 first:pt-0';
 
 /** 一组字段纵向排列。 */
 const fields = 'flex flex-col gap-[11px]';
-
-/** 「标签 132px + 控件」两栏；窄屏改为上下排列。 */
-const field = 'grid grid-cols-[minmax(0,1fr)] items-start gap-[7px] wide:grid-cols-[132px_minmax(0,1fr)] wide:gap-x-[18px]';
-
-const fieldLabel = 'text-control leading-normal font-medium text-ink-2 wide:pt-2';
-
-/** 字段下方说明。 */
-const fieldHint = `${hint} mt-1.5 block`;
 
 /** 标签输入框外框：看起来是一个输入框，里面排已添加的标签和真正的 input。 */
 const tagBox = 'flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-field px-2 py-1.5 text-ink-1 focus-within:border-brand focus-within:shadow-focus';
@@ -44,7 +36,7 @@ function TagEditor({ label, value = [], onChange, tone, hint: note }: TagEditorP
     if (next !== value) onChange(next);
     setInput('');
   };
-  return <div className={field}>
+  return <div className={fieldGrid}>
     <span className={fieldLabel}>{label}</span>
     <div>
       <div className={tagBox}>
@@ -141,7 +133,7 @@ export default function FiltersTab({ settings, updateSettings }: FiltersTabProps
     <section className={group}>
       <h2 className={groupTitle}>薪资与要求</h2>
       <div className={fields}>
-        <div className={field}>
+        <div className={fieldGrid}>
           <label className={fieldLabel} htmlFor="filter-salary-min">月薪下限</label>
           <div>
             <div className="flex items-center gap-2">

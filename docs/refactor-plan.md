@@ -1,6 +1,6 @@
 # 重构计划：只做 BOSS + 架构梳理 + 全项目 TypeScript
 
-状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页「通用与隐私」「岗位筛选」已完成）
+状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页「通用与隐私」「岗位筛选」「模型接口」已完成）
 当前：`npm run typecheck` 零错误、`npm run lint` 零警告、`npm test` 196 通过 / 0 失败、`npm run build` 通过
 分支：`refactor/codebase-cleanup`（基于 `dev`，两者均已推送 `personal`）
 基线：`adbf521`，`npm test` 198 通过 / 0 失败，`npm run build` 通过
@@ -155,6 +155,7 @@ src/
 
 - 已完成：设置页「通用与隐私」（`GeneralTab.tsx`，删除 `general.css` 和未被引用的 `controls.tsx`）。四种截图与转换前逐像素一致。
 - 已完成：设置页「岗位筛选」（`FiltersTab.tsx`，删除 `filters.css`）。开关改用共用的 `switchInput`，滑块颜色从 `#fff` 统一为通用页的 `#f7fbfa`，零阈值比对只有这 15×15 像素不同；其余与转换前逐像素一致。测试里的 `is-risk` 类名断言改为断言风险词标签的红色底。
+- 已完成：设置页「模型接口」（`AiTab.tsx`，删除 `ai.css`）。「标签 + 控件」字段行与岗位筛选页共用，收进 `recipes.ts` 的 `fieldGrid` / `fieldLabel` / `fieldHint`。四种截图与转换前逐像素一致；「高级设置」的 `›` 需要保留 `rotate-0`，原样式的 `transform: rotate(0deg)` 会改变字形抗锯齿，去掉后有十几个像素不同。截图只覆盖默认状态，测试结果、请求头报错等状态靠逐条对照原 CSS 转换。
 - 复合样式用 `recipes.ts` 里的 TS 常量 / `cva` 收敛，而不是 `@apply`：类名留在 TSX 里可搜、可类型检查。
 - 合并类名必须用 `src/lib/cn.ts`。`cn` 包默认不认识自定义字号令牌，`cn('text-body text-ink-1')` 会丢掉字号；`cva` 本身只拼接不合并，基础类和变体冲突时要再过一遍 `cn()`。
 - 截图比对：截图前要等 `document.fonts.ready`，否则字体是否加载完会让同一份代码出现两种渲染（整页亚像素偏移、页高差 1px）。基线要从 HEAD 的独立 worktree 构建后截取，与改动版用同一套脚本。

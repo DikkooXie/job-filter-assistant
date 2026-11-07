@@ -18,6 +18,15 @@ export const rowTitle = 'text-body leading-normal font-medium text-ink-1';
 /** 标题下方的灰色说明。 */
 export const hint = 'text-hint leading-[1.6] text-ink-3';
 
+/** 「标签 132px + 控件」两栏的一行字段；窄屏改为上下排列。 */
+export const fieldGrid = 'grid grid-cols-[minmax(0,1fr)] items-start gap-[7px] wide:grid-cols-[132px_minmax(0,1fr)] wide:gap-x-[18px]';
+
+/** 字段左侧标签；宽屏下压 8px，和 36px 高的输入框文字对齐。 */
+export const fieldLabel = 'text-control leading-normal font-medium text-ink-2 wide:pt-2';
+
+/** 字段下方说明。 */
+export const fieldHint = `${hint} mt-1.5 block`;
+
 /**
  * 设置页按钮。默认描边款；primary 深色实心，ghost 无边框，danger 红字描边。
  *
