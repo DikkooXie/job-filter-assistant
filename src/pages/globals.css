@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@source "../react";
+@source "../pages";
 @source "../components";
 @custom-variant dark (@media (prefers-color-scheme: dark));
 @theme inline {
@@ -13,6 +13,24 @@
   --color-accent: var(--accent); --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive); --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
   --radius-sm: calc(var(--radius) - 4px); --radius-md: calc(var(--radius) - 2px); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) + 4px);
+}
+/* 设置页令牌：值定义在 src/pages/options/shell.css 的 .settings-root（浅色 / 深色），这里只起工具类名。
+   例：bg-page、text-ink-2、border-line-strong、bg-brand-soft、shadow-card、shadow-focus、text-body。
+   新增 --text-* 字号时，要同步登记到 src/lib/cn.ts 的 SIZE_TOKENS，否则 cn() 合并时会丢掉它。
+   wide: 是设置页的双栏断点（>860px），与 shell.css 里 max-width: 860px 的单栏规则对齐。 */
+@theme {
+  --breakpoint-wide: 861px;
+}
+@theme inline {
+  --color-page: var(--s-page); --color-surface: var(--s-surface); --color-surface-2: var(--s-surface-2);
+  --color-well: var(--s-inset); --color-field: var(--s-field);
+  --color-line: var(--s-border); --color-line-strong: var(--s-border-strong);
+  --color-ink-1: var(--s-ink-1); --color-ink-2: var(--s-ink-2); --color-ink-3: var(--s-ink-3);
+  --color-brand: var(--s-accent); --color-brand-soft: var(--s-accent-soft); --color-brand-line: var(--s-accent-line); --color-on-brand: var(--s-on-accent);
+  --color-ok: var(--s-up); --color-danger: var(--s-down); --color-danger-soft: var(--s-down-soft); --color-warn: var(--s-warn);
+  --color-btn: var(--s-btn-bg); --color-btn-ink: var(--s-btn-ink); --color-switch-off: var(--s-switch-off);
+  --shadow-card: var(--s-shadow); --shadow-focus: 0 0 0 3px var(--s-focus);
+  --text-micro: 11.5px; --text-hint: 12px; --text-note: 12.5px; --text-control: 13px; --text-body: 13.5px; --text-section: 15px;
 }
 :root {
   --radius: .5rem; --background: oklch(.99 0 0); --foreground: oklch(.18 0 0);

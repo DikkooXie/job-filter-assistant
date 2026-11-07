@@ -99,7 +99,8 @@ test('设置页颜色变量挂在 .settings-root，错误使用 alert', () => {
   assert.match(css, /--s-page:\s*#f1f2f0/);
   assert.match(css, /--s-page:\s*#161d22/);
   assert.doesNotMatch(css, /:root\s*\{[^}]*--s-page/);
-  assert.doesNotMatch(globals, /--s-page/);
+  // globals.css 只能用 var(--s-page) 起工具类名，不能在这里定义它。
+  assert.doesNotMatch(globals, /--s-page\s*:/);
   assert.match(options, /role=\{notice\?\.error \? 'alert' : 'status'\}/);
   assert.match(options, /aria-live="polite"/);
   assert.doesNotMatch(options, /import\(/);
@@ -234,7 +235,7 @@ test('岗位库数量只统计列表和收藏', () => {
 test('通用与隐私页保留原设置字段，并用岗位列表统计数量', () => {
   const root = ROOT;
   const page = fs.readFileSync(path.join(root, 'src/pages/options/GeneralTab.tsx'), 'utf8');
-  const css = fs.readFileSync(path.join(root, 'src/pages/options/general.css'), 'utf8');
+  const recipes = fs.readFileSync(path.join(root, 'src/pages/options/recipes.ts'), 'utf8');
   for (const key of ['autoCapture', 'autoScore', 'showBadge', 'dedupe', 'maxJobs', 'redactPII', 'sendCompanyName', 'confirmBeforeSend']) {
     assert.match(page, new RegExp(key));
   }
@@ -243,7 +244,7 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(page, /只用 BOSS 直聘/);
   assert.match(page, /role="radiogroup"/);
   assert.match(page, /type="radio"/);
-  assert.match(page, /gen-update-slot/);
+  assert.match(page, /<UpdatePanel /);
   assert.match(page, /UpdatePanel/);
   assert.match(page, /updateChannel/);
   const panel = fs.readFileSync(path.join(root, 'src/pages/options/UpdatePanel.tsx'), 'utf8');
@@ -317,8 +318,18 @@ test('通用与隐私页保留原设置字段，并用岗位列表统计数量',
   assert.match(script, /prerelease \? \['--prerelease'\] : \[\]/);
   assert.match(script, /四段版本号/);
   assert.doesNotMatch(page, /JOB_COUNT|JOB_STATS|SHOW_BADGE/);
-  assert.match(css, /:focus-visible/);
-  assert.match(css, /width:\s*36px/);
-  assert.match(css, /height:\s*21px/);
-  assert.doesNotMatch(css, /import\(/);
+  // 开关保持 36×21 的胶囊尺寸，并有键盘聚焦环。
+  assert.match(page, /role="switch" className=\{switchInput\}/);
+  assert.match(recipes, /export const switchInput = \[[^\]]*h-\[21px\] w-9/);
+  assert.match(recipes, /focus-visible:outline-2/);
+});
+
+test('cn 认识设置页字号令牌，且与 globals.css 的 --text-* 一一对应', async () => {
+  const { cn, SIZE_TOKENS } = await import('../../src/lib/cn.js');
+  // 默认的 cn 会把 text-body 当成文字颜色，和 text-ink-1 合并时丢掉字号。
+  assert.equal(cn('text-body text-ink-1'), 'text-body text-ink-1');
+  assert.equal(cn('text-sm text-control'), 'text-control');
+  const globals = fs.readFileSync(path.join(ROOT, 'src/pages/globals.css'), 'utf8');
+  const declared = [...globals.matchAll(/--text-([a-z]+):/g)].map((m) => m[1]);
+  assert.deepEqual([...declared].sort(), [...SIZE_TOKENS].sort());
 });
