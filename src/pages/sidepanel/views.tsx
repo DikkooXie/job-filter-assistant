@@ -232,6 +232,15 @@ interface AcceptRiskSheetProps {
   onSave: () => void;
 }
 
+// 底部弹层共用外壳；按钮和输入框仍沿用侧栏基础样式。
+const sheetScrimClass = 'absolute inset-0 z-10 flex items-end bg-[rgba(11,23,21,.34)]';
+const sheetClass = 'w-full max-h-[calc(100%-36px)] overflow-auto rounded-t-[10px] bg-jp-surface text-jp-ink shadow-[0_-8px_28px_rgba(0,0,0,.12)]';
+const sheetHandleClass = 'mx-auto mb-3 h-1 w-9 rounded-[2px] bg-jp-line-strong';
+const sheetSubClass = '!mt-1.5 !text-[12px] leading-[1.45] !text-jp-muted';
+const sheetContextClass = '!mt-3 rounded-lg border border-jp-line bg-jp-field px-2.5 py-2 text-[11px] leading-[1.4] text-jp-muted [&_strong]:font-semibold [&_strong]:text-jp-summary';
+const sheetActionButtonClass = 'jp-btn !h-10 !rounded-lg !text-[13px] !font-[650]';
+const sheetTealButtonClass = '!border-[#2dd4bf] !bg-[#2dd4bf] !text-[#0f1419] enabled:hover:!border-[#5eead4] enabled:hover:!bg-[#5eead4] enabled:hover:!text-[#0f1419]';
+
 function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }: AcceptRiskSheetProps) {
   const ref = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
@@ -259,17 +268,17 @@ function AcceptRiskSheet({ risk, draft, saving, onDraft, onClose, onSave }: Acce
     };
   }, []);
   return (
-    <div className="scrim accept-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="sheet accept-sheet" role="dialog" aria-modal="true" aria-labelledby="accept-risk-title" ref={ref}>
-        <div className="sheet-handle" aria-hidden="true" />
-        <h2 id="accept-risk-title">接受这条</h2>
-        <p className="sheet-sub">将这条风险记入画像偏好，后续同类可不提示</p>
-        <p className="accept-origin"><strong>本条</strong>：{risk}</p>
-        <label htmlFor="accept-risk-note">自然语言（可改）</label>
+    <div className={sheetScrimClass} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={cn(sheetClass, "pb-4")} role="dialog" aria-modal="true" aria-labelledby="accept-risk-title" ref={ref}>
+        <div className={cn(sheetHandleClass, "mt-2.5")} aria-hidden="true" />
+        <h2 id="accept-risk-title" className="!text-[16px] !font-[650]">接受这条</h2>
+        <p className={sheetSubClass}>将这条风险记入画像偏好，后续同类可不提示</p>
+        <p className={cn(sheetContextClass, "!mt-0")}><strong>本条</strong>：{risk}</p>
+        <label className="mt-3.5 mb-1.5 block text-[11px] text-jp-muted" htmlFor="accept-risk-note">自然语言（可改）</label>
         <textarea id="accept-risk-note" rows={4} value={draft} onChange={(event) => onDraft(event.target.value)} />
-        <div className="accept-actions">
-          <button type="button" className="jp-btn" onClick={onClose}>取消</button>
-          <button type="button" className="jp-btn jp-btn-primary" disabled={saving || !draft.trim()} onClick={onSave}>{saving ? '写入中…' : '写入画像'}</button>
+        <div className="mt-4 flex gap-2.5">
+          <button type="button" className={cn(sheetActionButtonClass, "!flex-[0_0_96px]")} onClick={onClose}>取消</button>
+          <button type="button" className={cn(sheetActionButtonClass, "jp-btn-primary !flex-1")} disabled={saving || !draft.trim()} onClick={onSave}>{saving ? '写入中…' : '写入画像'}</button>
         </div>
       </section>
     </div>
@@ -321,14 +330,15 @@ export function DislikeSheet({ job, saving, onClose, onSave }: DislikeSheetProps
     if (typeof result === 'string' && result) setError(result);
   };
   return (
-    <div className="scrim dislike-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="sheet dislike-sheet" role="dialog" aria-modal="true" aria-labelledby="dislike-title" ref={ref}>
-        <div className="sheet-handle" aria-hidden="true" />
-        <h2 id="dislike-title">不喜欢的地方</h2>
-        <p className="sheet-sub">画像不全易误判。用一句话告诉我要避开什么，写入画像。</p>
-        <p className="dislike-context">针对 · <strong>{title}</strong>{salary ? ` · ${salary}` : ''}{city ? ` · ${city}` : ''}</p>
+    <div className={cn(sheetScrimClass, "bg-black/55")} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={cn(sheetClass, "rounded-t-[16px] border-t border-jp-line-strong px-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))] shadow-[0_-8px_32px_rgba(0,0,0,.45)] [animation:sheet-up_220ms_ease]")} role="dialog" aria-modal="true" aria-labelledby="dislike-title" ref={ref}>
+        <div className={cn(sheetHandleClass, "mt-2.5")} aria-hidden="true" />
+        <h2 id="dislike-title" className="!text-[16px] !font-[650]">不喜欢的地方</h2>
+        <p className={sheetSubClass}>画像不全易误判。用一句话告诉我要避开什么，写入画像。</p>
+        <p className={cn(sheetContextClass, "truncate")}>针对 · <strong>{title}</strong>{salary ? ` · ${salary}` : ''}{city ? ` · ${city}` : ''}</p>
         <textarea
           id="dislike-note"
+          className="!mt-3.5 !resize-none !rounded-lg !text-[13px] !leading-[1.45]"
           rows={4}
           aria-label="不喜欢的地方"
           placeholder="例如：太偏销售、不要驻场…"
@@ -336,10 +346,10 @@ export function DislikeSheet({ job, saving, onClose, onSave }: DislikeSheetProps
           disabled={saving}
           onChange={(event) => { setDraft(event.target.value); if (error) setError(''); }}
         />
-        {error && <p className="dislike-error" role="alert">{error}</p>}
-        <div className="dislike-actions">
-          <button type="button" className="jp-btn" disabled={saving} onClick={onClose}>取消</button>
-          <button type="button" className="jp-btn jp-btn-primary" disabled={saving || !draft.trim()} onClick={submit}>确认写入</button>
+        {error && <p className="!mt-2 !text-[12px] !text-jp-danger" role="alert">{error}</p>}
+        <div className="mt-4 flex gap-2.5">
+          <button type="button" className={cn(sheetActionButtonClass, "!flex-[0_0_96px]")} disabled={saving} onClick={onClose}>取消</button>
+          <button type="button" className={cn(sheetActionButtonClass, "jp-btn-primary !flex-1", sheetTealButtonClass)} disabled={saving || !draft.trim()} onClick={submit}>确认写入</button>
         </div>
       </section>
     </div>
@@ -996,12 +1006,12 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }: { selectedCoun
     };
   }, []);
   return (
-    <div className="scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="sheet analyze-sheet" role="dialog" aria-modal="true" aria-labelledby="analyze-title" ref={ref}>
-        <div className="sheet-handle" aria-hidden="true" />
-        <h2 id="analyze-title">智能分析</h2>
-        <p className="analyze-sub">已选 {selectedCount} 个岗位 · 选择分析范围</p>
-        <div className="analyze-options" role="radiogroup" aria-label="分析范围">
+    <div className={sheetScrimClass} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={cn(sheetClass, "p-[12px_16px_calc(16px+env(safe-area-inset-bottom,0px))] [animation:sheet-up_220ms_ease]")} role="dialog" aria-modal="true" aria-labelledby="analyze-title" ref={ref}>
+        <div className={sheetHandleClass} aria-hidden="true" />
+        <h2 id="analyze-title" className="!text-[15px] !font-[650]">智能分析</h2>
+        <p className="!mt-2 !mb-4 !text-[12px] !text-jp-muted">已选 {selectedCount} 个岗位 · 选择分析范围</p>
+        <div className="flex flex-col gap-2" role="radiogroup" aria-label="分析范围">
           {ANALYZE_CHOICES.map((choice) => (
             <button
               type="button"
@@ -1010,23 +1020,23 @@ export function AnalyzeSheet({ selectedCount, onClose, onStart }: { selectedCoun
               aria-checked={!choice.disabled && mode === choice.id}
               aria-disabled={choice.disabled || undefined}
               disabled={choice.disabled}
-              className={`analyze-option${mode === choice.id ? ' is-selected' : ''}${choice.disabled ? ' is-disabled' : ''}`}
+              className={cn('flex w-full items-start gap-2.5 rounded-[10px] !border !border-jp-line !bg-jp-field !px-3 !py-[11px] text-left !text-jp-ink', mode === choice.id && '!border-[rgba(45,212,191,.55)] !bg-[rgba(45,212,191,.08)]', choice.disabled && 'opacity-[.48] !border-dashed !bg-jp-surface-2')}
               onClick={() => { if (!choice.disabled) setMode(choice.id); }}
             >
-              <span className="analyze-radio" aria-hidden="true" />
-              <span className="analyze-copy">
-                <span className="analyze-label">
+              <span className={cn("relative mt-0.5 size-4 shrink-0 rounded-full border-[1.5px] border-jp-line-strong", mode === choice.id && "border-[#2dd4bf] after:absolute after:inset-[3px] after:rounded-full after:bg-[#2dd4bf] after:content-['']")} aria-hidden="true" />
+              <span className="flex min-w-0 flex-col gap-[3px]">
+                <span className={cn("flex flex-wrap items-center gap-2 text-[13px] font-[650] leading-[1.35]", choice.disabled && "font-[550] text-jp-muted")}>
                   {choice.title}
-                  {choice.tag === '推荐' && <span className="tag-recommend">推荐</span>}
+                  {choice.tag === '推荐' && <span className="inline-flex items-center rounded-full bg-[#f0b429] px-[7px] py-px text-[10px] font-bold leading-4 text-[#0f1419]">推荐</span>}
                 </span>
-                <span className="analyze-desc">{choice.desc}</span>
+                <span className="text-[11px] leading-[1.4] text-jp-muted">{choice.desc}</span>
               </span>
             </button>
           ))}
         </div>
-        <div className="analyze-actions">
-          <button type="button" className="jp-btn" onClick={onClose}>取消</button>
-          <button type="button" className="jp-btn jp-btn-primary" onClick={() => onStart(mode)}>开始分析</button>
+        <div className="mt-3 flex gap-2">
+          <button type="button" className={"jp-btn !min-h-[38px] !rounded-[9px]"} onClick={onClose}>取消</button>
+          <button type="button" className={cn("jp-btn jp-btn-primary !min-h-[38px] !flex-1 !rounded-[9px]", sheetTealButtonClass)} onClick={() => onStart(mode)}>开始分析</button>
         </div>
       </section>
     </div>
@@ -1327,22 +1337,22 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }: {
     };
   }, []);
   return (
-    <div className="scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="sheet" role="dialog" aria-modal="true" aria-label="筛选岗位" ref={ref}>
-        <header className="sheet-head">
-          <h2>筛选岗位</h2>
-          <button type="button" className="icon-btn" aria-label="关闭" onClick={onClose}><X aria-hidden="true" /></button>
+    <div className={sheetScrimClass} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={sheetClass} role="dialog" aria-modal="true" aria-label="筛选岗位" ref={ref}>
+        <header className="sticky top-0 flex items-center justify-between bg-jp-surface px-4 pt-[15px] pb-2.5">
+          <h2 className="!text-[15px] !font-[620]">筛选岗位</h2>
+          <button type="button" className="inline-flex size-[30px] items-center justify-center rounded-[5px] text-jp-secondary hover:!bg-jp-inset" aria-label="关闭" onClick={onClose}><X aria-hidden="true" /></button>
         </header>
-        <div className="sheet-content">
-          <fieldset>
-            <legend>匹配结果</legend>
-            <div className="filter-options">
+        <div className="p-[8px_16px_22px]">
+          <fieldset className="!m-0 !mb-[18px] min-w-0 !border-0 !p-0">
+            <legend className="!mb-2 !p-0 text-[12px] font-semibold">匹配结果</legend>
+            <div className="flex flex-wrap gap-x-3.5 gap-y-2.5">
               {[['all', '全部'], ['strong', '强匹配'], ['good', '较匹配'], ['fair', '一般'], ['unscored', '未分析']].map(([key, label]) => (
-                <label key={key}><input type="radio" name="verdict" checked={view.verdict === key} onChange={() => onView({ verdict: key })} />{label}</label>
+                <label key={key} className="flex min-h-6 items-center gap-1.5 text-[12px]"><input type="radio" name="verdict" checked={view.verdict === key} onChange={() => onView({ verdict: key })} />{label}</label>
               ))}
             </div>
           </fieldset>
-          <div className="sheet-actions">
+          <div className="mt-2 flex flex-wrap justify-end gap-2">
             <button type="button" className="jp-btn" onClick={onReset}>重置视图</button>
             <button type="button" className="jp-btn jp-btn-primary" onClick={onClose}>查看 {shown} 个岗位</button>
           </div>

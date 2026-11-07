@@ -312,7 +312,7 @@ test('侧栏底栏改为工作台入口和智能分析', () => {
   assert.match(views, /全部重新分析/);
   assert.match(views, /只分析当前画像下未分析的/);
   assert.match(views, /跳过已在当前画像下分析过的岗位；画像变化后的旧结果会重新分析/);
-  assert.match(views, /tag-recommend/);
+  assert.match(views, /choice\.tag === '推荐'/);
   assert.doesNotMatch(views, /本轮不可选|tag:\s*'后续'|disabled:\s*true/);
   assert.match(views, /后续同类可不提示/);
   assert.match(views, /找到 \$\{freshCount\} 个新岗位/);
@@ -472,17 +472,15 @@ test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
 });
 
 test('智能分析抽屉按 4pt 终锁留白', () => {
-  const root = ROOT;
-  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
-  const sheet = browse.match(/\.analyze-sheet \{[^}]*\}/)?.[0] || '';
-  assert.match(sheet, /padding:\s*12px 16px calc\(16px \+ env\(safe-area-inset-bottom,\s*0px\)\)/);
-  assert.match(browse, /\.analyze-sheet \.sheet-handle \{[^}]*margin:\s*0 auto 12px/);
-  assert.match(browse, /\.job-panel \.analyze-sub \{[^}]*margin-top:\s*8px/);
-  assert.match(browse, /\.job-panel \.analyze-sub \{[^}]*margin-bottom:\s*16px/);
-  assert.match(browse, /\.analyze-options \{[^}]*gap:\s*8px/);
-  assert.match(browse, /\.analyze-actions \{[^}]*margin-top:\s*12px/);
-  assert.match(browse, /\.analyze-actions \{[^}]*gap:\s*8px/);
-  assert.match(browse, /\.sheet-content \{[^}]*padding:\s*8px 16px 22px/);
+  const views = fs.readFileSync(path.join(ROOT, 'src/pages/sidepanel/views.tsx'), 'utf8');
+  const sheet = views.slice(views.indexOf('export function AnalyzeSheet'), views.indexOf('export function SurfaceState'));
+  assert.match(sheet, /p-\[12px_16px_calc\(16px\+env\(safe-area-inset-bottom,0px\)\)\]/);
+  assert.match(views, /const sheetHandleClass = '[^']*mb-3/);
+  assert.match(sheet, /className=\{sheetHandleClass\}/);
+  assert.match(sheet, /!mt-2 !mb-4/);
+  assert.match(sheet, /flex flex-col gap-2/);
+  assert.match(sheet, /mt-3 flex gap-2/);
+  assert.match(views, /p-\[8px_16px_22px\]/);
 });
 
 test('详情删除成功才回到列表，批量删除不改去向', () => {
@@ -549,7 +547,6 @@ test('删除确认态文案是再次点击确认删除', () => {
 
 test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重跑', () => {
   const root = ROOT;
-  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
   const row = views.slice(views.indexOf('export function JobRow'), views.indexOf('export function ListFooter'));
@@ -563,8 +560,8 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
   assert.match(sheet, /画像不全易误判。用一句话告诉我要避开什么，写入画像。/);
   assert.match(sheet, /避开/);
   assert.match(sheet, /写入画像/);
-  assert.match(browse, /\.job-panel \.dislike-sheet \.dislike-context \{[^}]*margin-top:\s*12px/);
-  assert.match(browse, /\.job-panel \.dislike-sheet textarea \{[^}]*margin-top:\s*14px/);
+  assert.match(views, /const sheetContextClass = '!mt-3/);
+  assert.match(sheet, /!mt-3\.5 !resize-none/);
   assert.match(sheet, /placeholder="例如：太偏销售、不要驻场…"/);
   assert.match(sheet, /针对 · <strong>/);
   assert.match(sheet, />取消</);
@@ -577,11 +574,10 @@ test('不喜欢直接打开自然语言底抽屉，写入雷点且不自动重�
   assert.match(save, /PROFILE_SAVE/);
   assert.match(save, /已写入画像/);
   assert.doesNotMatch(save, /AI_MATCH|startAnalysis|重新分析|analyze\(/);
-  const primary = browse.match(/\.job-panel \.dislike-sheet \.jp-btn-primary \{[^}]*\}/)?.[0] || '';
-  assert.match(primary, /background:\s*#2dd4bf/);
-  assert.match(primary, /color:\s*#0f1419/);
-  assert.match(browse, /\.scrim\.dislike-scrim \{[^}]*rgba\(0,\s*0,\s*0,\s*\.55\)/);
-  assert.match(browse, /\.sheet\.dislike-sheet \{[^}]*border-radius:\s*16px 16px 0 0/);
+  assert.match(views, /const sheetTealButtonClass = '[^']*!bg-\[#2dd4bf\][^']*!text-\[#0f1419\]/);
+  assert.match(sheet, /sheetTealButtonClass/);
+  assert.match(sheet, /bg-black\/55/);
+  assert.match(sheet, /rounded-t-\[16px\]/);
 });
 
 test('抽取画像方案 B 把底栏放进同一个圆角框', () => {

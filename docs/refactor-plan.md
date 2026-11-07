@@ -1,6 +1,6 @@
 # 重构计划：只做 BOSS + 架构梳理 + 全项目 TypeScript
 
-状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页已完成，侧栏与浮窗待转换）
+状态：P1–P5 已完成；P3 的 `views.tsx` / `browse.css` 拆分并入 P6；P6 进行中（设置页已完成；侧栏已转换批量队列、列表与底部弹层，详情及其他区域仍待转换；浮窗待转换）
 当前：`npm run typecheck` 零错误、`npm run lint` 零警告、`npm test` 196 通过 / 0 失败、`npm run build` 通过
 分支：`refactor/codebase-cleanup`（基于 `dev`，两者均已推送 `personal`）
 基线：`adbf521`，`npm test` 198 通过 / 0 失败，`npm run build` 通过
