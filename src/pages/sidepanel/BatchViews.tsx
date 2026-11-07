@@ -100,8 +100,8 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
     <div className="absolute inset-0 z-[12] flex items-end bg-queue-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className="queue-drawer flex h-[52%] max-h-[52%] min-h-0 w-full flex-col rounded-t-[16px] bg-queue-surface text-queue-ink shadow-[0_-12px_32px_rgba(0,0,0,.28)] [animation:sheet-up_220ms_ease]" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
         <div className="sheet-handle" aria-hidden="true" />
-        <header className="queue-head">
-          <div className="queue-head-row">
+        <header className="queue-head shrink-0 px-[14px]">
+          <div className="flex items-center justify-between gap-2">
             <h2 id="queue-title">{model.head}</h2>
             <button type="button" className="queue-cancel" disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
           </div>
@@ -116,7 +116,7 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
           <button type="button" className={`queue-chip${chip === 'running' ? ' is-on' : ''}`} aria-pressed={chip === 'running'} onClick={() => setChip('running')}>进行中</button>
           <button type="button" className={`queue-chip${model.failed.length ? ' is-failed' : ''}${chip === 'failed' ? ' is-on' : ''}`} aria-pressed={chip === 'failed'} onClick={() => setChip('failed')}>失败 {model.failed.length}</button>
         </div>
-        <div className="queue-scroll">
+        <div className="min-h-0 flex-1 overflow-auto px-[14px] pb-2">
           {chip !== 'failed' && (
             <QueueSection id="running" title="进行中" count={view.running.length} open={open.running} onToggle={() => toggle('running')}>
               {view.running.length === 0 && <p className="queue-empty">没有进行中的岗位</p>}

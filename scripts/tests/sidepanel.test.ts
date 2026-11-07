@@ -674,9 +674,8 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.match(browse, /\.batch-strip\s*\{[^}]*color:\s*#2dd4bf/);
   assert.match(browse, /\.batch-strip\.is-failed\s*\{[^}]*color:\s*#f0b429/);
   assert.match(batchViews, /h-\[52%\] max-h-\[52%\]/);
-  assert.match(browse, /\.queue-scroll\s*\{[^}]*overflow:\s*auto/);
-  assert.match(browse, /\.queue-head\s*\{[^}]*padding:\s*0 14px;/);
-  assert.doesNotMatch(browse.match(/\.queue-head\s*\{[^}]*\}/)?.[0] || '', /padding-bottom|8px/);
+  assert.match(batchViews, /min-h-0 flex-1 overflow-auto px-\[14px\] pb-2/);
+  assert.match(batchViews, /queue-head shrink-0 px-\[14px\]/);
   assert.match(browse, /\.queue-bar\s*\{[^}]*margin-top:\s*12px/);
   assert.match(browse, /\.job-panel \.queue-summary\s*\{[^}]*margin-top:\s*12px/);
   assert.match(browse, /\.queue-chips\s*\{[^}]*margin-top:\s*16px/);
