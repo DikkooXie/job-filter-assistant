@@ -55,9 +55,9 @@ export default function Popup() {
   const scored = jobs.filter(isCompleteAnalysis).length;
   const strong = jobs.filter((job) => isCompleteAnalysis(job) && ['strong', 'good'].includes(job.match?.verdict ?? '')).length;
   return <main className="w-[340px] max-w-full p-4 flex flex-col gap-4">
-    <header className="popup-header flex items-center gap-2.5">
-      <img className="popup-logo block h-7 w-7 shrink-0 object-contain" src={markUrl} alt="" width={28} height={28} />
-      <div className="popup-title text-[15px] font-semibold leading-tight">Offercome</div>
+    <header className="flex items-center gap-2.5">
+      <img className="block h-7 w-7 shrink-0 object-contain" src={markUrl} alt="" width={28} height={28} />
+      <div className="text-[15px] font-semibold leading-tight">Offercome</div>
     </header>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     {!settings ? <p className="text-sm text-muted-foreground">{error ? '请重新打开扩展。' : '正在加载…'}</p> : <>
