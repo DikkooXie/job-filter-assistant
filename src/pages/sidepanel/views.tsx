@@ -602,9 +602,8 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
     <article
       ref={scopeRef}
       className={cn(
-        // group/row 让警示条目随卡片悬停展开；job-row / is-confirming 仍是操作区展开规则（browse.css）的挂钩类。
-        'group/row job-row min-w-0 rounded-[10px] border px-3 pt-3 pb-2.5',
-        confirming && 'is-confirming',
+        // group/row 让警示条目和操作区随卡片悬停展开。
+        'group/row min-w-0 rounded-[10px] border px-3 pt-3 pb-2.5',
         returned ? 'bg-jp-accent-soft' : confirming ? rowTint : 'bg-jp-surface-2 hover:bg-[color-mix(in_srgb,var(--jp-ink)_4%,var(--jp-surface-2))]',
         isNew ? 'border-[rgba(240,180,41,.55)]' : returned || confirming ? 'border-jp-accent-line' : 'border-jp-line hover:border-jp-accent-line',
         confirming ? 'shadow-[0_0_0_1px_var(--jp-accent-soft)]' : 'hover:shadow-[0_0_0_1px_var(--jp-accent-soft)]',
@@ -698,29 +697,75 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
   );
 }
 
-function DeleteRowButton({ confirming, name, onClick }: { confirming: string | null; name: string; onClick: () => void }) {
+/* 操作行（列表卡片与详情底栏共用）。
+   `!` 用来盖过 browse.css 里 .job-panel button / svg 和 .jp-btn 的未分层规则。 */
+// 列表操作区：卡片悬停、键盘聚焦或删除待确认时展开（grid-rows 0fr → 1fr）。
+const rowActionsClass = cn(
+  'grid grid-rows-[0fr] overflow-hidden opacity-0 [transition:grid-template-rows_180ms_ease,opacity_180ms_ease,margin-top_180ms_ease]',
+  'group-hover/row:mt-2 group-hover/row:grid-rows-[1fr] group-hover/row:opacity-100',
+  'focus-within:mt-2 focus-within:grid-rows-[1fr] focus-within:opacity-100',
+);
+const rowActionsOpen = 'mt-2 grid-rows-[1fr] opacity-100';
+const actionsRowClass = (deleting: boolean) => cn('flex w-full items-center gap-1.5 pt-0.5', deleting && 'gap-0');
+/* 图标按钮静止宽度锁在 28px（详情 36px）。悬停只抬高 max-width，边框盒单调变宽。
+   不要把 width / flex-basis 从固定值过渡到 auto：auto 会先按图标内容宽（约 16px）插值，
+   右缘热区缩回，指针落到「不喜欢」上，两个按钮来回抢 hover。 */
+const actIconClass = cn(
+  'group/act inline-flex h-7 w-auto min-w-7 max-w-7 flex-none items-center justify-center gap-0 overflow-hidden whitespace-nowrap rounded-[6px]',
+  '!border !border-jp-line-strong !bg-jp-field !p-0 !text-hint !text-jp-muted [&_svg]:!size-3.5',
+  '[transition:max-width_200ms_ease,min-width_200ms_ease,padding_200ms_ease,gap_200ms_ease,background_160ms_ease,border-color_160ms_ease,color_160ms_ease,flex-grow_200ms_ease,opacity_200ms_ease,border-width_200ms_ease]',
+);
+const actIconDetail = 'h-9 min-w-9 max-w-9 rounded-[8px] [&_svg]:!size-[15px]';
+const actIconHover = 'hover:max-w-[9em] hover:gap-[5px] hover:!px-2.5 focus-visible:max-w-[9em] focus-visible:gap-[5px] focus-visible:!px-2.5';
+const delHover = 'hover:!border-jp-del-hover-bd hover:!bg-jp-del-hover-bg hover:!text-jp-del-hover-fg focus-visible:!border-jp-del-hover-bd focus-visible:!bg-jp-del-hover-bg focus-visible:!text-jp-del-hover-fg';
+const dislikeHover = 'hover:!border-jp-dislike-hover-bd hover:!bg-jp-dislike-hover-bg hover:!text-jp-dislike-hover-fg focus-visible:!border-jp-dislike-hover-bd focus-visible:!bg-jp-dislike-hover-bg focus-visible:!text-jp-dislike-hover-fg';
+// 删除待确认：max-width 到 none 不能插值，立刻放开上限，只让 flex-grow 把按钮拉满整行。
+const delConfirmClass = cn(
+  'w-auto min-w-0 max-w-none flex-auto justify-center gap-1.5 !border-jp-confirm-del !bg-jp-confirm-del !px-3 !text-white',
+  '[transition:flex-grow_200ms_ease,padding_200ms_ease,gap_200ms_ease,background_160ms_ease,border-color_160ms_ease,color_160ms_ease,opacity_200ms_ease]',
+);
+const actLabelClass = 'inline-block min-w-0 max-w-0 overflow-hidden font-[550] opacity-0 [transition:max-width_200ms_ease,opacity_160ms_ease]';
+const actLabelHover = 'group-hover/act:max-w-[4.5em] group-hover/act:opacity-100 group-focus-visible/act:max-w-[4.5em] group-focus-visible/act:opacity-100';
+const actLabelConfirm = 'max-w-[200px] font-[650] tracking-[0.01em] opacity-100';
+// 删除待确认时，同一行的其他按钮收成 0 宽并不可点。
+const actCollapsedClass = '!flex-[0_0_0px] !w-0 !min-w-0 !max-w-0 !gap-0 !border-0 !p-0 !opacity-0 overflow-hidden pointer-events-none';
+const actGreetClass = cn(
+  'inline-flex h-7 min-w-0 flex-auto items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-[6px]',
+  '!bg-jp-accent !px-3 !text-hint !font-[650] !text-jp-on-accent [&_svg]:!size-3',
+  'hover:enabled:!bg-[color-mix(in_srgb,var(--jp-accent)_88%,var(--jp-ink))]',
+  '[transition:flex-grow_200ms_ease,flex-basis_200ms_ease,opacity_200ms_ease,max-width_200ms_ease,padding_200ms_ease,min-width_200ms_ease]',
+);
+
+interface RowButtonProps {
+  confirming: string | null;
+  name: string;
+  detail?: boolean;
+}
+
+function DeleteRowButton({ confirming, name, detail, onClick }: RowButtonProps & { onClick: () => void }) {
+  const deleting = confirming === 'delete';
   return (
     <button
       type="button"
-      className="act-icon del"
+      className={cn(actIconClass, detail && actIconDetail, deleting ? delConfirmClass : [actIconHover, delHover], confirming && !deleting && actCollapsedClass)}
       data-row-action="delete"
-      aria-pressed={confirming === 'delete'}
-      aria-hidden={confirming && confirming !== 'delete' ? true : undefined}
-      tabIndex={confirming && confirming !== 'delete' ? -1 : 0}
+      aria-pressed={deleting}
+      aria-hidden={confirming && !deleting ? true : undefined}
+      tabIndex={confirming && !deleting ? -1 : 0}
       aria-label={confirming === 'delete' ? `再次点击确认删除 ${name}` : `删除 ${name}`}
       onClick={onClick}
     >
       <Trash2 aria-hidden="true" />
-      <span className="lbl" aria-hidden="true">{confirming === 'delete' ? '再次点击确认删除' : '删除'}</span>
+      <span className={cn(actLabelClass, deleting ? actLabelConfirm : actLabelHover)} aria-hidden="true">{confirming === 'delete' ? '再次点击确认删除' : '删除'}</span>
     </button>
   );
 }
 
-function DislikeRowButton({ confirming, name, onDislike }: { confirming: string | null; name: string; onDislike: () => void }) {
+function DislikeRowButton({ confirming, name, detail, onDislike }: RowButtonProps & { onDislike: () => void }) {
   return (
     <button
       type="button"
-      className="act-icon dislike"
+      className={cn(actIconClass, detail && actIconDetail, confirming ? actCollapsedClass : [actIconHover, dislikeHover])}
       data-row-action="dislike"
       aria-hidden={confirming ? true : undefined}
       tabIndex={confirming ? -1 : 0}
@@ -728,7 +773,7 @@ function DislikeRowButton({ confirming, name, onDislike }: { confirming: string 
       onClick={onDislike}
     >
       <HeartCrack aria-hidden="true" />
-      <span className="lbl" aria-hidden="true">不喜欢</span>
+      <span className={cn(actLabelClass, !confirming && actLabelHover)} aria-hidden="true">不喜欢</span>
     </button>
   );
 }
@@ -745,14 +790,14 @@ interface ListRowActionsProps {
 
 function ListRowActions({ name, company, confirming, progressStatus, onDelete, onDislike, onGreet }: ListRowActionsProps) {
   return (
-    <div className="row-actions">
-      <div className="row-actions-inner">
-        <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
+    <div className={cn(rowActionsClass, confirming && rowActionsOpen)}>
+      <div className="min-h-0 overflow-hidden">
+        <div className={actionsRowClass(confirming === 'delete')}>
           <DeleteRowButton confirming={confirming} name={name} onClick={onDelete} />
           <DislikeRowButton confirming={confirming} name={name} onDislike={onDislike} />
           <button
             type="button"
-            className={`act-greet${progressStatus ? ' progressed' : ''}`}
+            className={cn(actGreetClass, progressStatus && '!font-bold', confirming && actCollapsedClass)}
             data-row-action="greet"
             tabIndex={confirming ? -1 : 0}
             aria-hidden={confirming ? true : undefined}
@@ -778,11 +823,12 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
   const starred = !!job.star;
   const { confirming, arm, scopeRef } = useDeleteConfirm(job.uid);
   return (
-    <footer className="detail-sticky" ref={scopeRef}>
-      <div className={`actions-row${confirming ? ` is-confirm-${confirming}` : ''}`}>
+    // detail-sticky 是 SidepanelApp 量底部浮层高度用的查询挂钩。
+    <footer className="detail-sticky flex shrink-0 items-center gap-2 border-t border-jp-line bg-jp-surface-2 px-3 pt-2.5 pb-3.5" ref={scopeRef}>
+      <div className={cn(actionsRowClass(confirming === 'delete'), 'flex-auto pt-0')}>
         <button
           type="button"
-          className="jp-btn jp-btn-primary detail-open"
+          className={cn('jp-btn jp-btn-primary detail-open', confirming && actCollapsedClass)}
           data-row-action="open"
           disabled={!job.url}
           aria-hidden={confirming ? true : undefined}
@@ -793,7 +839,7 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
         </button>
         <button
           type="button"
-          className={`act-icon fav${starred ? ' is-on' : ''}`}
+          className={cn(actIconClass, actIconDetail, confirming ? actCollapsedClass : actIconHover, starred && '!text-jp-accent')}
           data-row-action="star"
           aria-pressed={starred}
           aria-hidden={confirming ? true : undefined}
@@ -802,10 +848,10 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
           onClick={onStar}
         >
           <Star aria-hidden="true" fill={starred ? 'currentColor' : 'none'} />
-          <span className="lbl" aria-hidden="true">{starred ? '取消收藏' : '收藏'}</span>
+          <span className={cn(actLabelClass, !confirming && actLabelHover)} aria-hidden="true">{starred ? '取消收藏' : '收藏'}</span>
         </button>
-        <DislikeRowButton confirming={confirming} name={name} onDislike={onDislike} />
-        <DeleteRowButton confirming={confirming} name={name} onClick={() => { if (arm('delete')) onDelete(); }} />
+        <DislikeRowButton detail confirming={confirming} name={name} onDislike={onDislike} />
+        <DeleteRowButton detail confirming={confirming} name={name} onClick={() => { if (arm('delete')) onDelete(); }} />
       </div>
     </footer>
   );

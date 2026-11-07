@@ -41,6 +41,9 @@
   --color-jp-accent: var(--jp-accent); --color-jp-on-accent: var(--jp-on-accent); --color-jp-confirm-del: var(--jp-confirm-del);
   --color-jp-accent-soft: var(--jp-accent-soft); --color-jp-accent-line: var(--jp-accent-line); --color-jp-switch: var(--jp-switch);
   --color-jp-danger: var(--jp-danger); --color-jp-danger-soft: var(--jp-danger-soft);
+  /* 操作行「删除 / 不喜欢」悬停配色。 */
+  --color-jp-del-hover-fg: var(--jp-del-hover-fg); --color-jp-del-hover-bg: var(--jp-del-hover-bg); --color-jp-del-hover-bd: var(--jp-del-hover-bd);
+  --color-jp-dislike-hover-fg: var(--jp-dislike-hover-fg); --color-jp-dislike-hover-bg: var(--jp-dislike-hover-bg); --color-jp-dislike-hover-bd: var(--jp-dislike-hover-bd);
   /* 分析等级（色块、等级字、分数）与警示 chip。 */
   --color-jp-seg-empty: var(--jp-seg-empty); --color-jp-seg-low: var(--jp-seg-low); --color-jp-seg-mid: var(--jp-seg-mid);
   --color-jp-grade-low: var(--jp-grade-low); --color-jp-grade-mid: var(--jp-grade-mid); --color-jp-warn: var(--jp-warn);

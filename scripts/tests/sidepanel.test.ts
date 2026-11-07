@@ -132,7 +132,7 @@ test('列表卡片把警示区放进分析框，摘要两行省略，操作行�
   const zone = views.slice(views.indexOf('function AnalysisWarnings'), rowStart);
   const analysis = row.indexOf('className={analysisBox(!grade)}');
   const call = row.indexOf('<AnalysisWarnings job={job} />');
-  const actions = row.indexOf('className="row-actions"');
+  const actions = row.indexOf('<ListRowActions');
   assert.ok(analysis >= 0 && call > analysis && actions > call);
   // 警示：chip + 收起的条目列表，悬停或聚焦整张卡片（group/row）时展开。
   assert.match(zone, /<WarnChip kind=\{zone\.chip\}/);
@@ -140,19 +140,22 @@ test('列表卡片把警示区放进分析框，摘要两行省略，操作行�
   assert.match(views, /const warnListClass = cn\([^;]*grid-rows-\[0fr\] opacity-0/);
   assert.match(views, /group-hover\/row:grid-rows-\[1fr\]/);
   assert.match(views, /group-focus-within\/row:grid-rows-\[1fr\]/);
-  assert.match(row, /'group\/row job-row /);
+  assert.match(row, /'group\/row min-w-0 /);
   assert.doesNotMatch(row, /className="risk"|className="exclusion"/);
-  assert.match(row, /className="act-icon del"/);
-  assert.match(row, /className="act-icon dislike"/);
-  assert.match(row, /className=\{`act-greet/);
+  assert.match(row, /<DeleteRowButton confirming=\{confirming\}/);
+  assert.match(row, /<DislikeRowButton confirming=\{confirming\}/);
+  assert.match(row, /className=\{cn\(actGreetClass/);
   // 摘要两行省略。
   assert.match(row, /line-clamp-2 [^"]*!text-jp-summary/);
   assert.match(css, /--jp-summary:\s*#c9d1d9/);
   assert.doesNotMatch(css, /warn-list|warn-chip|\.analysis(?![\w-])/);
-  assert.match(css, /\.job-row:hover \.row-actions/);
-  const actionCss = css.slice(css.indexOf('.row-actions {'), css.indexOf('.risk, .exclusion'));
-  assert.match(actionCss, /grid-template-rows: 0fr/);
-  assert.doesNotMatch(actionCss, /warn-chip|warn-list|line-clamp/);
+  // 操作区随卡片悬停、聚焦或删除待确认时展开，样式已全部移到 views.tsx。
+  const actionCls = views.match(/const rowActionsClass = cn\([^;]*\);/)?.[0] || '';
+  assert.match(actionCls, /grid-rows-\[0fr\] overflow-hidden opacity-0/);
+  assert.match(actionCls, /group-hover\/row:grid-rows-\[1fr\]/);
+  assert.match(actionCls, /focus-within:grid-rows-\[1fr\]/);
+  assert.match(row, /cn\(rowActionsClass, confirming && rowActionsOpen\)/);
+  assert.doesNotMatch(css, /\.row-actions|\.job-row\b|\.act-icon|\.act-greet|\.actions-row/);
 });
 
 test('岗位库只采用已收录列表，空结果不补演示岗位', () => {
@@ -340,8 +343,8 @@ test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () =>
   assert.match(box, /bg-jp-inset/);
   assert.doesNotMatch(box, /border/);
   assert.doesNotMatch(browse, /\.analysis\s*\{/);
-  assert.match(views, /'group\/row job-row min-w-0 rounded-\[10px\] border px-3/);
-  assert.doesNotMatch(views, /job-row[^']*border-b\b/);
+  assert.match(views, /'group\/row min-w-0 rounded-\[10px\] border px-3/);
+  assert.doesNotMatch(views, /group\/row[^']*border-b\b/);
   assert.match(views, /className=\{analysisBox\(!grade\)\}/);
   assert.doesNotMatch(views, /flow-link/);
 });
@@ -416,7 +419,7 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
   const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
   const analysisStart = views.indexOf('className={analysisBox(!grade)}');
-  const actionsStart = views.indexOf('className="row-actions"', analysisStart);
+  const actionsStart = views.indexOf('<ListRowActions', analysisStart);
   const analysis = views.slice(analysisStart, actionsStart);
   assert.ok(analysisStart > 0 && actionsStart > analysisStart);
   assert.match(analysis, /尚未分析/);
@@ -433,11 +436,10 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(views, /-skew-x-18/);
   assert.match(views, /const scoreClass = '[^']*!font-score[^']*!tabular-nums/);
   assert.match(globals, /--font-score:\s*"Space Grotesk"/);
-  assert.match(browse, /grid-template-rows:\s*0fr/);
-  assert.match(browse, /180ms/);
-  assert.match(browse, /200ms/);
+  assert.match(views, /const rowActionsClass = cn\([^;]*grid-rows-\[0fr\][^;]*180ms/);
+  assert.match(views, /const actIconClass = cn\([^;]*max-width_200ms/);
   assert.match(browse, /#2dd4bf/);
-  assert.match(browse, /\.act-greet\s*\{[^}]*flex:\s*1 1 auto/);
+  assert.match(views, /const actGreetClass = cn\([^;]*flex-auto/);
   assert.match(sidepanel, /onDelete=\{\(\) => deleteJob\(/);
   assert.match(sidepanel, /onDislike=\{\(\) => dislikeJob\(/);
   assert.match(sidepanel, /JOB_DELETE/);
@@ -454,20 +456,19 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
 
 test('操作行悬停伸长不把宽度从固定值过渡到 auto', () => {
   const root = ROOT;
-  const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
-  const icon = browse.match(/\.job-panel \.act-icon \{[^}]*\}/)?.[0] || '';
-  const hover = browse.match(/\.job-panel \.act-icon:hover,\s*\n\.job-panel \.act-icon:focus-visible \{[^}]*\}/)?.[0] || '';
-  assert.match(icon, /min-width:\s*28px/);
-  assert.match(icon, /max-width:\s*28px/);
-  assert.match(icon, /flex:\s*0 0 auto/);
-  const transition = icon.match(/transition:[^;]*;/)?.[0] || '';
-  assert.doesNotMatch(transition, /(^|[,\s])width\s/);
+  const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
+  const icon = views.match(/const actIconClass = cn\([^;]*\);/)?.[0] || '';
+  const hover = views.match(/const actIconHover = '[^']*'/)?.[0] || '';
+  // 静止宽度锁在 28px（min-w-7 / max-w-7），不参与 flex 伸缩。
+  assert.match(icon, /min-w-7 max-w-7 flex-none/);
+  const transition = icon.match(/\[transition:[^\]]*\]/)?.[0] || '';
+  assert.ok(transition.length > 0);
+  assert.doesNotMatch(transition, /(^|[:,])width_/);
   assert.doesNotMatch(transition, /flex-basis/);
-  assert.match(hover, /max-width:\s*9em/);
-  assert.match(hover, /padding:\s*0 10px/);
-  assert.doesNotMatch(hover, /width:\s*auto/);
-  assert.doesNotMatch(hover, /flex:\s*0 0 auto/);
-  assert.doesNotMatch(hover, /flex-basis/);
+  assert.match(transition, /max-width_200ms/);
+  assert.match(hover, /hover:max-w-\[9em\]/);
+  assert.match(hover, /hover:!px-2\.5/);
+  assert.doesNotMatch(hover, /w-auto|basis-|flex-none/);
 });
 
 test('智能分析抽屉按 4pt 终锁留白', () => {
@@ -510,24 +511,26 @@ test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
   const bar = views.slice(barStart, barEnd);
   assert.ok(barStart > views.indexOf('function DeleteRowButton'));
   assert.ok(barEnd > barStart);
-  assert.match(bar, /className=\{`actions-row/);
+  assert.match(bar, /className=\{cn\(actionsRowClass\(confirming === 'delete'\)/);
   assert.match(bar, /<DeleteRowButton/);
   assert.match(bar, /<DislikeRowButton/);
-  assert.match(bar, /className=\{`act-icon fav/);
+  assert.match(bar, /data-row-action="star"/);
+  assert.match(bar, /starred && '!text-jp-accent'/);
   assert.match(bar, /打开原岗位/);
   assert.match(bar, /arm\('delete'\)/);
-  assert.match(bar, /<span className="lbl"/);
+  assert.match(bar, /<span className=\{cn\(actLabelClass/);
   assert.doesNotMatch(bar, /confirm\(|window\.confirm|role="dialog"|detail-act/);
   assert.match(views, /<DetailActionBar/);
   assert.doesNotMatch(views.slice(views.indexOf('export function JobDetail')), /detail-act|window\.confirm|confirm\(`确定删除/);
   assert.match(sidepanel, /onDelete=\{\(\) => job && deleteJob\(/);
   assert.doesNotMatch(sidepanel, /removeSelected|确定删除岗位「/);
-  const collapse = browse.slice(browse.indexOf('.actions-row.is-confirm-delete .act-icon.dislike'), browse.indexOf('.risk, .exclusion'));
-  assert.match(collapse, /\.act-icon\.fav/);
-  assert.match(collapse, /\.detail-open/);
-  assert.match(collapse, /pointer-events:\s*none/);
-  assert.match(browse, /\.detail-sticky \.act-icon \{[^}]*max-width:\s*36px/);
-  assert.match(browse, /\.job-panel \.act-icon:hover/);
+  // 删除待确认时，收藏 / 打开原岗位 / 不喜欢都收成 0 宽并不可点。
+  assert.match(views, /const actCollapsedClass = '[^']*!max-w-0[^']*pointer-events-none'/);
+  assert.match(bar, /'jp-btn jp-btn-primary detail-open', confirming && actCollapsedClass/);
+  assert.match(bar, /cn\(actIconClass, actIconDetail, confirming \? actCollapsedClass : actIconHover/);
+  assert.match(views, /const actIconDetail = '[^']*min-w-9 max-w-9/);
+  assert.match(bar, /<DeleteRowButton detail /);
+  assert.doesNotMatch(browse, /\.act-icon|\.detail-sticky \{/);
 });
 
 test('删除确认态文案是再次点击确认删除', () => {
@@ -537,9 +540,9 @@ test('删除确认态文案是再次点击确认删除', () => {
   assert.match(views, /confirming === 'delete' \? '再次点击确认删除' : '删除'/);
   assert.match(views, /aria-label=\{confirming === 'delete' \? `再次点击确认删除 \$\{name\}`/);
   assert.doesNotMatch(views, /\? `确认删除 \$\{name\}`/);
-  const confirmLbl = browse.match(/\.actions-row\.is-confirm-delete \.act-icon\.del \.lbl \{[^}]*\}/)?.[0] || '';
-  assert.match(confirmLbl, /max-width:\s*200px/);
-  assert.match(confirmLbl, /font-weight:\s*650/);
+  const confirmLbl = views.match(/const actLabelConfirm = '[^']*'/)?.[0] || '';
+  assert.match(confirmLbl, /max-w-\[200px\]/);
+  assert.match(confirmLbl, /font-\[650\]/);
   assert.doesNotMatch(browse, /is-confirm-dislike/);
   assert.doesNotMatch(views, /arm\('dislike'\)/);
 });
