@@ -150,7 +150,7 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) 
   return (
     <>
       {gap ? (
-        <p className="analysis-empty">{gap.detail}</p>
+        <p className="text-[12px] text-jp-muted">{gap.detail}</p>
       ) : summary.grade ? (
         <>
           <div className="rounded-[10px] border border-jp-line bg-jp-surface-2 px-3.5 pt-3.5 pb-3">
@@ -199,23 +199,23 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) 
           )}
         </>
       ) : (
-        <p className="analysis-empty">尚未分析</p>
+        <p className="text-[12px] text-jp-muted">尚未分析</p>
       )}
       {!gap && risks.length > 0 && (
         <section className="detail-sec">
           <h3>风险提示</h3>
-          <div className="detail-warn">
+          <div className="rounded-lg border border-jp-line bg-jp-field px-1.5 py-1">
             {risks.map((line) => (
-              <div className="detail-warn-row" key={line}>
+              <div className="group/risk flex items-start gap-[7px] rounded-md bg-transparent px-1.5 py-2 text-[12px] leading-[1.4] text-jp-grade-mid hover:bg-[var(--jp-lift)] focus-within:bg-[var(--jp-lift)] [&+&]:border-t [&+&]:border-jp-line [&_svg]:!mt-px [&_svg]:!size-[13px]" key={line}>
                 <CircleAlert aria-hidden="true" />
-                <span className="warn-txt">{line}</span>
-                <button type="button" className="tune-link" onClick={() => onAccept(line)}>可以接受</button>
+                <span className="min-w-0 flex-1">{line}</span>
+                <button type="button" className="max-w-0 shrink-0 overflow-hidden whitespace-nowrap !border-0 !bg-transparent !p-0 !text-[11px] !font-semibold !leading-[1.4] !text-jp-accent opacity-0 group-hover/risk:max-w-[72px] group-hover/risk:opacity-100 group-focus-within/risk:max-w-[72px] group-focus-within/risk:opacity-100" onClick={() => onAccept(line)}>可以接受</button>
               </div>
             ))}
           </div>
         </section>
       )}
-      <button type="button" className="reanalyze" disabled={scoring} onClick={onAnalyze}>
+      <button type="button" className="mt-[18px] inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg !border !border-jp-line-strong !bg-transparent !text-[13px] !font-[650] !text-jp-secondary enabled:hover:!border-jp-muted enabled:hover:!text-jp-ink disabled:opacity-[.48] [&_svg]:!size-3.5" disabled={scoring} onClick={onAnalyze}>
         <RefreshCw aria-hidden="true" />
         {scoring ? '分析中…' : summary.grade ? '重新分析' : gap ? '重试分析' : '分析'}
       </button>
@@ -838,7 +838,7 @@ function DetailActionBar({ job, onOpenOriginal, onStar, onDislike, onDelete }: {
       <div className={cn(actionsRowClass(confirming === 'delete'), 'flex-auto pt-0')}>
         <button
           type="button"
-          className={cn('jp-btn jp-btn-primary detail-open', confirming && actCollapsedClass)}
+          className={cn('jp-btn jp-btn-primary min-w-0 flex-auto overflow-hidden !h-9 !rounded-lg !text-[13px] !font-[650]', confirming && actCollapsedClass)}
           data-row-action="open"
           disabled={!job.url}
           aria-hidden={confirming ? true : undefined}

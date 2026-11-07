@@ -403,13 +403,15 @@ test('详情分析 Tab 回吃匹配块，岗位不再挂警示墙', () => {
   assert.match(views, /重新分析/);
   assert.match(views, /尚未分析/);
   assert.match(views, /打开原岗位/);
-  const link = browse.match(/\.job-panel \.tune-link \{[^}]*\}/)?.[0] || '';
-  assert.match(link, /background:\s*transparent/);
-  assert.match(link, /color:\s*var\(--jp-accent\)/);
-  assert.match(link, /max-width:\s*0/);
+  assert.match(views, /max-w-0 shrink-0 overflow-hidden[^"\n]*!bg-transparent[^"\n]*!text-jp-accent/);
   assert.match(browse, /--jp-lift:\s*rgba\(255,\s*255,\s*255,\s*0\.04\)/);
-  assert.match(browse, /\.detail-warn-row:hover,\s*\.detail-warn-row:focus-within\s*\{\s*background:\s*var\(--jp-lift\)/);
-  assert.doesNotMatch(browse, /\.detail-warn-row:hover[^{]*\{[^}]*background:\s*(?:#(?:0[0-9a-f]{2,}|1c6b5e|2dd4bf)|var\(--jp-accent\))/);
+  assert.match(views, /hover:bg-\[var\(--jp-lift\)\] focus-within:bg-\[var\(--jp-lift\)\]/);
+  // 分析区各块改为工具类后，旧类名与对应 CSS 规则都不再保留。
+  assert.doesNotMatch(views, /analysis-empty|detail-warn|classList\.add\('reanalyze'\)/);
+  assert.match(views, /text-\[12px\] text-jp-muted/);
+  assert.match(views, /rounded-lg border border-jp-line bg-jp-field px-1\.5 py-1/);
+  assert.match(views, /mt-\[18px\] inline-flex h-9 w-full/);
+  assert.doesNotMatch(browse, /\.detail-warn|\.analysis-empty|\.reanalyze/);
 });
 
 test('列表项方案 E 把打招呼放在分析块外面，未分析只有文案', () => {
@@ -524,7 +526,7 @@ test('详情操作行复用列表伸长确认，删除不再弹窗', () => {
   assert.doesNotMatch(sidepanel, /removeSelected|确定删除岗位「/);
   // 删除待确认时，收藏 / 打开原岗位 / 不喜欢都收成 0 宽并不可点。
   assert.match(views, /const actCollapsedClass = '[^']*!max-w-0[^']*pointer-events-none'/);
-  assert.match(bar, /'jp-btn jp-btn-primary detail-open', confirming && actCollapsedClass/);
+  assert.match(bar, /'jp-btn jp-btn-primary min-w-0 flex-auto[^']*', confirming && actCollapsedClass/);
   assert.match(bar, /cn\(actIconClass, actIconDetail, confirming \? actCollapsedClass : actIconHover/);
   assert.match(views, /const actIconDetail = '[^']*min-w-9 max-w-9/);
   assert.match(bar, /<DeleteRowButton detail /);

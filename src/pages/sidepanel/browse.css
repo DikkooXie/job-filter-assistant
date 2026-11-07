@@ -387,64 +387,6 @@
   background: var(--jp-accent);
 }
 .detail-content .bullet-list.gap li::before { background: var(--jp-muted); }
-.detail-warn {
-  background: var(--jp-field);
-  border: 1px solid var(--jp-line);
-  border-radius: 8px;
-  padding: 4px 6px;
-}
-.detail-warn-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  padding: 8px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--jp-grade-mid);
-  background: transparent;
-}
-.detail-warn-row + .detail-warn-row { border-top: 1px solid var(--jp-line); }
-.detail-warn-row svg { width: 13px; height: 13px; margin-top: 1px; }
-.detail-warn-row .warn-txt { flex: 1; min-width: 0; }
-.detail-warn-row:hover,
-.detail-warn-row:focus-within { background: var(--jp-lift); }
-.job-panel .tune-link {
-  flex-shrink: 0;
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--jp-accent);
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-.detail-warn-row:hover .tune-link,
-.detail-warn-row:focus-within .tune-link { max-width: 72px; opacity: 1; }
-.analysis-empty { color: var(--jp-muted); font-size: 12px; }
-.job-panel .reanalyze {
-  margin-top: 18px;
-  width: 100%;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid var(--jp-line-strong);
-  background: transparent;
-  color: var(--jp-secondary);
-  font-size: 13px;
-  font-weight: 650;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.reanalyze svg { width: 14px; height: 14px; }
-.job-panel .reanalyze:hover:not(:disabled) { border-color: var(--jp-muted); color: var(--jp-ink); }
-.job-panel .reanalyze:disabled { opacity: 0.48; }
-.job-panel .detail-open { flex: 1 1 auto; min-width: 0; height: 36px; border-radius: 8px; font-size: 13px; font-weight: 650; overflow: hidden; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 0; }
 .facts div { min-width: 0; }
 .facts dt { color: var(--jp-muted); font-size: 11px; }
