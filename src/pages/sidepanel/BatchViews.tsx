@@ -143,7 +143,7 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
             </QueueSection>
           )}
         </div>
-        <footer className="queue-foot">
+        <footer className="flex shrink-0 justify-end border-t border-queue-divider px-[14px] pt-2 pb-3">
           <button type="button" className="batch-queue-btn" onClick={onClose}>收起</button>
         </footer>
       </section>
