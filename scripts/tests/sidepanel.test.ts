@@ -670,17 +670,23 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.match(sidepanel, /enqueueBatch\(s\.batch, targets, \{ source: 'manual'/);
   assert.match(sidepanel, /acceptAuto\(autoQueue\)/);
   assert.doesNotMatch(sidepanel, /batchBusy/);
-  assert.match(browse, /\.batch-strip\s*\{[^}]*background:\s*#151a21/);
-  assert.match(browse, /\.batch-strip\s*\{[^}]*color:\s*#2dd4bf/);
-  assert.match(browse, /\.batch-strip\.is-failed\s*\{[^}]*color:\s*#f0b429/);
+  // 浮条与队列改用 Tailwind：保留 batch-strip 类名供 SidepanelApp 的 IntersectionObserver 查询。
+  const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
+  assert.match(batchViews, /'batch-strip flex /);
+  assert.match(batchViews, /bg-queue-surface text-queue-accent/);
+  assert.match(batchViews, /bg-queue-raised text-queue-warn/);
+  assert.match(globals, /--color-queue-surface: #151a21/);
+  assert.match(globals, /--color-queue-accent: #2dd4bf/);
+  assert.match(globals, /--color-queue-warn: #f0b429/);
+  assert.doesNotMatch(browse, /\.batch-strip\s*\{|\.queue-chip|\.queue-job\b|\.queue-section/);
   assert.match(batchViews, /h-\[52%\] max-h-\[52%\]/);
   assert.match(batchViews, /min-h-0 flex-1 overflow-auto px-\[14px\] pb-2/);
   assert.match(batchViews, /queue-head shrink-0 px-\[14px\]/);
   assert.match(batchViews, /mt-3 h-\[3px\] overflow-hidden rounded-full bg-queue-track/);
   assert.match(batchViews, /!mt-3 flex justify-between gap-2 text-hint text-queue-muted/);
   assert.match(batchViews, /mt-4 mb-3 flex shrink-0 gap-1\.5 px-\[14px\]/);
-  assert.match(browse, /#1a222c/);
-  assert.match(browse, /#0f1419/);
+  assert.match(globals, /--color-queue-raised: #1a222c/);
+  assert.match(globals, /--color-queue-track: #0f1419/);
   assert.doesNotMatch(browse, /background:\s*#(?:0f0|00|16a34a|22c55e)[^;]*;\s*color:\s*#f0b429/);
   assert.match(background, /autoQueue: uids/);
   assert.match(background, /sidePanelIsOpen/);

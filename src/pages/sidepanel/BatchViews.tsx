@@ -2,6 +2,21 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronUp } from 'lucide-react';
 import { drawerModel, queueRowCopy, visibleSections } from './batchQueue.js';
 import type { Batch, BatchItem, StripModel } from './batchQueue.js';
+import { cn } from '../../lib/cn.js';
+
+// browse.css 的 `.job-panel button` 重置不在任何层里，会压过 Tailwind 工具类，
+// 所以按钮上被重置过的属性（边框、背景、内边距、字体、颜色）都要加 `!`。
+const queueButton = 'inline-flex min-h-7 items-center gap-1 whitespace-nowrap rounded-lg !border !bg-transparent !px-2.5 !py-[3px] !text-hint !font-[650] [&_svg]:!size-[14px]';
+const tealButton = cn(queueButton, '!border-[rgba(45,212,191,.45)] !text-queue-accent');
+const amberButton = cn(queueButton, '!border-[rgba(240,180,41,.55)] !text-queue-warn');
+
+function chipClass(on: boolean, failed = false) {
+  return cn(
+    'min-h-[26px] rounded-full !border !bg-queue-raised !px-2.5 !py-[2px] !text-hint !font-[650]',
+    failed ? '!border-[rgba(240,180,41,.55)] !text-queue-warn' : on ? '!border-[rgba(45,212,191,.6)] !text-queue-accent' : '!border-[rgba(231,237,240,.16)] !text-queue-chip',
+    failed && on && '!bg-[rgba(240,180,41,.12)]',
+  );
+}
 
 export function BatchStrip({ model, onOpenQueue, onRetryFailed }: {
   model: StripModel | null | undefined;
@@ -9,21 +24,30 @@ export function BatchStrip({ model, onOpenQueue, onRetryFailed }: {
   onRetryFailed: () => void;
 }) {
   if (!model?.visible) return null;
+  const failed = model.tone === 'failed';
   return (
-    <div className={`batch-strip is-${model.tone}`} role="status" data-batch-strip={model.tone} aria-live="polite">
-      <button type="button" className="batch-strip-main" onClick={onOpenQueue}>
+    <div
+      className={cn(
+        'batch-strip flex min-h-9 shrink-0 items-center justify-between gap-2 border-t px-3 py-1.5',
+        failed ? 'border-t-[rgba(240,180,41,.5)] bg-queue-raised text-queue-warn' : 'border-t-[rgba(45,212,191,.35)] bg-queue-surface text-queue-accent',
+      )}
+      role="status"
+      data-batch-strip={model.tone}
+      aria-live="polite"
+    >
+      <button type="button" className="inline-flex min-w-0 items-center gap-2 text-left" onClick={onOpenQueue}>
         {model.tone === 'running' && <i className="batch-spin" aria-hidden="true" />}
-        {model.auto && <span className="batch-auto">自动</span>}
-        <span className="batch-strip-label">{model.label}</span>
+        {model.auto && <span className="shrink-0 rounded-full border border-[rgba(45,212,191,.45)] bg-[rgba(45,212,191,.12)] px-[7px] text-[11px] leading-[18px] font-bold text-queue-accent">自动</span>}
+        <span className="text-control font-[650] whitespace-nowrap">{model.label}</span>
       </button>
-      <span className="batch-strip-actions">
+      <span className="inline-flex min-w-0 items-center gap-2">
         {model.tone !== 'success' && (
-          <button type="button" className="batch-queue-btn" aria-haspopup="dialog" onClick={onOpenQueue}>
+          <button type="button" className={failed ? amberButton : tealButton} aria-haspopup="dialog" onClick={onOpenQueue}>
             队列<ChevronUp aria-hidden="true" />
           </button>
         )}
-        {model.tone === 'failed' && (
-          <button type="button" className="batch-retry-btn" onClick={onRetryFailed}>重试失败</button>
+        {failed && (
+          <button type="button" className={amberButton} onClick={onRetryFailed}>重试失败</button>
         )}
       </span>
     </div>
@@ -39,10 +63,15 @@ function QueueSection({ id, title, count, open, onToggle, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <section className={`queue-section is-${id}${open ? ' is-open' : ''}`} data-queue-section={id}>
-      <button type="button" className="queue-section-toggle" aria-expanded={open} onClick={onToggle}>
+    <section className="border-t border-queue-divider" data-queue-section={id}>
+      <button
+        type="button"
+        className={cn('flex min-h-[34px] w-full items-center justify-between gap-2 !text-control !font-[650]', id === 'failed' ? '!text-queue-warn' : '!text-queue-ink')}
+        aria-expanded={open}
+        onClick={onToggle}
+      >
         <span>{title}</span>
-        <span className="queue-section-meta">{count}<ChevronUp aria-hidden="true" /></span>
+        <span className={cn('inline-flex items-center gap-1 font-semibold text-queue-muted [&_svg]:!size-[14px]', !open && '[&_svg]:[transform:rotate(180deg)]')}>{count}<ChevronUp aria-hidden="true" /></span>
       </button>
       {open && <div className="flex flex-col gap-1.5 pb-2">{children}</div>}
     </section>
@@ -55,14 +84,21 @@ function QueueJob({ item, batch, failed = false, onRetry }: {
   failed?: boolean;
   onRetry?: (uid: string) => void;
 }) {
+  const running = item.status === 'running';
   return (
-    <div className={`queue-job${failed ? ' is-failed' : ''}${item.status === 'running' ? ' is-running' : ''}`}>
-      <div className="queue-job-copy">
-        <strong>{item.title || '未命名岗位'}</strong>
-        <span>{queueRowCopy(batch, item)}</span>
+    <div
+      className={cn(
+        'flex items-center justify-between gap-2 rounded-[10px] bg-queue-raised px-2.5 py-2',
+        running && 'bg-[rgba(45,212,191,.1)]',
+        failed && 'border border-[rgba(240,180,41,.35)] bg-[rgba(240,180,41,.1)]',
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <strong className="truncate text-control font-[650]">{item.title || '未命名岗位'}</strong>
+        <span className={cn('text-[11px]', failed ? 'text-queue-warn' : running ? 'text-queue-accent' : 'text-queue-muted')}>{queueRowCopy(batch, item)}</span>
       </div>
       {failed && (
-        <button type="button" className="batch-retry-btn" onClick={() => onRetry?.(item.uid)}>重试</button>
+        <button type="button" className={amberButton} onClick={() => onRetry?.(item.uid)}>重试</button>
       )}
     </div>
   );
@@ -98,12 +134,12 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
   const toggle = (id: keyof QueueSections) => setOpen((current) => ({ ...current, [id]: !current[id] }));
   return (
     <div className="absolute inset-0 z-[12] flex items-end bg-queue-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="queue-drawer flex h-[52%] max-h-[52%] min-h-0 w-full flex-col rounded-t-[16px] bg-queue-surface text-queue-ink shadow-[0_-12px_32px_rgba(0,0,0,.28)] [animation:sheet-up_220ms_ease]" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
+      <section className="flex h-[52%] max-h-[52%] min-h-0 w-full flex-col rounded-t-[16px] bg-queue-surface text-queue-ink shadow-[0_-12px_32px_rgba(0,0,0,.28)] [animation:sheet-up_220ms_ease]" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
         <div className="sheet-handle" aria-hidden="true" />
         <header className="queue-head shrink-0 px-[14px]">
           <div className="flex items-center justify-between gap-2">
-            <h2 id="queue-title">{model.head}</h2>
-            <button type="button" className="queue-cancel" disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
+            <h2 id="queue-title" className="text-section font-[650] text-queue-accent">{model.head}</h2>
+            <button type="button" className={cn(tealButton, 'disabled:opacity-40')} disabled={!model.canCancel} onClick={onCancel}>取消剩余</button>
           </div>
           <div className="mt-3 h-[3px] overflow-hidden rounded-full bg-queue-track" aria-hidden="true"><span className="block h-full bg-queue-accent" style={{ width: `${Math.round(model.progress * 100)}%` }} /></div>
           <p className="!mt-3 flex justify-between gap-2 text-hint text-queue-muted">
@@ -112,9 +148,9 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
           </p>
         </header>
         <div className="mt-4 mb-3 flex shrink-0 gap-1.5 px-[14px]" role="toolbar" aria-label="筛选队列">
-          <button type="button" className={`queue-chip${chip === 'all' ? ' is-on' : ''}`} aria-pressed={chip === 'all'} onClick={() => setChip('all')}>全部</button>
-          <button type="button" className={`queue-chip${chip === 'running' ? ' is-on' : ''}`} aria-pressed={chip === 'running'} onClick={() => setChip('running')}>进行中</button>
-          <button type="button" className={`queue-chip${model.failed.length ? ' is-failed' : ''}${chip === 'failed' ? ' is-on' : ''}`} aria-pressed={chip === 'failed'} onClick={() => setChip('failed')}>失败 {model.failed.length}</button>
+          <button type="button" className={chipClass(chip === 'all')} aria-pressed={chip === 'all'} onClick={() => setChip('all')}>全部</button>
+          <button type="button" className={chipClass(chip === 'running')} aria-pressed={chip === 'running'} onClick={() => setChip('running')}>进行中</button>
+          <button type="button" className={chipClass(chip === 'failed', model.failed.length > 0)} aria-pressed={chip === 'failed'} onClick={() => setChip('failed')}>失败 {model.failed.length}</button>
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-[14px] pb-2">
           {chip !== 'failed' && (
@@ -144,7 +180,7 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
           )}
         </div>
         <footer className="flex shrink-0 justify-end border-t border-queue-divider px-[14px] pt-2 pb-3">
-          <button type="button" className="batch-queue-btn" onClick={onClose}>收起</button>
+          <button type="button" className={tealButton} onClick={onClose}>收起</button>
         </footer>
       </section>
     </div>

@@ -41,6 +41,7 @@
   --color-queue-overlay: rgba(15, 20, 25, .46);
   --color-queue-track: #0f1419; --color-queue-accent: #2dd4bf; --color-queue-muted: #9baab4;
   --color-queue-divider: rgba(231, 237, 240, .08);
+  --color-queue-raised: #1a222c; --color-queue-warn: #f0b429; --color-queue-chip: #c9d1d9;
 }
 :root {
   --radius: .5rem; --background: oklch(.99 0 0); --foreground: oklch(.18 0 0);
