@@ -1,11 +1,12 @@
 "use client"
 
-import { Toaster as Sonner, toast } from "sonner"
+import type * as React from "react"
+import { Toaster as Sonner, toast, type ToasterProps } from "sonner"
 
 /** 侧栏反馈条。颜色由 .job-panel 的 Sonner 变量覆盖，不用 richColors 的成功绿。 */
 function Toaster({
   ...props
-}) {
+}: ToasterProps) {
   return (
     <Sonner
       theme="system"
@@ -22,7 +23,7 @@ function Toaster({
         "--normal-text": "var(--jp-ink)",
         "--normal-border": "var(--jp-line)",
         "--border-radius": "10px",
-      }}
+      } as React.CSSProperties}
       {...props}
     />
   )

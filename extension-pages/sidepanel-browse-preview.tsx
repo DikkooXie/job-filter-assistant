@@ -7,4 +7,4 @@ import './styles.css';
 const theme = new URLSearchParams(location.search).get('theme');
 if (theme === 'dark' || theme === 'light') document.documentElement.dataset.theme = theme;
 
-createRoot(document.getElementById('root')).render(<Sidepanel />);
+createRoot(document.getElementById('root')!).render(<Sidepanel />);

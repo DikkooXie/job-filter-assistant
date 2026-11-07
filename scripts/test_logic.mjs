@@ -2361,8 +2361,8 @@ test('正式侧栏读取岗位库，不引用预览演示数据', () => {
   const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
-  const entry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel.jsx'), 'utf8');
-  const previewEntry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel-browse-preview.jsx'), 'utf8');
+  const entry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel.tsx'), 'utf8');
+  const previewEntry = fs.readFileSync(path.join(root, 'extension-pages/sidepanel-browse-preview.tsx'), 'utf8');
   const vite = fs.readFileSync(path.join(root, 'vite.config.js'), 'utf8');
   assert.match(sidepanel, /JOB_LIST_REQUEST/);
   assert.match(sidepanel, /jobsForLibrary/);
@@ -3632,7 +3632,7 @@ test('业务代码不再调用 alert/confirm/prompt，招呼语标题无旁注�
   assert.match(sentHover, /border-color:\s*var\(--jp-line-strong\)/);
   assert.match(sentHover, /background:\s*transparent/);
   assert.doesNotMatch(sentHover, /var\(--jp-accent\)/);
-  const alertUi = fs.readFileSync(path.join(srcDir, 'components', 'ui', 'alert-dialog.jsx'), 'utf8');
+  const alertUi = fs.readFileSync(path.join(srcDir, 'components', 'ui', 'alert-dialog.tsx'), 'utf8');
   assert.doesNotMatch(alertUi, /bg-background/);
   assert.doesNotMatch(alertUi, /bg-black\/50/);
   const overlayRule = browse.slice(browse.indexOf("[data-slot='alert-dialog-overlay']"), browse.indexOf("[data-slot='alert-dialog-content']"));

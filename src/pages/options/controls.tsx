@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import type { ChangeEvent, KeyboardEvent, ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toList } from '../../common/text.js';
@@ -59,15 +58,4 @@ export function Tags({ value = [], onChange, placeholder, label }: TagsProps) {
       else if (e.key === 'Backspace' && !input && value.length) onChange(value.slice(0, -1));
     }} />
   </div>;
-}
-
-export interface ToggleRowProps {
-  label: ReactNode;
-  description?: ReactNode;
-  checked?: boolean;
-  onChange: (checked: boolean) => void;
-}
-
-export function ToggleRow({ label, description, checked, onChange }: ToggleRowProps) {
-  return <div className="flex items-center justify-between gap-4 border-b py-3 last:border-0"><div><div className="text-sm font-medium">{label}</div>{description && <p className="text-sm text-muted-foreground">{description}</p>}</div><Switch aria-label={label} checked={!!checked} onCheckedChange={onChange} /></div>;
 }

@@ -3,4 +3,4 @@ import { createRoot } from 'react-dom/client';
 import Popup from '../src/pages/popup/PopupApp.jsx';
 import './styles.css';
 
-createRoot(document.getElementById('root')).render(<Popup />);
+createRoot(document.getElementById('root')!).render(<Popup />);
