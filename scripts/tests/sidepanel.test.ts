@@ -130,21 +130,25 @@ test('列表卡片把警示区放进分析框，摘要两行省略，操作行�
   const rowEnd = views.indexOf('export function ListFooter');
   const row = views.slice(rowStart, rowEnd);
   const zone = views.slice(views.indexOf('function AnalysisWarnings'), rowStart);
-  const analysis = row.indexOf('className={`analysis');
+  const analysis = row.indexOf('className={analysisBox(!grade)}');
   const call = row.indexOf('<AnalysisWarnings job={job} />');
   const actions = row.indexOf('className="row-actions"');
   assert.ok(analysis >= 0 && call > analysis && actions > call);
-  assert.match(zone, /warn-chips/);
-  assert.match(zone, /warn-list/);
-  assert.match(zone, /warn-item/);
+  // 警示：chip + 收起的条目列表，悬停或聚焦整张卡片（group/row）时展开。
+  assert.match(zone, /<WarnChip kind=\{zone\.chip\}/);
+  assert.match(zone, /<div className=\{warnListClass\}>/);
+  assert.match(views, /const warnListClass = cn\([^;]*grid-rows-\[0fr\] opacity-0/);
+  assert.match(views, /group-hover\/row:grid-rows-\[1fr\]/);
+  assert.match(views, /group-focus-within\/row:grid-rows-\[1fr\]/);
+  assert.match(row, /'group\/row job-row /);
   assert.doesNotMatch(row, /className="risk"|className="exclusion"/);
   assert.match(row, /className="act-icon del"/);
   assert.match(row, /className="act-icon dislike"/);
   assert.match(row, /className=\{`act-greet/);
-  assert.match(css, /-webkit-line-clamp:\s*2/);
+  // 摘要两行省略。
+  assert.match(row, /line-clamp-2 [^"]*!text-jp-summary/);
   assert.match(css, /--jp-summary:\s*#c9d1d9/);
-  assert.match(css, /\.job-row:hover \.warn-list/);
-  assert.match(css, /\.analysis:hover \.warn-list/);
+  assert.doesNotMatch(css, /warn-list|warn-chip|\.analysis(?![\w-])/);
   assert.match(css, /\.job-row:hover \.row-actions/);
   const actionCss = css.slice(css.indexOf('.row-actions {'), css.indexOf('.risk, .exclusion'));
   assert.match(actionCss, /grid-template-rows: 0fr/);
@@ -332,12 +336,13 @@ test('列表方案 B 用卡片间距，分析区不再画顶部分割线', () =>
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const app = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
   assert.match(app, /className="flex flex-col gap-2\.5 p-2\.5"/);
-  assert.match(browse, /\.analysis\s*\{[^}]*background:\s*var\(--jp-inset\)/);
-  assert.match(browse, /\.analysis\s*\{[^}]*border:\s*0/);
-  assert.doesNotMatch(browse, /\.analysis\s*\{[^}]*border-top/);
-  assert.match(views, /'job-row min-w-0 rounded-\[10px\] border px-3/);
+  const box = views.match(/const analysisBox = [^\n]*/)?.[0] || '';
+  assert.match(box, /bg-jp-inset/);
+  assert.doesNotMatch(box, /border/);
+  assert.doesNotMatch(browse, /\.analysis\s*\{/);
+  assert.match(views, /'group\/row job-row min-w-0 rounded-\[10px\] border px-3/);
   assert.doesNotMatch(views, /job-row[^']*border-b\b/);
-  assert.match(views, /className=\{`analysis/);
+  assert.match(views, /className=\{analysisBox\(!grade\)\}/);
   assert.doesNotMatch(views, /flow-link/);
 });
 
@@ -409,13 +414,14 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   const browse = fs.readFileSync(path.join(root, 'src/pages/sidepanel/browse.css'), 'utf8');
   const views = fs.readFileSync(path.join(root, 'src/pages/sidepanel/views.tsx'), 'utf8');
   const sidepanel = fs.readFileSync(path.join(root, 'src/pages/sidepanel/SidepanelApp.tsx'), 'utf8');
-  const analysisStart = views.indexOf('className={`analysis');
+  const globals = fs.readFileSync(path.join(root, 'src/pages/globals.css'), 'utf8');
+  const analysisStart = views.indexOf('className={analysisBox(!grade)}');
   const actionsStart = views.indexOf('className="row-actions"', analysisStart);
   const analysis = views.slice(analysisStart, actionsStart);
   assert.ok(analysisStart > 0 && actionsStart > analysisStart);
   assert.match(analysis, /尚未分析/);
-  assert.match(analysis, /score-num/);
-  assert.match(analysis, /segs/);
+  assert.match(analysis, /cn\(scoreClass, toneText\[grade\.tone\]/);
+  assert.match(analysis, /<GradeMarks grade=\{grade\} \/>/);
   assert.doesNotMatch(analysis, /打招呼|flowEntryLabel|—/);
   assert.ok(analysis.indexOf('尚未分析') > analysis.indexOf('grade ?'));
   assert.match(views, /data-row-action="delete"/);
@@ -423,13 +429,14 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(views, /data-row-action="greet"/);
   assert.match(views, /flowEntryLabel\(progressStatus\)/);
   assert.ok(views.indexOf('flowEntryLabel(progressStatus)') > actionsStart);
-  assert.match(browse, /skewX\(-18deg\)/);
+  // 等级格子斜切、分数用等宽数字字体。
+  assert.match(views, /-skew-x-18/);
+  assert.match(views, /const scoreClass = '[^']*!font-score[^']*!tabular-nums/);
+  assert.match(globals, /--font-score:\s*"Space Grotesk"/);
   assert.match(browse, /grid-template-rows:\s*0fr/);
   assert.match(browse, /180ms/);
   assert.match(browse, /200ms/);
   assert.match(browse, /#2dd4bf/);
-  assert.match(browse, /Space Grotesk/);
-  assert.match(browse, /tabular-nums/);
   assert.match(browse, /\.act-greet\s*\{[^}]*flex:\s*1 1 auto/);
   assert.match(sidepanel, /onDelete=\{\(\) => deleteJob\(/);
   assert.match(sidepanel, /onDislike=\{\(\) => dislikeJob\(/);

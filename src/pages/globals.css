@@ -41,6 +41,13 @@
   --color-jp-accent: var(--jp-accent); --color-jp-on-accent: var(--jp-on-accent); --color-jp-confirm-del: var(--jp-confirm-del);
   --color-jp-accent-soft: var(--jp-accent-soft); --color-jp-accent-line: var(--jp-accent-line); --color-jp-switch: var(--jp-switch);
   --color-jp-danger: var(--jp-danger); --color-jp-danger-soft: var(--jp-danger-soft);
+  /* 分析等级（色块、等级字、分数）与警示 chip。 */
+  --color-jp-seg-empty: var(--jp-seg-empty); --color-jp-seg-low: var(--jp-seg-low); --color-jp-seg-mid: var(--jp-seg-mid);
+  --color-jp-grade-low: var(--jp-grade-low); --color-jp-grade-mid: var(--jp-grade-mid); --color-jp-warn: var(--jp-warn);
+  --color-jp-filter-fg: var(--jp-filter-fg); --color-jp-filter-bg: var(--jp-filter-bg);
+  --color-jp-filter-bd: var(--jp-filter-bd); --color-jp-filter-dot: var(--jp-filter-dot);
+  /* 分数用的等宽数字字体。 */
+  --font-score: "Space Grotesk", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --color-queue-surface: #151a21; --color-queue-ink: #e7edf0;
   --color-queue-overlay: rgba(15, 20, 25, .46);
   --color-queue-track: #0f1419; --color-queue-accent: #2dd4bf; --color-queue-muted: #9baab4;

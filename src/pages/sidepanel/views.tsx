@@ -38,30 +38,68 @@ function Facts({ rows }: { rows: Array<[string, string | number | null | undefin
   );
 }
 
-function GradeMarks({ grade }: { grade: AnalysisGrade }) {
+// 分析区的原子样式：列表卡片、详情摘要、分析页的分数卡共用。
+// 列表里等级字和分数落在按钮上，browse.css 的按钮重置（未分层）会盖过普通工具类，所以颜色和字体统一带 `!`。
+type Tone = AnalysisGrade['tone'];
+const toneText: Record<Tone, string> = { low: '!text-jp-grade-low', mid: '!text-jp-grade-mid', high: '!text-jp-accent' };
+const toneCell: Record<Tone, string> = { low: 'bg-jp-seg-low', mid: 'bg-jp-seg-mid', high: 'bg-jp-accent' };
+const queueText: Record<CardCopy['kind'], string> = { running: '!text-queue-accent', queued: '!text-jp-muted', failed: '!text-queue-warn' };
+const gradeClass = 'whitespace-nowrap text-hint font-[650] leading-none tracking-[0.01em]';
+const gradeMuted = '!text-jp-muted font-[550]';
+const gradeGap = '!text-jp-warn';
+// 列表里整块分析按钮悬停时，等级字跟着变强调色（「描述不足」等缺口提示保持警示色）。
+const gradeHover = 'group-hover/main:!text-jp-accent';
+const scoreClass = 'shrink-0 !font-score !text-[20px] !font-bold !leading-none tracking-[-0.04em] !tabular-nums';
+const analysisBox = (bare: boolean) => cn('mt-2.5 min-w-0 rounded-md bg-jp-inset px-2.5', bare ? 'py-2' : 'pt-2 pb-[7px]');
+const analysisTop = (bare: boolean) => cn('flex min-w-0 items-center gap-2.5', bare ? 'justify-start' : 'justify-between');
+
+function GradeMarks({ grade, large = false }: { grade: AnalysisGrade; large?: boolean }) {
   return (
-    <span className="segs" aria-hidden="true">
+    <span className={cn('inline-flex shrink-0 items-center gap-[3px]', large ? 'h-4' : 'h-3.5')} aria-hidden="true">
       {Array.from({ length: 5 }, (_, index) => (
-        <span key={index} className={index < grade.filled ? `cell on ${grade.tone}` : 'cell'} />
+        <span
+          key={index}
+          className={cn('-skew-x-18 rounded-[1px]', large ? 'h-3 w-[11px]' : 'h-2.5 w-[9px]', index < grade.filled ? toneCell[grade.tone] : 'bg-jp-seg-empty')}
+        />
       ))}
     </span>
   );
 }
+
+function WarnChip({ kind, label }: { kind: 'warn' | 'filter'; label: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 whitespace-nowrap rounded-[4px] border px-[7px] py-1 text-[10px] font-[650] leading-none tracking-[0.01em]',
+        kind === 'filter' ? 'border-jp-filter-bd bg-jp-filter-bg text-jp-filter-fg' : 'border-jp-grade-mid/35 bg-jp-grade-mid/12 text-jp-grade-mid',
+      )}
+    >
+      <span className={cn('size-[5px] shrink-0 rounded-full', kind === 'filter' ? 'bg-jp-filter-dot' : 'bg-jp-grade-mid')} aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+// 详情摘要在 .detail-content 里：那里的 h3 / p 规则（未分层）会盖过工具类，外边距、字号、行高、颜色要加 `!`。
+const summarySection = 'mt-4';
+const summaryCopy = 'line-clamp-2 !mt-2 !text-hint !leading-[1.45] !text-jp-summary';
+const summaryFoot = 'mt-2.5 flex items-center justify-between gap-2';
+const summaryJump = 'ml-auto inline-flex items-center gap-0.5 whitespace-nowrap !text-hint !font-semibold !text-jp-accent [&_svg]:!size-3';
 
 function JobSummaryCard({ job, onOpenAnalysis }: { job: Job; onOpenAnalysis: () => void }) {
   const gap = descriptionGap(job);
   const summary = analysisSummary(job);
   if (gap || !summary.grade) {
     return (
-      <section className="detail-summary">
-        <h3>分析摘要</h3>
-        <div className="analysis bare detail-sum">
-          <div className="analysis-top">
-            <span className={gap ? 'grade gap' : 'grade muted'}>{gap ? gap.label : '尚未分析'}</span>
+      <section className={summarySection}>
+        <h3 className="!mb-2">分析摘要</h3>
+        <div className={analysisBox(true)}>
+          <div className={analysisTop(true)}>
+            <span className={cn(gradeClass, gap ? gradeGap : gradeMuted)}>{gap ? gap.label : '尚未分析'}</span>
           </div>
-          {gap && <p className="detail-sum-copy">{gap.detail}</p>}
-          <div className="sum-foot">
-            <button type="button" className="detail-jump" onClick={onOpenAnalysis}>{gap ? '重试分析' : '去分析'}<ChevronRight aria-hidden="true" /></button>
+          {gap && <p className={summaryCopy}>{gap.detail}</p>}
+          <div className={summaryFoot}>
+            <button type="button" className={summaryJump} onClick={onOpenAnalysis}>{gap ? '重试分析' : '去分析'}<ChevronRight aria-hidden="true" /></button>
           </div>
         </div>
       </section>
@@ -69,25 +107,22 @@ function JobSummaryCard({ job, onOpenAnalysis }: { job: Job; onOpenAnalysis: () 
   }
   const { grade } = summary;
   return (
-    <section className="detail-summary">
-      <h3>分析摘要</h3>
-      <div className="analysis detail-sum">
-        <div className="analysis-top">
-          <div className="sum-main">
+    <section className={summarySection}>
+      <h3 className="!mb-2">分析摘要</h3>
+      <div className={analysisBox(false)}>
+        <div className={analysisTop(false)}>
+          <div className="inline-flex min-w-0 items-center gap-2">
             <GradeMarks grade={grade} />
-            <span className={`grade ${grade.tone}`}>{grade.label}</span>
+            <span className={cn(gradeClass, toneText[grade.tone])}>{grade.label}</span>
           </div>
-          <span className={`score-num ${grade.tone}`}>{grade.score}<span className="score-den">/100</span></span>
+          <span className={cn(scoreClass, toneText[grade.tone])}>
+            {grade.score}<span className="ml-0.5 text-[11px] font-semibold tracking-normal text-jp-muted">/100</span>
+          </span>
         </div>
-        {summary.summary && <p className="detail-sum-copy">{summary.summary}</p>}
-        <div className="sum-foot">
-          {summary.warnLabel && (
-            <span className="warn-chip warn">
-              <span className="dot" aria-hidden="true" />
-              {summary.warnLabel}
-            </span>
-          )}
-          <button type="button" className="detail-jump" onClick={onOpenAnalysis}>查看完整分析<ChevronRight aria-hidden="true" /></button>
+        {summary.summary && <p className={summaryCopy}>{summary.summary}</p>}
+        <div className={summaryFoot}>
+          {summary.warnLabel && <WarnChip kind="warn" label={summary.warnLabel} />}
+          <button type="button" className={summaryJump} onClick={onOpenAnalysis}>查看完整分析<ChevronRight aria-hidden="true" /></button>
         </div>
       </div>
     </section>
@@ -118,18 +153,18 @@ function AnalysisBody({ job, scoring, onAnalyze, onAccept }: AnalysisBodyProps) 
         <p className="analysis-empty">{gap.detail}</p>
       ) : summary.grade ? (
         <>
-          <div className="score-card">
-            <div className="a-top">
-              <div className="segs-row">
-                <GradeMarks grade={summary.grade} />
-                <span className={`grade ${summary.grade.tone}`}>{summary.grade.label}</span>
+          <div className="rounded-[10px] border border-jp-line bg-jp-surface-2 px-3.5 pt-3.5 pb-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <GradeMarks grade={summary.grade} large />
+                <span className={cn(gradeClass, 'text-[14px]', toneText[summary.grade.tone])}>{summary.grade.label}</span>
               </div>
-              <div className="score-wrap">
-                <span className={`score-num ${summary.grade.tone}`}>{summary.grade.score}</span>
-                <span className="score-den">/100</span>
+              <div className="flex shrink-0 items-baseline gap-1">
+                <span className={cn(scoreClass, '!text-[40px] tracking-[-0.05em]', toneText[summary.grade.tone])}>{summary.grade.score}</span>
+                <span className="font-score text-[14px] font-semibold tracking-[-0.02em] text-jp-muted">/100</span>
               </div>
             </div>
-            {summary.summary && <p className="a-sum">{summary.summary}</p>}
+            {summary.summary && <p className="!mt-3 !text-[13px] !leading-normal !text-jp-summary">{summary.summary}</p>}
           </div>
           {dims.length > 0 && (
             <div className="dims">
@@ -457,23 +492,30 @@ export function ListHeader({
   );
 }
 
+// 警示区：chip 在摘要下，条目收在分析框里，悬停或聚焦卡片（group/row）时展开。
+const warnListClass = cn(
+  'grid grid-rows-[0fr] opacity-0 [transition:grid-template-rows_180ms_ease,margin-top_180ms_ease,opacity_160ms_ease]',
+  'group-hover/row:mt-1.5 group-hover/row:grid-rows-[1fr] group-hover/row:opacity-100',
+  'group-focus-within/row:mt-1.5 group-focus-within/row:grid-rows-[1fr] group-focus-within/row:opacity-100',
+);
+
 function AnalysisWarnings({ job }: { job: Job }) {
   const zone = warningZone(job);
   if (!zone) return null;
   return (
     <>
-      <div className="warn-chips">
-        <span className={`warn-chip ${zone.chip}`}>
-          <span className="dot" aria-hidden="true" />
-          {zone.label}
-        </span>
+      <div className="mt-[7px] flex flex-wrap items-center gap-1.5">
+        <WarnChip kind={zone.chip} label={zone.label} />
       </div>
-      <div className="warn-list">
-        <div className="warn-list-inner">
-          <ul className="warn-items">
+      <div className={warnListClass}>
+        <div className="min-h-0 overflow-hidden">
+          <ul className="m-0 flex list-none flex-col gap-[3px] p-0 pt-px">
             {zone.items.map((item, index) => (
-              <li key={`${item.kind}-${index}`} className={item.kind === 'filter' ? 'warn-item filter-hit' : 'warn-item'}>
-                <span className="pfx" aria-hidden="true">·</span>
+              <li
+                key={`${item.kind}-${index}`}
+                className={cn('flex items-start gap-[5px] text-[11px] leading-[1.3]', item.kind === 'filter' ? 'text-jp-filter-fg' : 'text-jp-grade-mid')}
+              >
+                <span className={cn('mt-[0.05em] shrink-0 opacity-85', item.kind === 'filter' && 'text-jp-filter-dot')} aria-hidden="true">·</span>
                 <span>{item.text}</span>
               </li>
             ))}
@@ -560,8 +602,8 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
     <article
       ref={scopeRef}
       className={cn(
-        // job-row / is-confirming 仍是分析区与操作区展开规则（browse.css）的挂钩类。
-        'job-row min-w-0 rounded-[10px] border px-3 pt-3 pb-2.5',
+        // group/row 让警示条目随卡片悬停展开；job-row / is-confirming 仍是操作区展开规则（browse.css）的挂钩类。
+        'group/row job-row min-w-0 rounded-[10px] border px-3 pt-3 pb-2.5',
         confirming && 'is-confirming',
         returned ? 'bg-jp-accent-soft' : confirming ? rowTint : 'bg-jp-surface-2 hover:bg-[color-mix(in_srgb,var(--jp-ink)_4%,var(--jp-surface-2))]',
         isNew ? 'border-[rgba(240,180,41,.55)]' : returned || confirming ? 'border-jp-accent-line' : 'border-jp-line hover:border-jp-accent-line',
@@ -601,40 +643,45 @@ export function JobRow({ job, checked, returned, isNew, progressStatus, queueCar
             {skills.slice(0, 6).map((skill) => <li key={skill} className="rounded-[4px] bg-jp-field px-[7px] py-0.5 text-[11px] leading-[18px] text-jp-secondary">{skill}</li>)}
           </ul>
         )}
-        <div className={`analysis${grade ? '' : ' bare'}${queueCard ? ` queue-${queueCard.kind}` : ''}`}>
-          <div className="analysis-top">
+        <div className={analysisBox(!grade)}>
+          <div className={analysisTop(!grade)}>
             <button
               type="button"
-              className="analysis-main"
+              className="group/main inline-flex min-w-0 items-center gap-2 text-left hover:!text-jp-accent"
               aria-label={queueCard ? `${job.company || '该岗位'}，${queueCard.label}` : grade ? `查看 ${job.company || '该岗位'} 的分析：${grade.score} 分，${grade.label}` : `查看 ${job.company || '该岗位'} 的分析，${gap ? gap.label : '尚未分析'}`}
               onClick={() => onOpen(job.uid, 'match')}
             >
               {queueCard ? (
-                <span className="queue-card-line">
+                <span className="inline-flex min-w-0 items-center gap-2">
                   {queueCard.kind === 'running' && <i className="batch-spin" aria-hidden="true" />}
-                  <span className="grade">{queueCard.label}</span>
+                  <span className={cn(gradeClass, queueText[queueCard.kind], gradeHover)}>{queueCard.label}</span>
                 </span>
               ) : gap ? (
-                <span className="grade gap">{gap.label}</span>
+                <span className={cn(gradeClass, gradeGap)}>{gap.label}</span>
               ) : grade ? (
                 <>
-                  <span className="segs" aria-hidden="true">
-                    {Array.from({ length: 5 }, (_, index) => (
-                      <span key={index} className={index < grade.filled ? `cell on ${grade.tone}` : 'cell'} />
-                    ))}
-                  </span>
-                  <span className={`grade ${grade.tone}`}>{grade.label}</span>
+                  <GradeMarks grade={grade} />
+                  <span className={cn(gradeClass, toneText[grade.tone], gradeHover)}>{grade.label}</span>
                 </>
-              ) : <span className="grade muted">尚未分析</span>}
+              ) : <span className={cn(gradeClass, gradeMuted, gradeHover)}>尚未分析</span>}
             </button>
             {!queueCard && grade && (
-              <button type="button" className={`score-num ${grade.tone}`} aria-label={`${grade.score} 分`} onClick={() => onOpen(job.uid, 'match')}>
+              <button type="button" className={cn(scoreClass, toneText[grade.tone], 'hover:!text-jp-accent')} aria-label={`${grade.score} 分`} onClick={() => onOpen(job.uid, 'match')}>
                 {grade.score}
               </button>
             )}
           </div>
-          {queueCard?.hint && <p className="queue-card-hint">{queueCard.hint}</p>}
-          {!queueCard && summary && <button type="button" className="analysis-sub" title={summary} onClick={() => onOpen(job.uid, 'match')}>{summary}</button>}
+          {queueCard?.hint && <p className="!mt-1 text-[11px] leading-[1.4] text-queue-warn">{queueCard.hint}</p>}
+          {!queueCard && summary && (
+            <button
+              type="button"
+              className="!mt-1.5 line-clamp-2 w-full max-w-full whitespace-normal text-left !text-[11px] !leading-[1.4] !font-normal !text-jp-summary [overflow-wrap:anywhere] hover:!text-jp-accent"
+              title={summary}
+              onClick={() => onOpen(job.uid, 'match')}
+            >
+              {summary}
+            </button>
+          )}
           {!queueCard && <AnalysisWarnings job={job} />}
         </div>
         <ListRowActions
