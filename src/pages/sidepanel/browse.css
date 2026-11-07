@@ -445,32 +445,6 @@
   color: var(--jp-secondary);
 }
 .library-hint button { color: var(--jp-accent); }
-.model-notice {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 16px 0;
-  padding: 7px 8px 7px 12px;
-  border: 1px solid var(--jp-line);
-  border-radius: 8px;
-  background: var(--jp-field);
-  color: var(--jp-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-.model-notice .text-action { margin-left: auto; min-height: 28px; }
-.model-notice-close {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--jp-muted);
-}
-.model-notice-close:hover { background: var(--jp-inset); color: var(--jp-ink); }
-
 .list-scroll { flex: 1; min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; }
 .continuous-list { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .job-row {
@@ -1690,27 +1664,6 @@
 .analysis.queue-failed .grade,
 .queue-card-hint { color: #f0b429; }
 .queue-card-hint { margin: 4px 0 0; font-size: 11px; line-height: 1.4; }
-.queue-scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 12;
-  background: rgba(15, 20, 25, .46);
-  display: flex;
-  align-items: flex-end;
-}
-.queue-drawer {
-  width: 100%;
-  height: 52%;
-  max-height: 52%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: #151a21;
-  color: #e7edf0;
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -12px 32px rgba(0, 0, 0, .28);
-  animation: sheet-up 220ms ease;
-}
 /* #72 终锁：头行→进度条 12，进度条→统计 12，统计→pill 16，pill→列表 12。头区自身不再垫底，避免和 chips 外边距叠距。 */
 .queue-head { padding: 0 14px; flex-shrink: 0; }
 .queue-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

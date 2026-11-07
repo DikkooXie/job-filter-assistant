@@ -32,6 +32,14 @@
   --shadow-card: var(--s-shadow); --shadow-focus: 0 0 0 3px var(--s-focus);
   --text-micro: 11.5px; --text-hint: 12px; --text-note: 12.5px; --text-control: 13px; --text-body: 13.5px; --text-section: 15px;
 }
+/* 侧栏令牌的值由 .job-panel 的主题变量提供。 */
+@theme inline {
+  --color-jp-line: var(--jp-line); --color-jp-field: var(--jp-field);
+  --color-jp-secondary: var(--jp-secondary); --color-jp-muted: var(--jp-muted);
+  --color-jp-inset: var(--jp-inset); --color-jp-ink: var(--jp-ink);
+  --color-queue-surface: #151a21; --color-queue-ink: #e7edf0;
+  --color-queue-overlay: rgba(15, 20, 25, .46);
+}
 :root {
   --radius: .5rem; --background: oklch(.99 0 0); --foreground: oklch(.18 0 0);
   --card: oklch(1 0 0); --card-foreground: oklch(.18 0 0); --popover: oklch(1 0 0); --popover-foreground: oklch(.18 0 0);

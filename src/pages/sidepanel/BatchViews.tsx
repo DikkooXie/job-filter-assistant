@@ -97,8 +97,8 @@ export function QueueDrawer({ batch, onCancel, onRetry, onClose }: {
   }, []);
   const toggle = (id: keyof QueueSections) => setOpen((current) => ({ ...current, [id]: !current[id] }));
   return (
-    <div className="queue-scrim" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="queue-drawer" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
+    <div className="absolute inset-0 z-[12] flex items-end bg-queue-overlay" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="queue-drawer flex h-[52%] max-h-[52%] min-h-0 w-full flex-col rounded-t-[16px] bg-queue-surface text-queue-ink shadow-[0_-12px_32px_rgba(0,0,0,.28)] [animation:sheet-up_220ms_ease]" role="dialog" aria-modal="true" aria-labelledby="queue-title" data-queue-drawer="half" ref={ref}>
         <div className="sheet-handle" aria-hidden="true" />
         <header className="queue-head">
           <div className="queue-head-row">

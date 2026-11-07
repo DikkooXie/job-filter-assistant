@@ -434,7 +434,6 @@ test('列表项方案 E 把打招呼放在分析块外面，未分析只有文�
   assert.match(sidepanel, /JOB_DELETE/);
   assert.match(sidepanel, /确定删除\$\{noun\}/);
   assert.match(sidepanel, /onDelete=\{\(\) => job && deleteJob\(/);
-  const batchViews = fs.readFileSync(path.join(root, 'src/pages/sidepanel/BatchViews.tsx'), 'utf8');
   const footerStart = views.indexOf('export function ListFooter');
   const sheetStart = views.indexOf('export function AnalyzeSheet', footerStart);
   const footer = views.slice(footerStart, sheetStart);
@@ -674,8 +673,7 @@ test('批量进度细条不占主钮，队列只露前几条并区分自动', ()
   assert.match(browse, /\.batch-strip\s*\{[^}]*background:\s*#151a21/);
   assert.match(browse, /\.batch-strip\s*\{[^}]*color:\s*#2dd4bf/);
   assert.match(browse, /\.batch-strip\.is-failed\s*\{[^}]*color:\s*#f0b429/);
-  assert.match(browse, /\.queue-drawer\s*\{[^}]*height:\s*52%/);
-  assert.match(browse, /\.queue-drawer\s*\{[^}]*max-height:\s*52%/);
+  assert.match(batchViews, /h-\[52%\] max-h-\[52%\]/);
   assert.match(browse, /\.queue-scroll\s*\{[^}]*overflow:\s*auto/);
   assert.match(browse, /\.queue-head\s*\{[^}]*padding:\s*0 14px;/);
   assert.doesNotMatch(browse.match(/\.queue-head\s*\{[^}]*\}/)?.[0] || '', /padding-bottom|8px/);

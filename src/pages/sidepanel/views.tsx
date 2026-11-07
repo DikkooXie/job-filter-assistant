@@ -1183,10 +1183,10 @@ export function FilterSheet({ view, shown, onView, onReset, onClose }: {
 
 export function ModelNotice({ onOpenSettings, onDismiss }: { onOpenSettings: () => void; onDismiss: () => void }) {
   return (
-    <div className="model-notice" role="status">
+    <div className="mx-4 mt-2 flex shrink-0 items-center gap-2 rounded-lg border border-jp-line bg-jp-field py-[7px] pr-2 pl-3 text-hint leading-[1.5] text-jp-secondary" role="status">
       <span>尚未配置模型接口。</span>
-      <button type="button" className="text-action" onClick={onOpenSettings}>前往设置</button>
-      <button type="button" className="model-notice-close" aria-label="关闭提示" onClick={onDismiss}><X aria-hidden="true" /></button>
+      <button type="button" className="text-action ml-auto" onClick={onOpenSettings}>前往设置</button>
+      <button type="button" className="inline-flex size-7 items-center justify-center rounded-md text-jp-muted hover:!bg-jp-inset hover:!text-jp-ink" aria-label="关闭提示" onClick={onDismiss}><X aria-hidden="true" /></button>
     </div>
   );
 }
